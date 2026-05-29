@@ -95,7 +95,7 @@ class SettingsController extends Controller
     public static function storeSettings(): array
     {
         return [
-            'store_name'             => Setting::get('store_name', 'HPYSync'),
+            'store_name'             => Setting::get('store_name', ''),
             'store_tagline'          => Setting::get('store_tagline', 'Point of Sale System'),
             'store_address'          => Setting::get('store_address', ''),
             'store_phone'            => Setting::get('store_phone', ''),

@@ -308,7 +308,7 @@ async function removeLogo() {
 }
 
 function updatePreview() {
-    const name    = val('store_name')     || 'HPYSync';
+    const name    = val('store_name')     || '';
     const tagline = val('store_tagline')  || 'Point of Sale System';
     const address = val('store_address');
     const phone   = val('store_phone');
