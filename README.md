@@ -1,4 +1,4 @@
-# Mitra POS HPY
+# RESTO POS HPY
 
 > Sistem kasir modern berbasis **Laravel 11**, database MySQL/MariaDB, UI Blade + Vite,
 > dilengkapi sinkronisasi penuh ke **ERP HPY (HPY)**.
