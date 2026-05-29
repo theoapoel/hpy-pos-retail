@@ -1,7 +1,7 @@
 {
     "name": "laravel/laravel",
     "type": "project",
-    "description": "HappyPos - Point of Sale",
+    "description": "HPYSync Resto - Point of Sale",
     "require": {
         "php": "^8.2",
         "guzzlehttp/guzzle": "^7.5",
