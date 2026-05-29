@@ -101,6 +101,8 @@ input:disabled + .toggle-slider { cursor:not-allowed; opacity:.55; }
                     'products'       => ['#FCE8E6','var(--red)'],
                     'customers'      => ['#E8F0FE','var(--blue)'],
                     'stock_transfer' => ['#F3E8FF','#9C27B0'],
+                    'stock'          => ['#FFF8E1','#F9A825'],
+                    'delivery'       => ['#E3F2FD','#1565C0'],
                     'sync'           => ['#E6F4EA','var(--green)'],
                 ];
                 @endphp

@@ -6,7 +6,8 @@ use App\Http\Controllers\{
     StockTransferController, StockController, StockOpnameController,
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
-    BackupController, SetupController, OnlineReportController, UpdateController
+    BackupController, SetupController, OnlineReportController, UpdateController,
+    DeliveryOrderController, DeliveryNoteController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -172,6 +173,24 @@ Route::middleware('auth')->group(function () {
         Route::post('/load-items', [StockTransferController::class, 'loadEntryItems'])->name('load-items');
         Route::get('/{stockTransfer}',        [StockTransferController::class, 'show'])->name('show');
         Route::post('/{stockTransfer}/retry', [StockTransferController::class, 'retry'])->name('retry');
+    });
+
+    // Delivery Order
+    Route::prefix('delivery-orders')->name('delivery-orders.')->middleware('permission:delivery')->group(function () {
+        Route::get('/',                         [DeliveryOrderController::class, 'index'])->name('index');
+        Route::get('/create',                   [DeliveryOrderController::class, 'create'])->name('create');
+        Route::post('/',                        [DeliveryOrderController::class, 'store'])->name('store');
+        Route::get('/{deliveryOrder}',          [DeliveryOrderController::class, 'show'])->name('show');
+        Route::post('/{deliveryOrder}/confirm', [DeliveryOrderController::class, 'confirm'])->name('confirm');
+        Route::post('/{deliveryOrder}/cancel',  [DeliveryOrderController::class, 'cancel'])->name('cancel');
+        Route::post('/{deliveryOrder}/sync-so', [DeliveryOrderController::class, 'syncSalesOrder'])->name('sync-so');
+    });
+
+    // Delivery Notes (Shipments)
+    Route::prefix('delivery-notes')->name('delivery-notes.')->middleware('permission:delivery')->group(function () {
+        Route::get('/',                                     [DeliveryNoteController::class, 'index'])->name('index');
+        Route::post('/{shipment}/mark-delivered',           [DeliveryNoteController::class, 'markDelivered'])->name('mark-delivered');
+        Route::post('/{shipment}/sync-dn',                  [DeliveryNoteController::class, 'syncDeliveryNote'])->name('sync-dn');
     });
 
     // Laporan Online — data historis langsung dari ERPNext

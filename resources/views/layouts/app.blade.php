@@ -232,6 +232,7 @@
             $canStockTransfer = $u->hasPermission('stock_transfer');
             $canStock         = $u->hasPermission('stock');
             $canSync          = $u->hasPermission('sync');
+            $canDelivery      = $u->hasPermission('delivery');
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
         @endphp
 
@@ -277,6 +278,16 @@
             <i class="fas fa-truck-loading nav-icon"></i> Transfer Barang
         </a>
         @endif
+        @endif
+
+        @if($canDelivery)
+        <div class="nav-section">Delivery</div>
+        <a href="{{ route('delivery-orders.index') }}" class="nav-item {{ request()->routeIs('delivery-orders.*') ? 'active' : '' }}">
+            <i class="fas fa-truck nav-icon"></i> Delivery Order
+        </a>
+        <a href="{{ route('delivery-notes.index') }}" class="nav-item {{ request()->routeIs('delivery-notes.*') ? 'active' : '' }}">
+            <i class="fas fa-map-marker-alt nav-icon"></i> Delivery Notes
+        </a>
         @endif
 
         @if($canSync)

@@ -1,0 +1,97 @@
+@extends('layouts.app')
+@section('title', 'Delivery Order')
+
+@section('content')
+<div class="page-header">
+    <div>
+        <div class="page-title"><i class="fas fa-truck text-blue"></i> Delivery Order</div>
+        <div class="page-subtitle">Kelola pesanan dengan jadwal pengiriman</div>
+    </div>
+    <a href="{{ route('delivery-orders.create') }}" class="btn btn-primary btn-lg">
+        <i class="fas fa-plus"></i> Buat Order
+    </a>
+</div>
+
+{{-- Filter --}}
+<div class="card" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="GET" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="margin-bottom:0;flex:1;min-width:160px">
+                <label class="form-label">Cari</label>
+                <input type="text" name="search" class="form-control" value="{{ request('search') }}"
+                    placeholder="No. order / customer...">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Tgl Kirim Dari</label>
+                <input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Sampai</label>
+                <input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-control form-select">
+                    <option value="">Semua</option>
+                    @foreach(['draft'=>'Draft','confirmed'=>'Confirmed','delivering'=>'Delivering','completed'=>'Completed','cancelled'=>'Cancelled'] as $v=>$l)
+                    <option value="{{ $v }}" {{ request('status')===$v ? 'selected' : '' }}>{{ $l }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search"></i> Cari
+            </button>
+            @if(request()->hasAny(['search','date_from','date_to','status']))
+            <a href="{{ route('delivery-orders.index') }}" class="btn btn-ghost">Reset</a>
+            @endif
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead><tr>
+                <th>No. Order</th><th>Customer</th><th>Tgl Kirim</th>
+                <th>Tujuan</th><th>Total</th><th>Status</th><th>ERP SO</th><th></th>
+            </tr></thead>
+            <tbody>
+            @forelse($orders as $order)
+            @php
+                $statusColor = ['draft'=>'badge-gray','confirmed'=>'badge-blue','delivering'=>'badge-yellow','completed'=>'badge-green','cancelled'=>'badge-red'][$order->status] ?? 'badge-gray';
+            @endphp
+            <tr>
+                <td><a href="{{ route('delivery-orders.show', $order) }}" class="text-blue font-medium">{{ $order->order_no }}</a></td>
+                <td>{{ $order->customer->name }}</td>
+                <td>{{ $order->delivery_date->isoFormat('D MMM Y') }}</td>
+                <td><span class="badge badge-gray">{{ $order->shipments_count ?? $order->shipments()->count() }} tujuan</span></td>
+                <td class="money">Rp {{ number_format($order->total, 0, ',', '.') }}</td>
+                <td><span class="badge {{ $statusColor }}">{{ strtoupper($order->status) }}</span></td>
+                <td>
+                    @if($order->erp_sales_order)
+                        <span class="badge badge-green text-xs">{{ $order->erp_sales_order }}</span>
+                    @elseif($order->erp_sync_status === 'failed')
+                        <span class="badge badge-red text-xs">FAILED</span>
+                    @else
+                        <span class="text-muted text-xs">—</span>
+                    @endif
+                </td>
+                <td>
+                    <a href="{{ route('delivery-orders.show', $order) }}" class="btn btn-ghost btn-sm">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                </td>
+            </tr>
+            @empty
+            <tr><td colspan="8" style="text-align:center;padding:40px;color:#80868B">Belum ada delivery order</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+    @if($orders->hasPages())
+    <div style="padding:16px 20px;border-top:1px solid var(--border)">
+        {{ $orders->links() }}
+    </div>
+    @endif
+</div>
+@endsection
