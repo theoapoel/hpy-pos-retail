@@ -6,7 +6,7 @@ use App\Http\Controllers\{
     StockTransferController, StockController, StockOpnameController,
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
-    BackupController, SetupController
+    BackupController, SetupController, OnlineReportController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -172,6 +172,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/load-items', [StockTransferController::class, 'loadEntryItems'])->name('load-items');
         Route::get('/{stockTransfer}',        [StockTransferController::class, 'show'])->name('show');
         Route::post('/{stockTransfer}/retry', [StockTransferController::class, 'retry'])->name('retry');
+    });
+
+    // Laporan Online — data historis langsung dari ERPNext
+    Route::prefix('online-report')->name('online-report.')->middleware('permission:sync')->group(function () {
+        Route::get('/',             [OnlineReportController::class, 'index'])->name('index');
+        Route::post('/fetch',       [OnlineReportController::class, 'fetch'])->name('fetch');
+        Route::get('/detail/{name}', [OnlineReportController::class, 'detail'])->name('detail')
+            ->where('name', '.+');
     });
 
     // Sync HPY — jalankan (permission:sync), konfigurasi (admin only)

@@ -287,6 +287,9 @@
                 <span class="nav-badge">{{ $pendingSync }}</span>
             @endif
         </a>
+        <a href="{{ route('online-report.index') }}" class="nav-item {{ request()->routeIs('online-report.*') ? 'active' : '' }}">
+            <i class="fas fa-cloud-download-alt nav-icon"></i> Laporan Online
+        </a>
         @endif
 
         @if($role === 'admin')

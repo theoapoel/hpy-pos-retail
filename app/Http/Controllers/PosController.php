@@ -27,11 +27,7 @@ class PosController extends Controller
         $posPaymentMethods   = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
         $erpBaseUrl         = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
 
-        $deliveryPrices = [
-            'gofood'     => json_decode(\App\Models\Setting::get('delivery_prices_gofood', '{}'), true) ?? [],
-            'grabfood'   => json_decode(\App\Models\Setting::get('delivery_prices_grabfood', '{}'), true) ?? [],
-            'shopeefood' => json_decode(\App\Models\Setting::get('delivery_prices_shopeefood', '{}'), true) ?? [],
-        ];
+        $deliveryPrices = \App\Models\DeliveryPrice::allGrouped();
 
         $dineInCharges = [
             'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',

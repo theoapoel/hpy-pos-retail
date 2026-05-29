@@ -1102,6 +1102,100 @@ class ErpNextService
         }
     }
 
+    // =========================================================
+    // FETCH HISTORICAL POS INVOICES FROM ERPNext (Online Report)
+    // =========================================================
+    public function fetchPosInvoices(
+        string $dateFrom,
+        string $dateTo,
+        string $posProfile = '',
+        int $maxRecords = 1000
+    ): array {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            $fields = json_encode([
+                'name', 'posting_date', 'posting_time',
+                'customer', 'customer_name',
+                'grand_total', 'net_total', 'total_taxes_and_charges',
+                'paid_amount', 'status', 'pos_profile', 'owner',
+            ]);
+
+            $filters = [
+                ['posting_date', '>=', $dateFrom],
+                ['posting_date', '<=', $dateTo],
+                ['docstatus', '=', 1],
+            ];
+
+            if ($posProfile) {
+                $filters[] = ['pos_profile', '=', $posProfile];
+            }
+
+            $filtersJson = json_encode($filters);
+            $allData     = [];
+            $start       = 0;
+            $batchSize   = 500;
+
+            do {
+                $response = $this->client->get('/api/resource/POS Invoice', [
+                    'query' => [
+                        'fields'            => $fields,
+                        'filters'           => $filtersJson,
+                        'limit_start'       => $start,
+                        'limit_page_length' => $batchSize,
+                        'order_by'          => 'posting_date asc, posting_time asc',
+                    ],
+                ]);
+
+                $body    = json_decode($response->getBody()->getContents(), true);
+                $batch   = $body['data'] ?? [];
+                $allData = array_merge($allData, $batch);
+                $start  += $batchSize;
+
+            } while (count($batch) === $batchSize && count($allData) < $maxRecords);
+
+            $truncated = count($batch) === $batchSize && count($allData) >= $maxRecords;
+
+            return [
+                'success'   => true,
+                'data'      => $allData,
+                'count'     => count($allData),
+                'truncated' => $truncated,
+            ];
+
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    public function fetchPosInvoiceDetail(string $name): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            $response = $this->client->get('/api/resource/POS Invoice/' . rawurlencode($name));
+            $body     = json_decode($response->getBody()->getContents(), true);
+            $doc      = $body['data'] ?? null;
+
+            if (!$doc) {
+                return ['success' => false, 'error' => "POS Invoice '{$name}' tidak ditemukan."];
+            }
+
+            return ['success' => true, 'data' => $doc];
+
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     private function extractError(RequestException $e): string
     {
         if (!$e->hasResponse()) {

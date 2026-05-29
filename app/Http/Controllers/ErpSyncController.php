@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use App\Models\Product;
 use App\Models\Customer;
+use App\Models\DeliveryPrice;
 use App\Models\ErpSyncLog;
 use App\Models\Category;
 use App\Models\Setting;
@@ -253,7 +254,21 @@ class ErpSyncController extends Controller
                 continue;
             }
 
-            Setting::set('delivery_prices_' . $key, json_encode($result['prices']), 'delivery');
+            $now  = now();
+            $rows = [];
+            foreach ($result['prices'] as $itemCode => $price) {
+                $rows[] = [
+                    'erp_item_code' => $itemCode,
+                    'platform'      => $key,
+                    'price'         => (float) $price,
+                    'created_at'    => $now,
+                    'updated_at'    => $now,
+                ];
+            }
+            DeliveryPrice::where('platform', $key)->delete();
+            if (!empty($rows)) {
+                DeliveryPrice::insert($rows);
+            }
             $results[$key] = $result['count'];
         }
 
