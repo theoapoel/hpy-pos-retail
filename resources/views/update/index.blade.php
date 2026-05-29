@@ -9,20 +9,8 @@
     </div>
 </div>
 
-@if(!$tokenSet)
-<div class="alert alert-warning" style="margin-bottom:20px">
-    <i class="fas fa-exclamation-triangle"></i>
-    <div>
-        <strong>GITHUB_TOKEN belum dikonfigurasi.</strong>
-        Tambahkan <code>GITHUB_TOKEN=&lt;token&gt;</code> di file <code>.env</code>, lalu jalankan
-        <code>php artisan config:clear</code>. Hubungi HPY Solution untuk mendapatkan token.
-    </div>
-</div>
-@endif
-
-{{-- Version cards --}}
+{{-- Versi lokal --}}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
-    {{-- Versi Saat Ini --}}
     <div class="card">
         <div class="card-header">
             <div class="card-title"><i class="fas fa-desktop text-blue"></i> Versi Saat Ini</div>
@@ -34,7 +22,7 @@
                     {{ $local['sha'] ?: '?' }}
                 </div>
                 @if($local['branch'])
-                <span class="badge badge-gray">{{ $local['branch'] }}</span>
+                    <span class="badge badge-gray">{{ $local['branch'] }}</span>
                 @endif
             </div>
             @if($local['date'])
@@ -52,56 +40,64 @@
         </div>
     </div>
 
-    {{-- Versi Terbaru (GitHub) --}}
     <div class="card">
         <div class="card-header">
             <div class="card-title"><i class="fab fa-github"></i> Versi Terbaru (GitHub)</div>
             <span id="latestBadge" class="badge badge-gray">BELUM DICEK</span>
         </div>
-        <div class="card-body">
-            <div id="latestLoading" style="color:var(--text3);font-size:14px;display:flex;align-items:center;gap:8px">
-                <div style="width:16px;height:16px;border:2px solid #E8F0FE;border-top-color:#4285F4;border-radius:50%;animation:spin .8s linear infinite"></div>
-                Mengambil info dari GitHub...
-            </div>
-            <div id="latestInfo" style="display:none">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-                    <div id="latestSha" style="font-family:'Google Sans',sans-serif;font-size:28px;font-weight:700;color:var(--green);letter-spacing:1px">
-                        —
-                    </div>
-                </div>
-                <div id="latestDate" class="text-sm text-muted" style="margin-bottom:4px"></div>
-                <div id="latestMsg"  class="text-sm" style="color:var(--text2)"></div>
-            </div>
-            <div id="latestError" style="display:none" class="alert alert-danger" style="margin:0">
-                <i class="fas fa-exclamation-circle"></i>
-                <span id="latestErrorMsg"></span>
-            </div>
+        <div class="card-body" id="latestBody">
+            <div class="text-muted text-sm">Masukkan GitHub Token lalu klik <strong>Cek Update</strong>.</div>
         </div>
     </div>
 </div>
 
-{{-- Status bar --}}
-<div id="statusBar" style="display:none;margin-bottom:24px"></div>
-
-{{-- Update form --}}
-<div id="updateForm" class="card" style="display:none;margin-bottom:24px">
+{{-- Input token + cek --}}
+<div class="card" style="margin-bottom:20px">
     <div class="card-header">
-        <div class="card-title"><i class="fas fa-key text-yellow" style="color:#E37400"></i> Otorisasi Update</div>
+        <div class="card-title"><i class="fab fa-github"></i> GitHub Token</div>
     </div>
     <div class="card-body">
         <div class="alert alert-info" style="margin-bottom:16px">
             <i class="fas fa-info-circle"></i>
-            Update memerlukan <strong>key</strong> dari HPY Solution.
-            Hubungi developer untuk mendapatkan key sebelum melanjutkan.
+            Token GitHub diberikan oleh HPY Solution dan bisa berubah sewaktu-waktu.
+            Masukkan token yang diterima, lalu klik <strong>Cek Update</strong>.
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-end">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+                <label class="form-label">GitHub Token</label>
+                <input type="password" id="githubToken" class="form-control"
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    autocomplete="off" style="font-family:monospace;letter-spacing:1px">
+            </div>
+            <button id="btnCheck" onclick="checkUpdate()" class="btn btn-primary"
+                style="height:42px;border-radius:8px;white-space:nowrap">
+                <i class="fas fa-search"></i> Cek Update
+            </button>
+        </div>
+    </div>
+</div>
+
+{{-- Status hasil cek --}}
+<div id="statusBar" style="display:none;margin-bottom:20px"></div>
+
+{{-- Form update (muncul setelah cek jika ada update) --}}
+<div id="updateForm" class="card" style="display:none;margin-bottom:24px">
+    <div class="card-header">
+        <div class="card-title"><i class="fas fa-key" style="color:#E37400"></i> Otorisasi Update</div>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning" style="margin-bottom:16px">
+            <i class="fas fa-exclamation-triangle"></i>
+            Proses update akan me-restart aplikasi sebentar. Pastikan tidak ada transaksi yang sedang berjalan.
         </div>
         <div style="display:flex;gap:12px;align-items:flex-end">
             <div class="form-group" style="flex:1;margin-bottom:0">
                 <label class="form-label">Key Update</label>
                 <input type="password" id="updateKey" class="form-control"
                     placeholder="Masukkan key yang diberikan HPY Solution"
-                    style="letter-spacing:2px">
+                    autocomplete="off" style="letter-spacing:2px">
             </div>
-            <button id="btnUpdate" class="btn btn-primary" onclick="runUpdate()"
+            <button id="btnUpdate" onclick="runUpdate()" class="btn btn-success"
                 style="height:42px;border-radius:8px;white-space:nowrap">
                 <i class="fas fa-download"></i> Mulai Update
             </button>
@@ -119,84 +115,95 @@
         <pre id="logOutput" style="font-family:'Courier New',monospace;font-size:12px;background:#1E1E1E;color:#D4D4D4;margin:0;padding:16px;border-radius:0 0 12px 12px;max-height:400px;overflow-y:auto;line-height:1.6;white-space:pre-wrap;word-break:break-all"></pre>
     </div>
 </div>
-
 @endsection
 
 @push('scripts')
 <script>
-const CSRF      = document.querySelector('meta[name="csrf-token"]').content;
-const localSha  = '{{ $local["sha"] }}';
-let   latestSha = '';
+const CSRF     = document.querySelector('meta[name="csrf-token"]').content;
+const localSha = '{{ $local["sha"] }}';
 
-async function checkLatest() {
+async function checkUpdate() {
+    const token = document.getElementById('githubToken').value.trim();
+    if (!token) { alert('Masukkan GitHub Token terlebih dahulu.'); return; }
+
+    const btn = document.getElementById('btnCheck');
+    btn.disabled  = true;
+    btn.innerHTML = '<span class="spinner"></span> Mengecek...';
+
+    document.getElementById('latestBadge').textContent = '...';
+    document.getElementById('latestBody').innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;color:var(--text3);font-size:14px">
+            <div style="width:16px;height:16px;border:2px solid #E8F0FE;border-top-color:#4285F4;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0"></div>
+            Menghubungi GitHub...
+        </div>`;
+    document.getElementById('statusBar').style.display  = 'none';
+    document.getElementById('updateForm').style.display = 'none';
+
     try {
-        const res  = await fetch('{{ route("update.check") }}');
+        const res  = await fetch('{{ route("update.check") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ github_token: token }),
+        });
         const json = await res.json();
-
-        document.getElementById('latestLoading').style.display = 'none';
 
         if (!json.success) throw new Error(json.error);
 
-        latestSha = json.sha;
-        document.getElementById('latestSha').textContent  = json.sha;
-        document.getElementById('latestBadge').textContent = 'GITHUB';
-        document.getElementById('latestBadge').className   = 'badge badge-green';
-
+        const sha = json.sha;
+        let dateStr = '';
         if (json.date) {
             const d = new Date(json.date);
-            document.getElementById('latestDate').innerHTML =
-                `<i class="fas fa-clock" style="width:14px"></i> ${d.toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})} WIB`;
-        }
-        if (json.message) {
-            const msg = json.message.split('\n')[0].substring(0, 80);
-            document.getElementById('latestMsg').innerHTML =
-                `<i class="fas fa-code-commit" style="width:14px"></i> ${msg}`;
+            dateStr = d.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) + ' WIB';
         }
 
-        document.getElementById('latestInfo').style.display = 'block';
+        document.getElementById('latestBadge').textContent = 'GITHUB';
+        document.getElementById('latestBadge').className   = 'badge badge-green';
+        document.getElementById('latestBody').innerHTML    = `
+            <div style="font-family:'Google Sans',sans-serif;font-size:28px;font-weight:700;color:var(--green);letter-spacing:1px;margin-bottom:12px">${sha}</div>
+            ${dateStr ? `<div class="text-sm text-muted" style="margin-bottom:4px"><i class="fas fa-clock" style="width:14px"></i> ${dateStr}</div>` : ''}
+            ${json.message ? `<div class="text-sm" style="color:var(--text2)"><i class="fas fa-code-commit" style="width:14px"></i> ${json.message.split('\\n')[0].substring(0,80)}</div>` : ''}`;
 
         // Bandingkan SHA
-        showStatus(json.sha);
+        const bar = document.getElementById('statusBar');
+        bar.style.display = 'block';
+
+        if (sha === localSha) {
+            bar.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>Sistem sudah terbaru.</strong> Tidak ada pembaruan yang tersedia saat ini.
+                </div>`;
+        } else {
+            bar.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Pembaruan tersedia!</strong>
+                    Versi lokal <code>${localSha}</code> berbeda dengan versi terbaru <code>${sha}</code>.
+                    Masukkan <strong>Key Update</strong> di bawah untuk melanjutkan.
+                </div>`;
+            document.getElementById('updateForm').style.display = 'block';
+        }
 
     } catch (e) {
-        document.getElementById('latestLoading').style.display = 'none';
-        document.getElementById('latestErrorMsg').textContent  = e.message;
-        document.getElementById('latestError').style.display   = 'block';
-        document.getElementById('latestBadge').textContent     = 'ERROR';
-        document.getElementById('latestBadge').className       = 'badge badge-red';
-    }
-}
-
-function showStatus(remoteSha) {
-    const bar = document.getElementById('statusBar');
-    bar.style.display = 'block';
-
-    if (remoteSha === localSha || remoteSha === '') {
-        bar.innerHTML = `
-            <div class="alert alert-success">
-                <i class="fas fa-check-circle"></i>
-                <strong>Sistem sudah terbaru.</strong> Tidak ada pembaruan yang tersedia saat ini.
+        document.getElementById('latestBadge').textContent = 'ERROR';
+        document.getElementById('latestBadge').className   = 'badge badge-red';
+        document.getElementById('latestBody').innerHTML    = `
+            <div class="alert alert-danger" style="margin:0">
+                <i class="fas fa-exclamation-circle"></i> ${e.message}
             </div>`;
-        document.getElementById('updateForm').style.display = 'none';
-    } else {
-        bar.innerHTML = `
-            <div class="alert alert-warning">
-                <i class="fas fa-exclamation-triangle"></i>
-                <strong>Pembaruan tersedia!</strong>
-                Versi lokal <code>${localSha}</code> berbeda dengan versi terbaru <code>${remoteSha}</code>.
-            </div>`;
-        document.getElementById('updateForm').style.display = 'block';
     }
+
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="fas fa-search"></i> Cek Update';
 }
 
 async function runUpdate() {
-    const key = document.getElementById('updateKey').value.trim();
-    if (!key) {
-        alert('Masukkan key update terlebih dahulu.');
-        return;
-    }
+    const token = document.getElementById('githubToken').value.trim();
+    const key   = document.getElementById('updateKey').value.trim();
 
-    if (!confirm('Sistem akan diperbarui dan semua cache akan dibersihkan. Lanjutkan?')) return;
+    if (!token) { alert('GitHub Token tidak boleh kosong.'); return; }
+    if (!key)   { alert('Key Update tidak boleh kosong.'); return; }
+    if (!confirm('Sistem akan diperbarui. Pastikan tidak ada transaksi berjalan. Lanjutkan?')) return;
 
     const btn = document.getElementById('btnUpdate');
     btn.disabled  = true;
@@ -211,7 +218,7 @@ async function runUpdate() {
         const res  = await fetch('{{ route("update.run") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: JSON.stringify({ key }),
+            body: JSON.stringify({ key, github_token: token }),
         });
         const json = await res.json();
 
@@ -225,19 +232,16 @@ async function runUpdate() {
             document.getElementById('statusBar').innerHTML   = `
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle"></i>
-                    <strong>Update berhasil!</strong>
-                    Sistem sudah diperbarui ke versi terbaru. Refresh halaman untuk melihat perubahan.
+                    <strong>Update berhasil!</strong> Sistem sudah diperbarui ke versi terbaru.
                     <a href="{{ route('dashboard') }}" class="btn btn-success btn-sm" style="margin-left:12px">
-                        <i class="fas fa-refresh"></i> Kembali ke Dashboard
+                        <i class="fas fa-home"></i> Kembali ke Dashboard
                     </a>
                 </div>`;
             document.getElementById('updateForm').style.display = 'none';
         } else {
             document.getElementById('logStatus').textContent = '✗ GAGAL';
             document.getElementById('logStatus').className   = 'badge badge-red';
-            if (json.error) {
-                logEl.textContent += '\n\n❌ ERROR: ' + json.error;
-            }
+            if (json.error) logEl.textContent += '\n\n❌ ' + json.error;
         }
     } catch (e) {
         document.getElementById('logStatus').textContent = '✗ ERROR';
@@ -249,8 +253,5 @@ async function runUpdate() {
     btn.innerHTML = '<i class="fas fa-download"></i> Mulai Update';
     document.getElementById('updateKey').value = '';
 }
-
-// Auto-cek saat halaman dimuat
-checkLatest();
 </script>
 @endpush

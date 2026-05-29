@@ -12,21 +12,12 @@ class UpdateController extends Controller
 
     public function index()
     {
-        $info        = $this->localVersionInfo();
-        $tokenSet    = !empty(env('GITHUB_TOKEN'));
-        return view('update.index', ['local' => $info, 'tokenSet' => $tokenSet]);
+        return view('update.index', ['local' => $this->localVersionInfo()]);
     }
 
-    public function checkLatest()
+    public function checkLatest(Request $request)
     {
-        $token = env('GITHUB_TOKEN', '');
-
-        if (empty($token)) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'GITHUB_TOKEN belum diset di .env. Hubungi HPY Solution untuk mendapatkan token.',
-            ], 422);
-        }
+        $request->validate(['github_token' => 'required|string']);
 
         try {
             $client = new Client(['timeout' => 10, 'verify' => false]);
@@ -36,7 +27,7 @@ class UpdateController extends Controller
                     'headers' => [
                         'User-Agent'    => 'HPYSync-POS/1.0',
                         'Accept'        => 'application/vnd.github.v3+json',
-                        'Authorization' => 'Bearer ' . $token,
+                        'Authorization' => 'Bearer ' . $request->github_token,
                     ],
                 ]
             );
@@ -54,14 +45,17 @@ class UpdateController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'error'   => 'Tidak dapat menghubungi GitHub: ' . $e->getMessage(),
+                'error'   => 'Gagal menghubungi GitHub: ' . $e->getMessage(),
             ], 422);
         }
     }
 
     public function run(Request $request)
     {
-        $request->validate(['key' => 'required|string']);
+        $request->validate([
+            'key'          => 'required|string',
+            'github_token' => 'required|string',
+        ]);
 
         $validKey = env('UPDATE_KEY', '');
         if (empty($validKey) || $request->key !== $validKey) {
@@ -71,16 +65,9 @@ class UpdateController extends Controller
             ], 403);
         }
 
-        $token = env('GITHUB_TOKEN', '');
-        $log   = [];
-        $base  = base_path();
-
-        // Gunakan token di URL agar git pull bisa autentikasi tanpa credential store
-        if ($token) {
-            $pullUrl = 'https://' . $token . '@github.com/' . self::GITHUB_REPO . '.git';
-        } else {
-            $pullUrl = 'origin';
-        }
+        $log     = [];
+        $base    = base_path();
+        $pullUrl = 'https://' . $request->github_token . '@github.com/' . self::GITHUB_REPO . '.git';
 
         $log[] = '▶ git pull ' . self::GITHUB_BRANCH;
         exec(
@@ -94,13 +81,11 @@ class UpdateController extends Controller
             return response()->json(['success' => false, 'error' => 'git pull gagal.', 'log' => $log]);
         }
 
-        // Migrate
         $log[] = '';
         $log[] = '▶ php artisan migrate --force';
         exec(PHP_BINARY . ' ' . escapeshellarg($base . '/artisan') . ' migrate --force 2>&1', $migrateOut);
         foreach ($migrateOut as $line) $log[] = $line;
 
-        // Cache clear
         $log[] = '';
         $log[] = '▶ cache:clear / config:clear / view:clear / route:clear';
         foreach (['cache:clear', 'config:clear', 'view:clear', 'route:clear'] as $cmd) {
@@ -136,10 +121,9 @@ class UpdateController extends Controller
             $sha = $head;
         }
 
-        $date    = '';
-        $message = '';
-        $logOut  = [];
+        $logOut = [];
         exec('git -C ' . escapeshellarg($base) . ' log -1 --format="%ci|||%s" HEAD 2>&1', $logOut);
+        $date = $message = '';
         if (!empty($logOut[0]) && str_contains($logOut[0], '|||')) {
             [$date, $message] = explode('|||', $logOut[0], 2);
         }

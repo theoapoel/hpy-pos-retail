@@ -225,7 +225,7 @@ Route::middleware('auth')->group(function () {
         // Update Sistem
         Route::prefix('update')->name('update.')->group(function () {
             Route::get('/',      [UpdateController::class, 'index'])->name('index');
-            Route::get('/check', [UpdateController::class, 'checkLatest'])->name('check');
+            Route::post('/check', [UpdateController::class, 'checkLatest'])->name('check');
             Route::post('/run',  [UpdateController::class, 'run'])->name('run');
         });
 
