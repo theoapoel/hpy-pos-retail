@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Struk {{ $transaction->invoice_no }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; font-size: 12px; width: 300px; margin: 0 auto; padding: 10px; background: #fff; }
+        .center { text-align: center; }
+        .bold { font-weight: bold; }
+        .big { font-size: 16px; }
+        .sm { font-size: 10px; }
+        .divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+        .row { display: flex; justify-content: space-between; margin: 3px 0; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin: 4px 0; }
+        @media print {
+            body { width: 100%; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    {{-- Header --}}
+    <div class="center bold big">{{ $store['store_name'] }}</div>
+    @if($store['store_tagline'])
+        <div class="center sm">{{ $store['store_tagline'] }}</div>
+    @endif
+    @if($store['store_address'])
+        <div class="center sm" style="margin-top:2px;">{{ $store['store_address'] }}</div>
+    @endif
+    @if($store['store_phone'])
+        <div class="center sm">Telp: {{ $store['store_phone'] }}</div>
+    @endif
+    @if($store['store_email'])
+        <div class="center sm">{{ $store['store_email'] }}</div>
+    @endif
+
+    <hr class="divider">
+
+    {{-- Info transaksi --}}
+    <div class="row"><span>Invoice</span><span>{{ $transaction->invoice_no }}</span></div>
+    <div class="row"><span>Tanggal</span><span>{{ $transaction->created_at->format('d/m/Y H:i') }}</span></div>
+    <div class="row"><span>Kasir</span><span>{{ $transaction->user->name }}</span></div>
+    @if($transaction->customer)
+        <div class="row"><span>Customer</span><span>{{ $transaction->customer->name }}</span></div>
+    @endif
+
+    <hr class="divider">
+
+    {{-- Item --}}
+    @foreach($transaction->items as $item)
+    <div>{{ $item->product_name }}</div>
+    <div class="row" style="padding-left:8px">
+        <span>{{ $item->quantity }} x Rp {{ number_format($item->price,0,',','.') }}</span>
+        <span>Rp {{ number_format($item->subtotal,0,',','.') }}</span>
+    </div>
+    @endforeach
+
+    <hr class="divider">
+
+    {{-- Totals --}}
+    @if($transaction->order_type)
+        <div class="row"><span>Tipe</span><span>{{ ['dine_in'=>'Dine In','take_away'=>'Take Away','delivery'=>'Delivery'][$transaction->order_type] ?? $transaction->order_type }}</span></div>
+    @endif
+    <div class="row"><span>Subtotal</span><span>Rp {{ number_format($transaction->subtotal,0,',','.') }}</span></div>
+    @if($transaction->discount_amount > 0)
+        <div class="row"><span>Diskon</span><span>- Rp {{ number_format($transaction->discount_amount,0,',','.') }}</span></div>
+    @endif
+    @if($transaction->tax_amount > 0)
+        <div class="row"><span>Pajak</span><span>Rp {{ number_format($transaction->tax_amount,0,',','.') }}</span></div>
+    @endif
+    @if($transaction->service_charge_amount > 0)
+        <div class="row"><span>Service Charge ({{ $transaction->service_charge_pct }}%)</span><span>Rp {{ number_format($transaction->service_charge_amount,0,',','.') }}</span></div>
+    @endif
+    @if($transaction->pb1_amount > 0)
+        <div class="row"><span>PB1 ({{ $transaction->pb1_pct }}%)</span><span>Rp {{ number_format($transaction->pb1_amount,0,',','.') }}</span></div>
+    @endif
+
+    <hr class="divider">
+
+    <div class="total-row"><span>TOTAL</span><span>Rp {{ number_format($transaction->total,0,',','.') }}</span></div>
+    <div class="row"><span>Bayar ({{ strtoupper($transaction->payment_method) }})</span><span>Rp {{ number_format($transaction->paid_amount,0,',','.') }}</span></div>
+    @if($transaction->change_amount > 0)
+        <div class="row"><span>Kembalian</span><span>Rp {{ number_format($transaction->change_amount,0,',','.') }}</span></div>
+    @endif
+
+    <hr class="divider">
+
+    {{-- Footer --}}
+    <div class="center" style="margin-top:8px;">{{ $store['receipt_footer'] }}</div>
+
+    <div class="no-print" style="text-align:center;margin-top:20px">
+        <button onclick="window.print()" style="padding:8px 20px;background:#4285F4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Print</button>
+        <button onclick="window.close()" style="padding:8px 20px;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:14px;margin-left:8px">Tutup</button>
+    </div>
+    <script>
+        window.onload = () => window.print();
+    </script>
+</body>
+</html>
