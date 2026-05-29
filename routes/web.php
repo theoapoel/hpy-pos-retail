@@ -6,7 +6,7 @@ use App\Http\Controllers\{
     StockTransferController, StockController, StockOpnameController,
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
-    BackupController, SetupController, OnlineReportController
+    BackupController, SetupController, OnlineReportController, UpdateController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -220,6 +220,13 @@ Route::middleware('auth')->group(function () {
             Route::get('/download', [BackupController::class, 'download'])->name('download');
             Route::get('/restore',  [BackupController::class, 'restorePage'])->name('restore');
             Route::post('/restore', [BackupController::class, 'restore'])->name('restore.post');
+        });
+
+        // Update Sistem
+        Route::prefix('update')->name('update.')->group(function () {
+            Route::get('/',      [UpdateController::class, 'index'])->name('index');
+            Route::get('/check', [UpdateController::class, 'checkLatest'])->name('check');
+            Route::post('/run',  [UpdateController::class, 'run'])->name('run');
         });
 
         // Factory Reset

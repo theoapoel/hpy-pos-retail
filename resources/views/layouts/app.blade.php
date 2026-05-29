@@ -312,6 +312,9 @@
         <a href="{{ route('backup.restore') }}" class="nav-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">
             <i class="fas fa-upload nav-icon"></i> Restore Backup
         </a>
+        <a href="{{ route('update.index') }}" class="nav-item {{ request()->routeIs('update.*') ? 'active' : '' }}">
+            <i class="fas fa-download nav-icon"></i> Update Sistem
+        </a>
         <a href="{{ route('factory-reset.index') }}"
             class="nav-item {{ request()->routeIs('factory-reset.*') ? 'active' : '' }}"
             style="{{ request()->routeIs('factory-reset.*') ? '' : 'color:#EA4335;' }}"
