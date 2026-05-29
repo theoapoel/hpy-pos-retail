@@ -206,8 +206,10 @@ Route::middleware('auth')->group(function () {
     Route::middleware('role:admin')->group(function () {
 
         // Pengaturan Toko
-        Route::get('/settings',  [SettingsController::class, 'index'])->name('settings.index');
-        Route::post('/settings', [SettingsController::class, 'save'])->name('settings.save');
+        Route::get('/settings',          [SettingsController::class, 'index'])->name('settings.index');
+        Route::post('/settings',         [SettingsController::class, 'save'])->name('settings.save');
+        Route::post('/settings/logo',    [SettingsController::class, 'uploadLogo'])->name('settings.logo.upload');
+        Route::delete('/settings/logo',  [SettingsController::class, 'removeLogo'])->name('settings.logo.remove');
 
         // Hak Akses
         Route::get('/permissions',  [PermissionController::class, 'index'])->name('permissions.index');

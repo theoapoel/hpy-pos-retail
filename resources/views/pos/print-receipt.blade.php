@@ -21,6 +21,11 @@
 </head>
 <body>
     {{-- Header --}}
+    @if($store['store_logo'])
+    <div class="center" style="margin-bottom:6px">
+        <img src="{{ asset($store['store_logo']) }}" style="max-height:50px;max-width:200px;object-fit:contain">
+    </div>
+    @endif
     <div class="center bold big">{{ $store['store_name'] }}</div>
     @if($store['store_tagline'])
         <div class="center sm">{{ $store['store_tagline'] }}</div>

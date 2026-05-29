@@ -15,14 +15,51 @@ class SettingsController extends Controller
         'pb1_enabled', 'pb1_pct',
     ];
 
+    private const LOGO_DIR = 'images';
+
     public function index()
     {
         $settings = [];
         foreach (self::STORE_KEYS as $key) {
             $settings[$key] = Setting::get($key, '');
         }
+        $settings['store_logo'] = Setting::get('store_logo', '');
 
         return view('settings.index', compact('settings'));
+    }
+
+    public function uploadLogo(Request $request)
+    {
+        $request->validate([
+            'logo' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:2048',
+        ]);
+
+        // Hapus logo lama jika ada
+        $old = Setting::get('store_logo', '');
+        if ($old && file_exists(public_path($old))) {
+            @unlink(public_path($old));
+        }
+
+        $file = $request->file('logo');
+        $ext  = $file->getClientOriginalExtension();
+        $name = 'store-logo.' . strtolower($ext);
+        $file->move(public_path(self::LOGO_DIR), $name);
+
+        $path = self::LOGO_DIR . '/' . $name;
+        Setting::set('store_logo', $path, 'store');
+
+        return response()->json(['success' => true, 'path' => $path, 'url' => asset($path)]);
+    }
+
+    public function removeLogo()
+    {
+        $old = Setting::get('store_logo', '');
+        if ($old && file_exists(public_path($old))) {
+            @unlink(public_path($old));
+        }
+        Setting::set('store_logo', '', 'store');
+
+        return response()->json(['success' => true]);
     }
 
     public function save(Request $request)
@@ -70,6 +107,7 @@ class SettingsController extends Controller
             'service_charge_pct'     => (float) Setting::get('service_charge_pct', '0'),
             'pb1_enabled'            => Setting::get('pb1_enabled', '0'),
             'pb1_pct'                => (float) Setting::get('pb1_pct', '0'),
+            'store_logo'             => Setting::get('store_logo', ''),
         ];
     }
 }

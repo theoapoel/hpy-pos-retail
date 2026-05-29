@@ -22,9 +22,14 @@
         <div class="card-body" style="padding:32px">
             <!-- Header -->
             <div style="text-align:center;margin-bottom:24px">
+                @if($store['store_logo'])
+                <img src="{{ asset($store['store_logo']) }}"
+                    style="max-height:72px;max-width:200px;object-fit:contain;display:block;margin:0 auto 12px">
+                @else
                 <div style="width:64px;height:64px;background:#E6F4EA;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px">
                     ✅
                 </div>
+                @endif
                 <div style="font-family:'Google Sans',sans-serif;font-size:20px;font-weight:700;color:var(--text)">
                     {{ $store['store_name'] }}
                 </div>

@@ -158,6 +158,44 @@
                     </div>
                 </div>
 
+                {{-- Logo Struk --}}
+                <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
+                    <div style="font-weight:700;font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+                        <i class="fas fa-image" style="color:var(--blue)"></i>
+                        Logo Struk
+                    </div>
+
+                    <div id="logoPreviewWrap" style="margin-bottom:12px">
+                        @if($settings['store_logo'])
+                        <div style="display:flex;align-items:center;gap:12px">
+                            <img id="logoImg" src="{{ asset($settings['store_logo']) }}"
+                                style="height:64px;max-width:160px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff">
+                            <button type="button" onclick="removeLogo()" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i> Hapus Logo
+                            </button>
+                        </div>
+                        @else
+                        <div id="noLogoMsg" style="color:var(--text3);font-size:13px;display:flex;align-items:center;gap:8px">
+                            <i class="fas fa-image" style="font-size:32px;color:var(--border)"></i>
+                            Belum ada logo
+                        </div>
+                        @endif
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <label for="logoFile" class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">
+                            <i class="fas fa-upload"></i> Pilih Gambar
+                        </label>
+                        <input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp"
+                            style="display:none" onchange="uploadLogo(this)">
+                        <span id="logoUploadStatus" class="text-sm text-muted"></span>
+                    </div>
+                    <p style="font-size:11px;color:var(--text3);margin-top:8px">
+                        Format: JPG, PNG, GIF, WebP &mdash; Maks. 2 MB.
+                        Akan tampil di bagian atas struk digital dan cetak.
+                    </p>
+                </div>
+
                 <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveSettings()">
                     <i class="fas fa-save"></i> Simpan Pengaturan
                 </button>
@@ -208,6 +246,67 @@ function val(name) {
     return document.querySelector(`[name="${name}"]`)?.value?.trim() ?? '';
 }
 
+let currentLogoUrl = '{{ $settings['store_logo'] ? asset($settings['store_logo']) : '' }}';
+
+async function uploadLogo(input) {
+    if (!input.files[0]) return;
+    const status = document.getElementById('logoUploadStatus');
+    status.textContent = 'Mengunggah...';
+
+    const fd = new FormData();
+    fd.append('logo', input.files[0]);
+    fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+
+    try {
+        const res  = await fetch('{{ route("settings.logo.upload") }}', { method: 'POST', body: fd });
+        const json = await res.json();
+
+        if (!json.success) throw new Error(json.message || 'Gagal');
+
+        currentLogoUrl = json.url;
+        document.getElementById('logoPreviewWrap').innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px">
+                <img id="logoImg" src="${json.url}"
+                    style="height:64px;max-width:160px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff">
+                <button type="button" onclick="removeLogo()" class="btn btn-danger btn-sm">
+                    <i class="fas fa-trash"></i> Hapus Logo
+                </button>
+            </div>`;
+        status.textContent = '';
+        updatePreview();
+        toast('Logo berhasil disimpan!', 'success');
+    } catch (e) {
+        status.textContent = 'Gagal: ' + e.message;
+    }
+    input.value = '';
+}
+
+async function removeLogo() {
+    if (!confirm('Hapus logo struk?')) return;
+    const status = document.getElementById('logoUploadStatus');
+
+    try {
+        const res  = await fetch('{{ route("settings.logo.remove") }}', {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error('Gagal');
+
+        currentLogoUrl = '';
+        document.getElementById('logoPreviewWrap').innerHTML = `
+            <div id="noLogoMsg" style="color:var(--text3);font-size:13px;display:flex;align-items:center;gap:8px">
+                <i class="fas fa-image" style="font-size:32px;color:var(--border)"></i>
+                Belum ada logo
+            </div>`;
+        status.textContent = '';
+        updatePreview();
+        toast('Logo dihapus', 'success');
+    } catch (e) {
+        toast('Gagal menghapus logo', 'error');
+    }
+}
+
 function updatePreview() {
     const name    = val('store_name')     || 'HPYSync';
     const tagline = val('store_tagline')  || 'Point of Sale System';
@@ -218,7 +317,11 @@ function updatePreview() {
 
     const divider = `<div style="border-top:1px dashed #000;margin:5px 0;"></div>`;
 
-    let html = `<div style="text-align:center;font-weight:bold;font-size:15px;">${name}</div>`;
+    let html = '';
+    if (currentLogoUrl) {
+        html += `<div style="text-align:center;margin-bottom:6px"><img src="${currentLogoUrl}" style="max-height:50px;max-width:200px;object-fit:contain"></div>`;
+    }
+    html += `<div style="text-align:center;font-weight:bold;font-size:15px;">${name}</div>`;
     if (tagline) html += `<div style="text-align:center;font-size:10px;">${tagline}</div>`;
     if (address) html += `<div style="text-align:center;font-size:10px;">${address.replace(/\n/g,'<br>')}</div>`;
     if (phone)   html += `<div style="text-align:center;font-size:10px;">Telp: ${phone}</div>`;
