@@ -9,6 +9,17 @@
     </div>
 </div>
 
+@if(!$tokenSet)
+<div class="alert alert-warning" style="margin-bottom:20px">
+    <i class="fas fa-exclamation-triangle"></i>
+    <div>
+        <strong>GITHUB_TOKEN belum dikonfigurasi.</strong>
+        Tambahkan <code>GITHUB_TOKEN=&lt;token&gt;</code> di file <code>.env</code>, lalu jalankan
+        <code>php artisan config:clear</code>. Hubungi HPY Solution untuk mendapatkan token.
+    </div>
+</div>
+@endif
+
 {{-- Version cards --}}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
     {{-- Versi Saat Ini --}}
