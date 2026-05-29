@@ -22,7 +22,7 @@
         <div class="card-body">
             <form id="storeSettingsForm">
                 <div class="form-group">
-                    <label class="form-label">Nama Toko <span style="color:var(--red)">*</span></label>
+                    <label class="form-label">Nama Toko</label>
                     <input type="text" name="store_name" class="form-control"
                         value="{{ $settings['store_name'] }}"
                         placeholder="Contoh: HPYSync" maxlength="100"

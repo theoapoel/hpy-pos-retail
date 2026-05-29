@@ -65,7 +65,7 @@ class SettingsController extends Controller
     public function save(Request $request)
     {
         $request->validate([
-            'store_name'             => 'required|string|max:100',
+            'store_name'             => 'nullable|string|max:100',
             'store_tagline'          => 'nullable|string|max:150',
             'store_address'          => 'nullable|string|max:300',
             'store_phone'            => 'nullable|string|max:30',
