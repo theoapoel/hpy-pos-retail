@@ -1,7 +1,7 @@
-# RESTO POS HPY
+# Resto POS HPY
 
 > Sistem kasir modern berbasis **Laravel 11**, database MySQL/MariaDB, UI Blade + Vite,
-> dilengkapi sinkronisasi penuh ke **ERP HPY (HPY)**.
+> dilengkapi sinkronisasi penuh ke **ERP HPY**.
 
 ---
 
@@ -10,7 +10,7 @@
 1. [Persyaratan Sistem](#persyaratan-sistem)
 2. [Langkah Instalasi](#langkah-instalasi)
 3. [Login Pertama Kali](#login-pertama-kali)
-4. [Konfigurasi ERPNext](#konfigurasi-erpnext)
+4. [Konfigurasi ERP HPY](#konfigurasi-erp-hpy)
 5. [Fitur-Fitur Utama](#fitur-fitur-utama)
 6. [Struktur Project](#struktur-project)
 7. [Perintah Berguna](#perintah-berguna)
@@ -39,11 +39,11 @@ php-zip       php-pdo  php-mysql php-fileinfo
 
 ## Langkah Instalasi
 
-### Langkah 1 — Clone / Ekstrak Project
+### Langkah 1 — Clone Project
 
 ```bash
-git clone <repo-url> mitra-pos-hpy
-cd mitra-pos-hpy
+git clone https://github.com/theoapoel/resto-pos.git
+cd resto-pos
 ```
 
 ---
@@ -77,7 +77,7 @@ php artisan key:generate
 
 ```sql
 -- Login ke MySQL/MariaDB, lalu jalankan:
-CREATE DATABASE mitra_pos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE resto_pos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 ---
@@ -87,13 +87,13 @@ CREATE DATABASE mitra_pos CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 Buka file `.env`, sesuaikan bagian ini:
 
 ```env
-APP_NAME="Mitra POS HPY"
+APP_NAME="Resto POS HPY"
 APP_URL=http://localhost:8000
 
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=mitra_pos
+DB_DATABASE=resto_pos
 DB_USERNAME=root
 DB_PASSWORD=
 ```
@@ -143,7 +143,7 @@ npm run dev
 
 ```bash
 # Jika menggunakan XAMPP: akses langsung lewat Apache
-http://localhost/mitra-pos-hpy/public
+http://localhost/resto-pos/public
 
 # Atau jalankan standalone:
 php artisan serve
@@ -166,53 +166,59 @@ php artisan serve
 
 ---
 
-## Konfigurasi ERPNext
+## Konfigurasi ERP HPY
 
-### Di Sisi ERPNext (lakukan dulu):
+### Di Sisi ERP HPY (lakukan dulu):
 
 **1. Buat API Key:**
 ```
-ERPNext → Settings → My Settings → API Access
+ERP HPY → Settings → My Settings → API Access
 → Klik "Generate Keys"
 → Salin API Key dan API Secret
 ```
 
 **2. Buat POS Profile:**
 ```
-ERPNext → Point of Sale → POS Profile → New
-→ Isi nama, company, warehouse, payment methods
+ERP HPY → Point of Sale → POS Profile → New
+→ Isi nama, company, warehouse
+→ Tambahkan payment methods (Cash, QRIS, dll.)
+→ Tambahkan kasir di tab "Applicable for Users"
 → Simpan
 ```
 
-**3. Buat Customer "Walk-in Customer"** (jika belum ada):
-```
-ERPNext → Selling → Customer → New
-→ Customer Name: "Walk-in Customer"
-→ Simpan
-```
+**3. Pastikan Walk-in Customer tersedia** di ERP HPY untuk transaksi tanpa customer terdaftar.
 
-**4. Pastikan item ada di ERPNext** dengan `is_sales_item = Yes`
+**4. Pastikan item ada di ERP HPY** dengan `is_sales_item = Yes`
 
 ---
 
-### Di Sisi Mitra POS:
+### Di Sisi Resto POS:
 
-Buka menu **Sync ERPNext** → isi form konfigurasi:
+Buka menu **Sync HPY** → halaman dibagi 3 bagian:
 
+**Konfigurasi HPY** (kolom kiri):
 ```
-ERPNext URL  : http://your-erpnext-domain.com
+HPY URL      : http://your-hpy-domain.com
 API Key      : (dari langkah di atas)
 API Secret   : (dari langkah di atas)
-Company      : Nama perusahaan di ERPNext
+Company      : Nama perusahaan di ERP HPY
 POS Profile  : Nama POS Profile yang sudah dibuat
+Naming Series: ACC-PSINV-.YYYY.- (sesuaikan jika perlu)
 ```
 
-Klik **"Test Koneksi"** → harus muncul status **"Terhubung"**
+Klik **"Test"** → harus muncul status **"Terhubung"**, lalu klik **"Simpan"**.
 
-Klik **"Simpan"**, lalu:
-- **"Pull Produk"** → import semua item dari ERPNext
-- **"Pull Customer"** → import semua customer dari ERPNext
-- **"Sync Pending"** → kirim transaksi yang belum tersync
+**Sales Taxes & Charges** (kolom kanan):
+- Pajak Produk: isi Account Head jika pajak diatur per item
+- Service Charge & PB1: isi Account Head dan Charge Type sesuai Chart of Accounts ERP HPY
+- Kosongkan jika pajak sudah diatur di POS Profile
+
+**Aksi Sinkronisasi** (bawah):
+- **Pull Payment Methods** → ambil metode bayar dari POS Profile, set walk-in customer otomatis
+- **Pull Produk** → import semua item dari ERP HPY ke lokal
+- **Pull User dari POS Profile** → import kasir dari tab "Applicable for Users"
+- **Pull Harga Delivery** → ambil harga GoFood/GrabFood/ShopeeFood dari price list
+- **Sync Pending** → kirim transaksi yang belum tersync ke ERP HPY sebagai POS Invoice
 
 ---
 
@@ -225,7 +231,9 @@ Klik **"Simpan"**, lalu:
 - Manajemen keranjang (tambah/kurang/hapus item)
 - Diskon nominal (Rp) dan persentase (%)
 - Kalkulasi pajak per produk
-- 4 metode pembayaran: Tunai / Kartu / Transfer / QRIS
+- Metode pembayaran dinamis dari POS Profile ERP HPY
+- Service Charge & PB1 otomatis untuk order Dine In
+- Harga delivery khusus untuk GoFood / GrabFood / ShopeeFood
 - Hitung kembalian otomatis, tombol nominal cepat
 - Pilih / tambah customer
 - Struk digital dan cetak struk thermal
@@ -243,12 +251,12 @@ Klik **"Simpan"**, lalu:
 - Kategori dengan warna dan icon
 - Barcode support
 - Pajak per produk
-- Sinkronisasi gambar produk dari HPYERP
+- Sinkronisasi gambar produk dari ERP HPY
 
 ### Manajemen Customer
 - CRUD customer
 - Tracking total pembelian
-- Push customer ke HPYERP
+- Push customer ke ERP HPY
 
 ### Riwayat Transaksi
 - Filter tanggal, status, metode bayar
@@ -257,9 +265,9 @@ Klik **"Simpan"**, lalu:
 - Batalkan transaksi — stok otomatis dikembalikan (admin/manager)
 
 ### Multi-Warehouse & Stock Transfer
-- Manajemen beberapa gudang (pemetaan 1:1 ke ERPNext Warehouse)
+- Manajemen beberapa gudang (pemetaan 1:1 ke ERP HPY Warehouse)
 - Transfer stok antar gudang dengan status lokal (`pending` / `submitted` / `cancelled`)
-- Sinkronisasi ke ERPNext Warehouse Transfer document
+- Sinkronisasi ke ERP HPY Warehouse Transfer document
 - Soft-delete untuk audit trail
 
 ### Stock Opname
@@ -269,14 +277,9 @@ Klik **"Simpan"**, lalu:
 - Batalkan opname yang belum disubmit
 - Riwayat opname lengkap
 
-### Stok per Gudang (ProductStock)
-- Tracking stok per produk per gudang
-- Sync dari ERPNext Bin (stok aktual ERPHPY)
-- Sync per-warehouse on demand
-
-### Sinkronisasi ERPHPY
+### Sinkronisasi ERP HPY
 - Test koneksi real-time
-- Pull produk & customer dari ERPHPY
+- Pull produk, user kasir, payment methods, harga delivery dari ERP HPY
 - Push transaksi sebagai POS Invoice (auto-submit)
 - Retry transaksi gagal
 - Log sinkronisasi lengkap
@@ -293,7 +296,7 @@ Klik **"Simpan"**, lalu:
 ## Struktur Project
 
 ```
-mitra-pos-hpy/
+resto-pos/
 ├── app/
 │   ├── Http/Controllers/
 │   │   ├── DashboardController.php       ← Dashboard & statistik
@@ -304,7 +307,7 @@ mitra-pos-hpy/
 │   │   ├── StockTransferController.php   ← Transfer stok antar gudang
 │   │   ├── StockController.php           ← Stok per gudang & sync Bin
 │   │   ├── StockOpnameController.php     ← Stock opname
-│   │   ├── ErpSyncController.php         ← Sinkronisasi ERPHPY
+│   │   ├── ErpSyncController.php         ← Sinkronisasi ERP HPY
 │   │   ├── UserController.php
 │   │   ├── PermissionController.php
 │   │   ├── RoleController.php
@@ -328,9 +331,9 @@ mitra-pos-hpy/
 │   │   ├── ErpSyncLog.php
 │   │   └── Setting.php
 │   └── Services/
-│       └── ERPNextService.php            ← Semua API call ke ERP HPY (Guzzle)
+│       └── ErpNextService.php            ← Semua API call ke ERP HPY (Guzzle)
 ├── database/
-│   ├── migrations/                       ← 19 file migrasi
+│   ├── migrations/
 │   └── seeders/
 │       └── DatabaseSeeder.php
 ├── resources/views/
@@ -400,7 +403,7 @@ php artisan storage:link
 ```
 
 ### ERP HPY: `401 Unauthorized`
-- Pastikan API Key dan Secret benar di menu Settings
+- Pastikan API Key dan Secret benar di menu Sync HPY → Konfigurasi HPY
 - User ERP HPY harus punya role System Manager atau Sales User
 - Coba regenerate API keys di ERP HPY
 
@@ -408,9 +411,9 @@ php artisan storage:link
 - Nama POS Profile harus **sama persis** (case-sensitive) dengan di ERP HPY
 - Pastikan POS Profile sudah di-enable
 
-### ERP HPY: `Customer does not exist`
-- Buat customer "Walk-in Customer" di ERP HPY
-- Atau pull customer dulu: **Sync ERP HPY → Pull Customer**
+### ERP HPY: `Customer does not exist` / `NoneType error`
+- Klik **Pull Payment Methods** di halaman Sync HPY — walk-in customer akan di-set otomatis dari POS Profile
+- Pastikan customer yang dimaksud ada di ERP HPY
 
 ### Permission tidak berlaku setelah diubah
 Cache permission di-reset otomatis saat menyimpan perubahan, tapi jika masih bermasalah:
@@ -445,7 +448,7 @@ chown -R www-data:www-data storage bootstrap/cache
 server {
     listen 80;
     server_name pos.yourdomain.com;
-    root /var/www/mitra-pos-hpy/public;
+    root /var/www/resto-pos/public;
     index index.php;
 
     location / {
@@ -462,4 +465,4 @@ server {
 
 ---
 
-*Mitra POS HPY — Laravel 11 + ERP HPY*
+*Resto POS HPY — Laravel 11 + ERP HPY*
