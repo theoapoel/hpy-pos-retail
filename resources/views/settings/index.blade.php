@@ -350,7 +350,8 @@ function updatePreview() {
     html += `<div style="display:flex;justify-content:space-between;"><span>Bayar (CASH)</span><span>Rp 100.000</span></div>`;
     html += `<div style="display:flex;justify-content:space-between;"><span>Kembalian</span><span>Rp 50.000</span></div>`;
     html += divider;
-    html += `<div style="text-align:center;margin-top:6px;">${footer}</div>`;
+    if (footer) html += `<div style="text-align:center;margin-top:6px;">${footer}</div>`;
+    html += `<div style="text-align:center;font-size:10px;color:#aaa;margin-top:4px;">Powered by HPY Solution</div>`;
 
     document.getElementById('receiptPreview').innerHTML = html;
 }

@@ -141,8 +141,13 @@
             @endif
 
             <hr style="margin:20px 0;border:none;border-top:1px dashed var(--border)">
+            @if($store['receipt_footer'])
             <div style="text-align:center;color:var(--text3);font-size:13px">
                 {{ $store['receipt_footer'] }}
+            </div>
+            @endif
+            <div style="text-align:center;color:var(--text3);font-size:11px;margin-top:6px">
+                Powered by HPY Solution
             </div>
         </div>
     </div>

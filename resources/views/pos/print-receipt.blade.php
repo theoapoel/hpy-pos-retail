@@ -92,7 +92,10 @@
     <hr class="divider">
 
     {{-- Footer --}}
+    @if($store['receipt_footer'])
     <div class="center" style="margin-top:8px;">{{ $store['receipt_footer'] }}</div>
+    @endif
+    <div class="center sm" style="margin-top:4px;color:#888;">Powered by HPY Solution</div>
 
     <div class="no-print" style="text-align:center;margin-top:20px">
         <button onclick="window.print()" style="padding:8px 20px;background:#4285F4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Print</button>
