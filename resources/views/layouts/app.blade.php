@@ -65,17 +65,68 @@
             position: fixed; top: var(--header-h); left: 0; width: var(--nav-w);
             height: calc(100vh - var(--header-h)); background: var(--surface);
             border-right: 1px solid var(--border); padding: 8px 0; overflow-y: auto; z-index: 90;
+            transition: width .22s ease, transform .22s ease;
+            overflow-x: hidden;
         }
-        .nav-section { padding: 16px 12px 4px; font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; }
-        .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; text-decoration: none; color: var(--text2); font-size: 14px; font-weight: 500; border-radius: 0 24px 24px 0; margin-right: 8px; transition: all .2s; }
+        .nav-section { padding: 16px 12px 4px; font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; white-space: nowrap; transition: opacity .15s; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; text-decoration: none; color: var(--text2); font-size: 14px; font-weight: 500; border-radius: 0 24px 24px 0; margin-right: 8px; transition: background .2s, color .2s; white-space: nowrap; position: relative; }
         .nav-item:hover { background: var(--surface2); color: var(--text); }
         .nav-item.active { background: var(--blue-light); color: var(--blue); }
         .nav-item.active .nav-icon { color: var(--blue); }
-        .nav-icon { width: 20px; text-align: center; font-size: 16px; }
-        .nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 700; }
+        .nav-icon { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; }
+        .nav-label { transition: opacity .15s; }
+        .nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 700; flex-shrink: 0; }
+        .nav-tooltip {
+            display: none; position: absolute; left: calc(100% + 10px); top: 50%;
+            transform: translateY(-50%); background: rgba(32,33,36,.92); color: #fff;
+            padding: 5px 12px; border-radius: 6px; font-size: 13px; white-space: nowrap;
+            pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 200;
+        }
+
+        /* Sidebar toggle button */
+        .sidebar-toggle {
+            width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; cursor: pointer; border: none; background: transparent;
+            color: var(--text2); font-size: 18px; margin-right: 4px; transition: background .2s; flex-shrink: 0;
+        }
+        .sidebar-toggle:hover { background: var(--surface2); }
+
+        /* Mobile backdrop */
+        .sidebar-backdrop {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,.45); z-index: 88;
+        }
+
+        /* DESKTOP collapsed state */
+        body.nav-collapsed .sidebar { width: 64px; }
+        body.nav-collapsed .main { margin-left: 64px; }
+        body.nav-collapsed .header-brand { width: 64px; }
+        body.nav-collapsed .brand-text { opacity: 0; width: 0; overflow: hidden; }
+        body.nav-collapsed .nav-section { opacity: 0; height: 0; padding: 0; overflow: hidden; }
+        body.nav-collapsed .nav-item { justify-content: center; padding: 10px 0; margin-right: 0; border-radius: 8px; margin: 2px 8px; }
+        body.nav-collapsed .nav-label { opacity: 0; width: 0; overflow: hidden; }
+        body.nav-collapsed .nav-badge { position: absolute; top: 4px; right: 6px; width: 8px; height: 8px; padding: 0; border-radius: 50%; font-size: 0; }
+        body.nav-collapsed .nav-item .nav-tooltip { display: block; }
+        body.nav-collapsed .nav-item:hover .nav-tooltip { opacity: 1; }
+        body.nav-collapsed .sidebar-user { padding: 8px; }
+        body.nav-collapsed .sidebar-user-info { display: none; }
 
         /* MAIN CONTENT */
-        .main { margin-left: var(--nav-w); margin-top: var(--header-h); padding: 24px; min-height: calc(100vh - var(--header-h)); }
+        .main { margin-left: var(--nav-w); margin-top: var(--header-h); padding: 24px; min-height: calc(100vh - var(--header-h)); transition: margin-left .22s ease; }
+        .header-brand { transition: width .22s ease; overflow: hidden; }
+
+        /* MOBILE */
+        @media (max-width: 767px) {
+            .sidebar { transform: translateX(-100%); width: var(--nav-w) !important; }
+            body.nav-open .sidebar { transform: translateX(0); }
+            body.nav-open .sidebar-backdrop { display: block; }
+            .main { margin-left: 0 !important; }
+            .header-brand { width: auto !important; }
+            body.nav-collapsed .nav-item { justify-content: flex-start; padding: 10px 16px; margin: 0 8px 0 0; border-radius: 0 24px 24px 0; }
+            body.nav-collapsed .nav-label { opacity: 1; width: auto; }
+            body.nav-collapsed .nav-section { opacity: 1; height: auto; padding: 16px 12px 4px; }
+            body.nav-collapsed .nav-item .nav-tooltip { display: none !important; }
+        }
         .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
         .page-title { font-family: 'Google Sans', sans-serif; font-size: 24px; font-weight: 700; color: var(--text); }
         .page-subtitle { font-size: 13px; color: var(--text3); margin-top: 2px; }
@@ -192,8 +243,14 @@
     @stack('styles')
 </head>
 <body>
+    <!-- Sidebar backdrop (mobile) -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
     <!-- Header -->
     <header class="header">
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle menu">
+            <i class="fas fa-bars"></i>
+        </button>
         <a href="{{ route('dashboard') }}" class="header-brand">
             <img src="{{ asset('images/happypos.png') }}" alt="HPYSync"
                 style="height:52px;width:auto;object-fit:contain;">
@@ -237,120 +294,90 @@
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
         @endphp
 
+        @php
+        $navItem = fn(string $href, string $icon, string $label, bool $active) =>
+            "<a href=\"{$href}\" class=\"nav-item" . ($active ? ' active' : '') . "\">"
+            . "<i class=\"{$icon} nav-icon\"></i>"
+            . "<span class=\"nav-label\">{$label}</span>"
+            . "<span class=\"nav-tooltip\">{$label}</span>"
+            . "</a>";
+        @endphp
+
         <div class="nav-section">Menu</div>
         @if($canDashboard)
-        <a href="{{ route('dashboard') }}" class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
-            <i class="fas fa-th-large nav-icon"></i> Dashboard
-        </a>
+        {!! $navItem(route('dashboard'), 'fas fa-th-large', 'Dashboard', request()->routeIs('dashboard')) !!}
         @endif
         @if($canPos)
-        <a href="{{ route('pos.index') }}" class="nav-item {{ request()->routeIs('pos.*') ? 'active' : '' }}">
-            <i class="fas fa-cash-register nav-icon"></i> Kasir (POS)
-        </a>
+        {!! $navItem(route('pos.index'), 'fas fa-cash-register', 'Kasir (POS)', request()->routeIs('pos.*')) !!}
         @endif
         @if($canTransactions)
-        <a href="{{ route('transactions.index') }}" class="nav-item {{ request()->routeIs('transactions.*') ? 'active' : '' }}">
-            <i class="fas fa-receipt nav-icon"></i> Transaksi
-        </a>
+        {!! $navItem(route('transactions.index'), 'fas fa-receipt', 'Transaksi', request()->routeIs('transactions.*')) !!}
         @endif
 
         @if($showManajemen)
         <div class="nav-section">Manajemen</div>
         @if($canProducts)
-        <a href="{{ route('products.index') }}" class="nav-item {{ request()->routeIs('products.*') ? 'active' : '' }}">
-            <i class="fas fa-box nav-icon"></i> Produk
-        </a>
+        {!! $navItem(route('products.index'), 'fas fa-box', 'Produk', request()->routeIs('products.*')) !!}
         @endif
         @if($canCustomers)
-        <a href="{{ route('customers.index') }}" class="nav-item {{ request()->routeIs('customers.*') ? 'active' : '' }}">
-            <i class="fas fa-users nav-icon"></i> Customer
-        </a>
+        {!! $navItem(route('customers.index'), 'fas fa-users', 'Customer', request()->routeIs('customers.*')) !!}
         @endif
         @if($canStock)
-        <a href="{{ route('stock.index') }}" class="nav-item {{ request()->routeIs('stock.index') || request()->routeIs('stock.debug*') || request()->routeIs('stock.sync*') ? 'active' : '' }}">
-            <i class="fas fa-boxes nav-icon"></i> Stok Barang
-        </a>
-        <a href="{{ route('stock-opname.index') }}" class="nav-item {{ request()->routeIs('stock-opname.*') ? 'active' : '' }}">
-            <i class="fas fa-clipboard-list nav-icon"></i> Stock Opname
-        </a>
+        {!! $navItem(route('stock.index'), 'fas fa-boxes', 'Stok Barang', request()->routeIs('stock.index') || request()->routeIs('stock.debug*') || request()->routeIs('stock.sync*')) !!}
+        {!! $navItem(route('stock-opname.index'), 'fas fa-clipboard-list', 'Stock Opname', request()->routeIs('stock-opname.*')) !!}
         @endif
         @if($canStockTransfer)
-        <a href="{{ route('stock-transfer.index') }}" class="nav-item {{ request()->routeIs('stock-transfer.*') ? 'active' : '' }}">
-            <i class="fas fa-truck-loading nav-icon"></i> Transfer Barang
-        </a>
+        {!! $navItem(route('stock-transfer.index'), 'fas fa-truck-loading', 'Transfer Barang', request()->routeIs('stock-transfer.*')) !!}
         @endif
         @endif
 
         @if($canDelivery || $canKitchen)
         <div class="nav-section">Delivery</div>
         @if($canDelivery)
-        <a href="{{ route('delivery-orders.index') }}" class="nav-item {{ request()->routeIs('delivery-orders.*') ? 'active' : '' }}">
-            <i class="fas fa-truck nav-icon"></i> Delivery Order
-        </a>
-        <a href="{{ route('delivery-notes.index') }}" class="nav-item {{ request()->routeIs('delivery-notes.*') ? 'active' : '' }}">
-            <i class="fas fa-map-marker-alt nav-icon"></i> Delivery Notes
-        </a>
+        {!! $navItem(route('delivery-orders.index'), 'fas fa-truck', 'Delivery Order', request()->routeIs('delivery-orders.*')) !!}
+        {!! $navItem(route('delivery-notes.index'), 'fas fa-map-marker-alt', 'Delivery Notes', request()->routeIs('delivery-notes.*')) !!}
         @endif
         @if($canKitchen)
-        <a href="{{ route('kitchen.index') }}" class="nav-item {{ request()->routeIs('kitchen.*') ? 'active' : '' }}">
-            <i class="fas fa-utensils nav-icon"></i> Kitchen Monitor
-        </a>
+        {!! $navItem(route('kitchen.index'), 'fas fa-utensils', 'Kitchen Monitor', request()->routeIs('kitchen.*')) !!}
         @endif
         @endif
 
         @if($canSync)
         <div class="nav-section">Integrasi</div>
         <a href="{{ route('sync.index') }}" class="nav-item {{ request()->routeIs('sync.*') ? 'active' : '' }}">
-            <i class="fas fa-sync-alt nav-icon"></i> Sync HPY
-            @if($pendingSync > 0)
-                <span class="nav-badge">{{ $pendingSync }}</span>
-            @endif
+            <i class="fas fa-sync-alt nav-icon"></i>
+            <span class="nav-label">Sync HPY</span>
+            @if($pendingSync > 0)<span class="nav-badge">{{ $pendingSync }}</span>@endif
+            <span class="nav-tooltip">Sync HPY</span>
         </a>
-        <a href="{{ route('online-report.index') }}" class="nav-item {{ request()->routeIs('online-report.*') ? 'active' : '' }}">
-            <i class="fas fa-cloud-download-alt nav-icon"></i> Laporan Online
-        </a>
+        {!! $navItem(route('online-report.index'), 'fas fa-cloud-download-alt', 'Laporan Online', request()->routeIs('online-report.*')) !!}
         @endif
 
         @if($role === 'admin')
         <div class="nav-section">Sistem</div>
-        <a href="{{ route('users.index') }}" class="nav-item {{ request()->routeIs('users.*') ? 'active' : '' }}">
-            <i class="fas fa-users-cog nav-icon"></i> Manajemen User
-        </a>
-        <a href="{{ route('roles.index') }}" class="nav-item {{ request()->routeIs('roles.*') ? 'active' : '' }}">
-            <i class="fas fa-layer-group nav-icon"></i> Manajemen Role
-        </a>
-        <a href="{{ route('permissions.index') }}" class="nav-item {{ request()->routeIs('permissions.*') ? 'active' : '' }}">
-            <i class="fas fa-shield-alt nav-icon"></i> Hak Akses
-        </a>
-        <a href="{{ route('warehouses.index') }}" class="nav-item {{ request()->routeIs('warehouses.*') ? 'active' : '' }}">
-            <i class="fas fa-warehouse nav-icon"></i> Warehouse
-        </a>
-        <a href="{{ route('settings.index') }}" class="nav-item {{ request()->routeIs('settings.*') ? 'active' : '' }}">
-            <i class="fas fa-store nav-icon"></i> Pengaturan Toko
-        </a>
-        <a href="{{ route('backup.restore') }}" class="nav-item {{ request()->routeIs('backup.*') ? 'active' : '' }}">
-            <i class="fas fa-upload nav-icon"></i> Restore Backup
-        </a>
-        <a href="{{ route('update.index') }}" class="nav-item {{ request()->routeIs('update.*') ? 'active' : '' }}">
-            <i class="fas fa-download nav-icon"></i> Update Sistem
-        </a>
+        {!! $navItem(route('users.index'),       'fas fa-users-cog',       'Manajemen User',   request()->routeIs('users.*')) !!}
+        {!! $navItem(route('roles.index'),       'fas fa-layer-group',     'Manajemen Role',   request()->routeIs('roles.*')) !!}
+        {!! $navItem(route('permissions.index'), 'fas fa-shield-alt',      'Hak Akses',        request()->routeIs('permissions.*')) !!}
+        {!! $navItem(route('warehouses.index'),  'fas fa-warehouse',       'Warehouse',        request()->routeIs('warehouses.*')) !!}
+        {!! $navItem(route('settings.index'),    'fas fa-store',           'Pengaturan Toko',  request()->routeIs('settings.*')) !!}
+        {!! $navItem(route('backup.restore'),    'fas fa-upload',          'Restore Backup',   request()->routeIs('backup.*')) !!}
+        {!! $navItem(route('update.index'),      'fas fa-download',        'Update Sistem',    request()->routeIs('update.*')) !!}
         <a href="{{ route('factory-reset.index') }}"
             class="nav-item {{ request()->routeIs('factory-reset.*') ? 'active' : '' }}"
-            style="{{ request()->routeIs('factory-reset.*') ? '' : 'color:#EA4335;' }}"
-            onmouseenter="this.style.color='#EA4335'"
-            onmouseleave="this.style.color='{{ request()->routeIs('factory-reset.*') ? 'var(--blue)' : '#EA4335' }}'">
-            <i class="fas fa-trash-alt nav-icon" style="color:#EA4335;"></i> Factory Reset
+            style="color:#EA4335">
+            <i class="fas fa-trash-alt nav-icon" style="color:#EA4335"></i>
+            <span class="nav-label">Factory Reset</span>
+            <span class="nav-tooltip">Factory Reset</span>
         </a>
         @endif
 
-        {{-- User badge di bawah sidebar --}}
-        <div style="position:absolute;bottom:0;left:0;right:0;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface)">
+        {{-- User badge --}}
+        <div class="sidebar-user" style="position:absolute;bottom:0;left:0;right:0;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface)">
             <div style="display:flex;align-items:center;gap:8px">
-                <div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex-shrink:0;
-                    background:{{ $roleColor }}">
+                <div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex-shrink:0;background:{{ $roleColor }}">
                     {{ strtoupper(substr($u->name, 0, 1)) }}
                 </div>
-                <div style="overflow:hidden;flex:1">
+                <div class="sidebar-user-info" style="overflow:hidden;flex:1">
                     <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $u->name }}</div>
                     <div style="font-size:11px;color:var(--text3);text-transform:capitalize">{{ $role }}</div>
                 </div>
@@ -417,6 +444,39 @@
     function formatMoney(n) {
         return 'Rp ' + parseFloat(n||0).toLocaleString('id-ID',{minimumFractionDigits:0});
     }
+
+    // ── Sidebar toggle ────────────────────────────────────────────
+    function isMobile() { return window.innerWidth <= 767; }
+
+    function toggleSidebar() {
+        if (isMobile()) {
+            document.body.classList.toggle('nav-open');
+        } else {
+            const collapsed = document.body.classList.toggle('nav-collapsed');
+            localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0');
+        }
+    }
+
+    function closeSidebar() {
+        document.body.classList.remove('nav-open');
+    }
+
+    // Restore desktop collapsed state
+    if (!isMobile() && localStorage.getItem('sidebarCollapsed') === '1') {
+        document.body.classList.add('nav-collapsed');
+    }
+
+    // Close mobile sidebar when a nav item is clicked
+    document.querySelectorAll('.nav-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+            if (isMobile()) closeSidebar();
+        });
+    });
+
+    // Close on resize to desktop
+    window.addEventListener('resize', function() {
+        if (!isMobile()) document.body.classList.remove('nav-open');
+    });
     </script>
     @stack('scripts')
 </body>
