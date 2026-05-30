@@ -1163,7 +1163,7 @@ class ErpNextService
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
         } catch (RequestException $e) {
-            $rawBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : '';
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
             Log::error('SO create failed', ['order' => $order->order_no, 'raw' => $rawBody]);
             $error = $this->extractError($e);
             $order->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
@@ -1236,7 +1236,7 @@ class ErpNextService
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
         } catch (RequestException $e) {
-            $rawBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : '';
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
             Log::error('DN create failed', ['shipment' => $shipment->id, 'raw' => $rawBody]);
             $error = $this->extractError($e);
             $shipment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
@@ -1346,6 +1346,15 @@ class ErpNextService
         }
     }
 
+    private function readResponseBody(\Psr\Http\Message\ResponseInterface $response): string
+    {
+        $stream = $response->getBody();
+        if ($stream->isSeekable()) {
+            $stream->rewind();
+        }
+        return (string) $stream;
+    }
+
     private function extractError(RequestException $e): string
     {
         if (!$e->hasResponse()) {
@@ -1353,7 +1362,7 @@ class ErpNextService
         }
 
         $status = $e->getResponse()->getStatusCode();
-        $body   = $e->getResponse()->getBody()->getContents();
+        $body   = $this->readResponseBody($e->getResponse());
 
         if (str_starts_with(ltrim($body), '<')) {
             return "Server ERP HPY tidak tersedia (HTTP {$status}). Coba beberapa saat lagi.";
