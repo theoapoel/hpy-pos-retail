@@ -83,25 +83,17 @@
 {{-- Form update (muncul setelah cek jika ada update) --}}
 <div id="updateForm" class="card" style="display:none;margin-bottom:24px">
     <div class="card-header">
-        <div class="card-title"><i class="fas fa-key" style="color:#E37400"></i> Otorisasi Update</div>
+        <div class="card-title"><i class="fas fa-download text-blue"></i> Jalankan Update</div>
     </div>
     <div class="card-body">
         <div class="alert alert-warning" style="margin-bottom:16px">
             <i class="fas fa-exclamation-triangle"></i>
             Proses update akan me-restart aplikasi sebentar. Pastikan tidak ada transaksi yang sedang berjalan.
         </div>
-        <div style="display:flex;gap:12px;align-items:flex-end">
-            <div class="form-group" style="flex:1;margin-bottom:0">
-                <label class="form-label">Key Update</label>
-                <input type="password" id="updateKey" class="form-control"
-                    placeholder="Masukkan key yang diberikan HPY Solution"
-                    autocomplete="off" style="letter-spacing:2px">
-            </div>
-            <button id="btnUpdate" onclick="runUpdate()" class="btn btn-success"
-                style="height:42px;border-radius:8px;white-space:nowrap">
-                <i class="fas fa-download"></i> Mulai Update
-            </button>
-        </div>
+        <button id="btnUpdate" onclick="runUpdate()" class="btn btn-success"
+            style="height:42px;border-radius:8px;white-space:nowrap">
+            <i class="fas fa-download"></i> Mulai Update Sekarang
+        </button>
     </div>
 </div>
 
@@ -199,10 +191,7 @@ async function checkUpdate() {
 
 async function runUpdate() {
     const token = document.getElementById('githubToken').value.trim();
-    const key   = document.getElementById('updateKey').value.trim();
-
-    if (!token) { alert('GitHub Token tidak boleh kosong.'); return; }
-    if (!key)   { alert('Key Update tidak boleh kosong.'); return; }
+    if (!token) { alert('GitHub Token tidak boleh kosong. Isi token lalu Cek Update terlebih dahulu.'); return; }
     if (!confirm('Sistem akan diperbarui. Pastikan tidak ada transaksi berjalan. Lanjutkan?')) return;
 
     const btn = document.getElementById('btnUpdate');
@@ -218,7 +207,7 @@ async function runUpdate() {
         const res  = await fetch('{{ route("update.run") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: JSON.stringify({ key, github_token: token }),
+            body: JSON.stringify({ github_token: token }),
         });
         const json = await res.json();
 
@@ -250,8 +239,7 @@ async function runUpdate() {
     }
 
     btn.disabled  = false;
-    btn.innerHTML = '<i class="fas fa-download"></i> Mulai Update';
-    document.getElementById('updateKey').value = '';
+    btn.innerHTML = '<i class="fas fa-download"></i> Mulai Update Sekarang';
 }
 </script>
 @endpush

@@ -53,26 +53,8 @@ class UpdateController extends Controller
     public function run(Request $request)
     {
         $request->validate([
-            'key'          => 'required|string',
             'github_token' => 'required|string',
         ]);
-
-        $validKey = trim(env('UPDATE_KEY', ''));
-        $inputKey = trim($request->key);
-
-        if (empty($validKey)) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'UPDATE_KEY belum dikonfigurasi di server (.env). Hubungi HPY Solution.',
-            ], 403);
-        }
-
-        if ($inputKey !== $validKey) {
-            return response()->json([
-                'success' => false,
-                'error'   => 'Key tidak valid. Hubungi HPY Solution untuk mendapatkan key update.',
-            ], 403);
-        }
 
         $log     = [];
         $base    = base_path();
