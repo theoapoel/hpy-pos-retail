@@ -43,21 +43,27 @@ class DeliveryNoteController extends Controller
             return response()->json(['success' => false, 'error' => 'Sudah ditandai terkirim.']);
         }
 
-        $shipment->update([
-            'status'       => 'delivered',
-            'delivered_at' => now(),
-        ]);
+        try {
+            $shipment->update([
+                'status'       => 'delivered',
+                'delivered_at' => now(),
+            ]);
 
-        // Cek apakah semua shipment dari order ini sudah delivered
-        $order = $shipment->order;
-        $allDelivered = $order->shipments()->where('status', '!=', 'delivered')->doesntExist();
-        if ($allDelivered) {
-            $order->update(['status' => 'completed']);
-        } elseif ($order->status === 'confirmed') {
-            $order->update(['status' => 'delivering']);
+            // Update order status — load with withTrashed in case order was soft-deleted
+            $order = DeliveryOrder::withTrashed()->find($shipment->delivery_order_id);
+            if ($order) {
+                $allDelivered = $order->shipments()->where('status', '!=', 'delivered')->doesntExist();
+                if ($allDelivered) {
+                    $order->update(['status' => 'completed']);
+                } elseif ($order->status === 'confirmed') {
+                    $order->update(['status' => 'delivering']);
+                }
+            }
+
+            return response()->json(['success' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
         }
-
-        return response()->json(['success' => true]);
     }
 
     public function syncDeliveryNote(DeliveryShipment $shipment)

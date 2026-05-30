@@ -374,11 +374,25 @@
                 headers: {'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
                 body: JSON.stringify(data)
             });
-            return r.json();
+            const text = await r.text();
+            try {
+                return JSON.parse(text);
+            } catch(e) {
+                // Server returned non-JSON (HTML error page, redirect, etc.)
+                const preview = text.substring(0, 300);
+                console.error('Non-JSON response from', url, ':', preview);
+                throw new Error('Server error (HTTP ' + r.status + '). Cek Laravel log.');
+            }
         },
         async get(url) {
             const r = await fetch(url, { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
-            return r.json();
+            const text = await r.text();
+            try {
+                return JSON.parse(text);
+            } catch(e) {
+                console.error('Non-JSON response from', url, ':', text.substring(0, 300));
+                throw new Error('Server error (HTTP ' + r.status + ')');
+            }
         }
     };
 
