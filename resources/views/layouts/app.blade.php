@@ -64,7 +64,7 @@
         .sidebar {
             position: fixed; top: var(--header-h); left: 0; width: var(--nav-w);
             height: calc(100vh - var(--header-h)); background: var(--surface);
-            border-right: 1px solid var(--border); padding: 8px 0 60px; overflow-y: auto; z-index: 90;
+            border-right: 1px solid var(--border); padding: 8px 0 12px; overflow-y: auto; z-index: 90;
             transition: width .22s ease, transform .22s ease;
             overflow-x: hidden;
         }
@@ -108,8 +108,6 @@
         body.nav-collapsed .nav-badge { position: absolute; top: 4px; right: 6px; width: 8px; height: 8px; padding: 0; border-radius: 50%; font-size: 0; }
         body.nav-collapsed .nav-item .nav-tooltip { display: block; }
         body.nav-collapsed .nav-item:hover .nav-tooltip { opacity: 1; }
-        body.nav-collapsed .sidebar-user { padding: 8px; }
-        body.nav-collapsed .sidebar-user-info { display: none; }
 
         /* MAIN CONTENT */
         .main { margin-left: var(--nav-w); margin-top: var(--header-h); padding: 24px; min-height: calc(100vh - var(--header-h)); transition: margin-left .22s ease; }
@@ -371,18 +369,6 @@
         </a>
         @endif
 
-        {{-- User badge --}}
-        <div class="sidebar-user" style="position:absolute;bottom:0;left:0;right:0;padding:12px 16px;border-top:1px solid var(--border);background:var(--surface)">
-            <div style="display:flex;align-items:center;gap:8px">
-                <div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex-shrink:0;background:{{ $roleColor }}">
-                    {{ strtoupper(substr($u->name, 0, 1)) }}
-                </div>
-                <div class="sidebar-user-info" style="overflow:hidden;flex:1">
-                    <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $u->name }}</div>
-                    <div style="font-size:11px;color:var(--text3);text-transform:capitalize">{{ $role }}</div>
-                </div>
-            </div>
-        </div>
     </nav>
 
     <!-- Main -->
