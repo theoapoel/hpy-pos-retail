@@ -1157,12 +1157,16 @@ class ErpNextService
         $docname = null;
 
         try {
-            $response = $this->client->post('/api/resource/Sales%20Order', ['json' => $payload]);
-            $data     = json_decode($response->getBody()->getContents(), true);
-            $docname  = $data['data']['name'] ?? null;
+            // Use frappe.client.insert (whitelisted method) — different auth context than /api/resource/
+            $response = $this->client->post('/api/method/frappe.client.insert', [
+                'json' => ['doc' => $payload],
+            ]);
+            $data    = json_decode($response->getBody()->getContents(), true);
+            $docname = $data['message']['name'] ?? null;
         } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : '';
+            Log::error('SO create failed', ['order' => $order->order_no, 'raw' => $rawBody]);
             $error = $this->extractError($e);
-            Log::error('SO create failed', ['order' => $order->order_no, 'error' => $error]);
             $order->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
             return ['success' => false, 'error' => $error];
         }
@@ -1372,16 +1376,13 @@ class ErpNextService
             return "Server ERP HPY tidak tersedia (HTTP {$status}). Coba beberapa saat lagi.";
         }
 
+        Log::debug('ERPNext raw error', ['status' => $status, 'body' => $body]);
+
         $decoded = json_decode($body, true);
         if ($decoded) {
             $exception = $decoded['exception'] ?? '';
 
-            if (str_contains($exception, 'PermissionError')) {
-                return 'ERPNext: Tidak ada izin untuk membuat dokumen ini. '
-                     . 'Pastikan API user memiliki role "Sales User" atau "Sales Manager" di ERPNext.';
-            }
-
-            // Parse _server_messages (nested JSON string from Frappe)
+            // Try to extract human-readable message from _server_messages first
             $raw = $decoded['_server_messages'] ?? null;
             if ($raw) {
                 $msgs = json_decode($raw, true);
@@ -1390,19 +1391,27 @@ class ErpNextService
                     foreach ($msgs as $m) {
                         $parsed = is_string($m) ? json_decode($m, true) : $m;
                         $text   = is_array($parsed) ? ($parsed['message'] ?? '') : (string) $m;
-                        if ($text) $texts[] = strip_tags($text);
+                        if ($text) $texts[] = strip_tags(html_entity_decode($text));
                     }
-                    if ($texts) return 'ERPNext: ' . implode(' | ', $texts);
+                    if ($texts) {
+                        $msg = implode(' | ', $texts);
+                        if (str_contains($exception, 'PermissionError')) {
+                            $msg .= ' (Hint: pastikan API user memiliki role Sales User/Manager di ERPNext)';
+                        }
+                        return $msg;
+                    }
                 }
             }
 
             if (!empty($decoded['message'])) {
-                return 'ERPNext: ' . $decoded['message'];
+                return $decoded['message'];
             }
 
             if ($exception) {
                 $short = preg_replace('/^frappe\.exceptions\./', '', $exception);
-                return "ERPNext Error: {$short}";
+                return "ERPNext {$short}" . (str_contains($exception, 'PermissionError')
+                    ? ': API user tidak punya izin buat dokumen ini'
+                    : '');
             }
         }
 
