@@ -1111,62 +1111,80 @@ class ErpNextService
             return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
         }
 
-        $company    = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY'));
-        $priceList  = \App\Models\Setting::get('erpnext_price_list', 'Standard Selling');
+        // Customer must exist in ERPNext — use erp_customer_name if synced
+        $customer = $order->customer->erp_customer_name ?: $order->customer->name;
+        if (empty($customer)) {
+            return ['success' => false, 'error' => 'Customer belum memiliki nama ERP. Push customer ke ERPNext terlebih dahulu.'];
+        }
 
-        $items = $order->items->map(fn($item) => [
+        $company       = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $priceList     = \App\Models\Setting::get('erpnext_price_list', '');
+        $defaultWh     = Warehouse::getDefault()?->name;
+
+        $items = $order->items->map(fn($item) => array_filter([
             'item_code'     => $item->product?->erp_item_code ?? $item->product_sku ?? $item->product_name,
             'item_name'     => $item->product_name,
             'qty'           => (float) $item->qty,
             'rate'          => (float) $item->price,
             'delivery_date' => $order->delivery_date->format('Y-m-d'),
             'uom'           => $item->product?->unit ?? 'Nos',
-        ])->toArray();
+            'warehouse'     => $defaultWh ?: null,
+        ], fn($v) => !is_null($v)))->toArray();
 
-        $customer = $order->customer->erp_customer_name ?: $order->customer->name;
-
-        $payload = [
-            'doctype'            => 'Sales Order',
-            'customer'           => $customer,
-            'transaction_date'   => now()->format('Y-m-d'),
-            'delivery_date'      => $order->delivery_date->format('Y-m-d'),
-            'order_type'         => 'Sales',
-            'company'            => $company,
-            'selling_price_list' => $priceList,
-            'po_no'              => $order->order_no,
-            'items'              => $items,
-            'remarks'            => implode("\n", array_filter([
+        $payload = array_filter([
+            'doctype'          => 'Sales Order',
+            'customer'         => $customer,
+            'transaction_date' => now()->format('Y-m-d'),
+            'delivery_date'    => $order->delivery_date->format('Y-m-d'),
+            'order_type'       => 'Sales',
+            'company'          => $company ?: null,
+            'set_warehouse'    => $defaultWh ?: null,
+            'selling_price_list' => $priceList ?: null,
+            'po_no'            => $order->order_no,
+            'items'            => $items,
+            'remarks'          => implode("\n", array_filter([
                 'Order: ' . $order->order_no,
                 $order->billing_address ? 'Billing: ' . $order->billing_address : null,
                 $order->notes,
-            ])),
-        ];
+            ])) ?: null,
+        ], fn($v) => !is_null($v));
+
+        // Keep items key even if empty array (won't be filtered by array_filter)
+        $payload['items'] = $items;
+
+        Log::info('DeliveryOrder SO payload', ['order' => $order->order_no, 'payload' => $payload]);
+
+        $docname = null;
 
         try {
-            $response = $this->client->post('/api/resource/Sales Order', ['json' => $payload]);
+            $response = $this->client->post('/api/resource/Sales%20Order', ['json' => $payload]);
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
-
-            if ($docname) {
-                $this->submitDoc('Sales Order', $docname);
-            }
-
-            $order->update([
-                'erp_sales_order'  => $docname,
-                'erp_sync_status'  => 'synced',
-                'erp_sync_error'   => null,
-            ]);
-
-            return ['success' => true, 'sales_order' => $docname, 'docname' => $docname];
-
         } catch (RequestException $e) {
             $error = $this->extractError($e);
+            Log::error('SO create failed', ['order' => $order->order_no, 'error' => $error]);
             $order->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
             return ['success' => false, 'error' => $error];
-        } catch (\Exception $e) {
-            $order->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $e->getMessage()]);
-            return ['success' => false, 'error' => $e->getMessage()];
         }
+
+        // Submit separately so insert errors and submit errors are distinguishable
+        if ($docname) {
+            try {
+                $this->submitDoc('Sales Order', $docname);
+            } catch (RequestException $e) {
+                $error = 'SO dibuat (' . $docname . ') tapi gagal submit: ' . $this->extractError($e);
+                $order->update(['erp_sales_order' => $docname, 'erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+                return ['success' => false, 'error' => $error];
+            }
+        }
+
+        $order->update([
+            'erp_sales_order' => $docname,
+            'erp_sync_status' => 'synced',
+            'erp_sync_error'  => null,
+        ]);
+
+        return ['success' => true, 'sales_order' => $docname, 'docname' => $docname];
     }
 
     // =========================================================
@@ -1178,60 +1196,73 @@ class ErpNextService
             return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
         }
 
-        $order   = $shipment->order;
-        $company = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY'));
+        $order    = $shipment->order;
+        $company  = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
         $customer = $order->customer->erp_customer_name ?: $order->customer->name;
+        $defaultWh = Warehouse::getDefault()?->name;
 
-        $items = collect($shipment->items ?? [])->map(fn($item) => [
-            'item_code' => $item['product_sku'] ?? $item['product_name'],
-            'item_name' => $item['product_name'],
-            'qty'       => (float) ($item['qty'] ?? 1),
-            'rate'      => (float) ($item['price'] ?? 0),
-            'uom'       => 'Nos',
-            // Link ke Sales Order jika sudah ada
-            'against_sales_order' => $order->erp_sales_order ?: null,
-        ])->filter(fn($i) => $i['qty'] > 0)->values()->toArray();
+        $soName = $order->erp_sales_order ?: null;
 
-        $payload = [
-            'doctype'          => 'Delivery Note',
-            'customer'         => $customer,
-            'posting_date'     => now()->format('Y-m-d'),
-            'company'          => $company,
-            'items'            => $items,
-            'shipping_address' => $shipment->shipping_address,
-            'remarks'          => implode("\n", array_filter([
+        $items = collect($shipment->items ?? [])->map(fn($item) => array_filter([
+            'item_code'           => $item['product_sku'] ?? $item['product_name'],
+            'item_name'           => $item['product_name'],
+            'qty'                 => (float) ($item['qty'] ?? 1),
+            'rate'                => (float) ($item['price'] ?? 0),
+            'uom'                 => 'Nos',
+            'warehouse'           => $defaultWh ?: null,
+            'against_sales_order' => $soName,
+            'so_detail'           => null, // will be set per-row if needed
+        ], fn($v) => !is_null($v)))->filter(fn($i) => ($i['qty'] ?? 0) > 0)->values()->toArray();
+
+        $payload = array_filter([
+            'doctype'      => 'Delivery Note',
+            'customer'     => $customer,
+            'posting_date' => now()->format('Y-m-d'),
+            'company'      => $company ?: null,
+            'set_warehouse' => $defaultWh ?: null,
+            'items'        => $items,
+            'remarks'      => implode("\n", array_filter([
                 'Order: ' . $order->order_no,
                 'Penerima: ' . $shipment->recipient_name,
                 $shipment->recipient_phone ? 'Telp: ' . $shipment->recipient_phone : null,
                 $shipment->notes,
-            ])),
-        ];
+            ])) ?: null,
+        ], fn($v) => !is_null($v));
+
+        $payload['items'] = $items;
+
+        Log::info('DeliveryNote payload', ['shipment' => $shipment->id, 'payload' => $payload]);
+
+        $docname = null;
 
         try {
-            $response = $this->client->post('/api/resource/Delivery Note', ['json' => $payload]);
+            $response = $this->client->post('/api/resource/Delivery%20Note', ['json' => $payload]);
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
-
-            if ($docname) {
-                $this->submitDoc('Delivery Note', $docname);
-            }
-
-            $shipment->update([
-                'erp_delivery_note' => $docname,
-                'erp_sync_status'   => 'synced',
-                'erp_sync_error'    => null,
-            ]);
-
-            return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname];
-
         } catch (RequestException $e) {
             $error = $this->extractError($e);
+            Log::error('DN create failed', ['shipment' => $shipment->id, 'error' => $error]);
             $shipment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
             return ['success' => false, 'error' => $error];
-        } catch (\Exception $e) {
-            $shipment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $e->getMessage()]);
-            return ['success' => false, 'error' => $e->getMessage()];
         }
+
+        if ($docname) {
+            try {
+                $this->submitDoc('Delivery Note', $docname);
+            } catch (RequestException $e) {
+                $error = 'DN dibuat (' . $docname . ') tapi gagal submit: ' . $this->extractError($e);
+                $shipment->update(['erp_delivery_note' => $docname, 'erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+                return ['success' => false, 'error' => $error];
+            }
+        }
+
+        $shipment->update([
+            'erp_delivery_note' => $docname,
+            'erp_sync_status'   => 'synced',
+            'erp_sync_error'    => null,
+        ]);
+
+        return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname];
     }
 
     // =========================================================
