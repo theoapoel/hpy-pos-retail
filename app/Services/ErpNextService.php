@@ -1157,7 +1157,7 @@ class ErpNextService
                 'erp_sync_error'   => null,
             ]);
 
-            return ['success' => true, 'docname' => $docname];
+            return ['success' => true, 'sales_order' => $docname, 'docname' => $docname];
 
         } catch (RequestException $e) {
             $error = $this->extractError($e);
@@ -1222,7 +1222,7 @@ class ErpNextService
                 'erp_sync_error'    => null,
             ]);
 
-            return ['success' => true, 'docname' => $docname];
+            return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname];
 
         } catch (RequestException $e) {
             $error = $this->extractError($e);
@@ -1337,9 +1337,42 @@ class ErpNextService
         $status = $e->getResponse()->getStatusCode();
         $body   = $e->getResponse()->getBody()->getContents();
 
-        // HTML response (maintenance page, nginx error, etc.)
         if (str_starts_with(ltrim($body), '<')) {
             return "Server ERP HPY tidak tersedia (HTTP {$status}). Coba beberapa saat lagi.";
+        }
+
+        $decoded = json_decode($body, true);
+        if ($decoded) {
+            $exception = $decoded['exception'] ?? '';
+
+            if (str_contains($exception, 'PermissionError')) {
+                return 'ERPNext: Tidak ada izin untuk membuat dokumen ini. '
+                     . 'Pastikan API user memiliki role "Sales User" atau "Sales Manager" di ERPNext.';
+            }
+
+            // Parse _server_messages (nested JSON string from Frappe)
+            $raw = $decoded['_server_messages'] ?? null;
+            if ($raw) {
+                $msgs = json_decode($raw, true);
+                if (is_array($msgs) && !empty($msgs)) {
+                    $texts = [];
+                    foreach ($msgs as $m) {
+                        $parsed = is_string($m) ? json_decode($m, true) : $m;
+                        $text   = is_array($parsed) ? ($parsed['message'] ?? '') : (string) $m;
+                        if ($text) $texts[] = strip_tags($text);
+                    }
+                    if ($texts) return 'ERPNext: ' . implode(' | ', $texts);
+                }
+            }
+
+            if (!empty($decoded['message'])) {
+                return 'ERPNext: ' . $decoded['message'];
+            }
+
+            if ($exception) {
+                $short = preg_replace('/^frappe\.exceptions\./', '', $exception);
+                return "ERPNext Error: {$short}";
+            }
         }
 
         return $body ?: $e->getMessage();
