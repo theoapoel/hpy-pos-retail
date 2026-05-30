@@ -64,7 +64,7 @@
         .sidebar {
             position: fixed; top: var(--header-h); left: 0; width: var(--nav-w);
             height: calc(100vh - var(--header-h)); background: var(--surface);
-            border-right: 1px solid var(--border); padding: 8px 0; overflow-y: auto; z-index: 90;
+            border-right: 1px solid var(--border); padding: 8px 0 60px; overflow-y: auto; z-index: 90;
             transition: width .22s ease, transform .22s ease;
             overflow-x: hidden;
         }
