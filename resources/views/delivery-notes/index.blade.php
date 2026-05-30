@@ -114,14 +114,18 @@
                 <td>
                     <div style="display:flex;gap:6px">
                         @if($ship->status !== 'delivered')
-                        <button onclick="markDelivered({{ $ship->id }}, this)"
+                        <button onclick="markDelivered(this)"
+                            data-url="{{ route('delivery-notes.mark-delivered', $ship) }}"
+                            data-id="{{ $ship->id }}"
                             class="btn btn-ghost btn-sm" title="Tandai Terkirim"
                             id="markBtn-{{ $ship->id }}">
                             <i class="fas fa-check"></i>
                         </button>
                         @endif
                         @if($ship->erp_sync_status !== 'synced')
-                        <button onclick="syncDn({{ $ship->id }}, this)"
+                        <button onclick="syncDn(this)"
+                            data-url="{{ route('delivery-notes.sync-dn', $ship) }}"
+                            data-id="{{ $ship->id }}"
                             class="btn btn-ghost btn-sm" title="Sync Delivery Note ke ERP"
                             id="dnBtn-{{ $ship->id }}"
                             {{ $ship->order->erp_sales_order ? '' : 'disabled title=Sync SO order dulu' }}>
@@ -154,13 +158,15 @@ function filterStatus(val) {
     form.submit();
 }
 
-async function markDelivered(id, btn) {
+async function markDelivered(btn) {
     if (!confirm('Tandai pengiriman ini sebagai terkirim?')) return;
+    const id  = btn.dataset.id;
+    const url = btn.dataset.url;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
 
     try {
-        const res = await api.post('/delivery-notes/' + id + '/mark-delivered');
+        const res = await api.post(url);
         if (res.success) {
             document.getElementById('status-' + id).className = 'badge badge-green';
             document.getElementById('status-' + id).textContent = 'DELIVERED';
@@ -178,12 +184,14 @@ async function markDelivered(id, btn) {
     }
 }
 
-async function syncDn(id, btn) {
+async function syncDn(btn) {
+    const id  = btn.dataset.id;
+    const url = btn.dataset.url;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
 
     try {
-        const res = await api.post('/delivery-notes/' + id + '/sync-dn');
+        const res = await api.post(url);
         if (res.success) {
             toast('Delivery Note dibuat: ' + res.delivery_note, 'success');
             setTimeout(() => location.reload(), 1200);

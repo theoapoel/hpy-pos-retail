@@ -233,6 +233,7 @@
             $canStock         = $u->hasPermission('stock');
             $canSync          = $u->hasPermission('sync');
             $canDelivery      = $u->hasPermission('delivery');
+            $canKitchen       = $u->hasPermission('kitchen');
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
         @endphp
 
@@ -280,14 +281,21 @@
         @endif
         @endif
 
-        @if($canDelivery)
+        @if($canDelivery || $canKitchen)
         <div class="nav-section">Delivery</div>
+        @if($canDelivery)
         <a href="{{ route('delivery-orders.index') }}" class="nav-item {{ request()->routeIs('delivery-orders.*') ? 'active' : '' }}">
             <i class="fas fa-truck nav-icon"></i> Delivery Order
         </a>
         <a href="{{ route('delivery-notes.index') }}" class="nav-item {{ request()->routeIs('delivery-notes.*') ? 'active' : '' }}">
             <i class="fas fa-map-marker-alt nav-icon"></i> Delivery Notes
         </a>
+        @endif
+        @if($canKitchen)
+        <a href="{{ route('kitchen.index') }}" class="nav-item {{ request()->routeIs('kitchen.*') ? 'active' : '' }}">
+            <i class="fas fa-utensils nav-icon"></i> Kitchen Monitor
+        </a>
+        @endif
         @endif
 
         @if($canSync)

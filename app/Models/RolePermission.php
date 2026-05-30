@@ -22,6 +22,7 @@ class RolePermission extends Model
             'stock_transfer' => ['label' => 'Transfer Barang',  'icon' => 'fa-truck-loading'],
             'stock'          => ['label' => 'Stok Barang',      'icon' => 'fa-boxes'],
             'delivery'       => ['label' => 'Delivery Order',   'icon' => 'fa-truck'],
+            'kitchen'        => ['label' => 'Kitchen Monitor',  'icon' => 'fa-utensils'],
             'sync'           => ['label' => 'Sync HPY',         'icon' => 'fa-sync-alt'],
         ];
     }

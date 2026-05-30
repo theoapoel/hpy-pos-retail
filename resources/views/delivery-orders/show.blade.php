@@ -122,14 +122,17 @@
                         @elseif($ship->erp_sync_status === 'failed')
                             <span class="badge badge-red text-xs" title="{{ $ship->erp_sync_error }}">DN FAILED</span>
                         @else
-                            <button onclick="syncDeliveryNote({{ $ship->id }}, this)"
+                            <button onclick="syncDeliveryNote(this)"
+                                data-url="{{ route('delivery-notes.sync-dn', $ship) }}"
                                 class="btn btn-ghost btn-sm"
                                 {{ $order->erp_sales_order ? '' : 'disabled title=Sync SO dulu' }}>
                                 <i class="fas fa-sync-alt"></i> Sync DN
                             </button>
                         @endif
                         @if($ship->status !== 'delivered')
-                        <button onclick="markDelivered({{ $ship->id }}, this)" class="btn btn-ghost btn-sm">
+                        <button onclick="markDelivered(this)"
+                            data-url="{{ route('delivery-notes.mark-delivered', $ship) }}"
+                            class="btn btn-ghost btn-sm">
                             <i class="fas fa-check"></i> Terkirim
                         </button>
                         @endif
@@ -292,12 +295,13 @@ async function syncSalesOrder() {
     }
 }
 
-async function syncDeliveryNote(shipmentId, btn) {
+async function syncDeliveryNote(btn) {
+    const url = btn.dataset.url;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
 
     try {
-        const res = await api.post('/delivery-notes/' + shipmentId + '/sync-dn');
+        const res = await api.post(url);
         if (res.success) {
             toast('Delivery Note dibuat: ' + res.delivery_note, 'success');
             setTimeout(() => location.reload(), 1200);
@@ -313,13 +317,14 @@ async function syncDeliveryNote(shipmentId, btn) {
     }
 }
 
-async function markDelivered(shipmentId, btn) {
+async function markDelivered(btn) {
     if (!confirm('Tandai pengiriman ini sebagai terkirim?')) return;
+    const url = btn.dataset.url;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';
 
     try {
-        const res = await api.post('/delivery-notes/' + shipmentId + '/mark-delivered');
+        const res = await api.post(url);
         if (res.success) {
             toast('Ditandai terkirim.', 'success');
             setTimeout(() => location.reload(), 800);

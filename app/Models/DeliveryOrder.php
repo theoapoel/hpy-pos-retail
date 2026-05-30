@@ -14,14 +14,17 @@ class DeliveryOrder extends Model
     protected $fillable = [
         'order_no', 'customer_id', 'billing_address', 'delivery_date',
         'notes', 'status',
+        'kitchen_status', 'kitchen_started_at', 'kitchen_ready_at',
         'erp_sales_order', 'erp_sync_status', 'erp_sync_error',
         'subtotal', 'total', 'created_by',
     ];
 
     protected $casts = [
-        'delivery_date' => 'date',
-        'subtotal'      => 'decimal:2',
-        'total'         => 'decimal:2',
+        'delivery_date'      => 'date',
+        'kitchen_started_at' => 'datetime',
+        'kitchen_ready_at'   => 'datetime',
+        'subtotal'           => 'decimal:2',
+        'total'              => 'decimal:2',
     ];
 
     public function customer(): BelongsTo

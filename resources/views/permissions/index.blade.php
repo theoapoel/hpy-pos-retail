@@ -103,6 +103,7 @@ input:disabled + .toggle-slider { cursor:not-allowed; opacity:.55; }
                     'stock_transfer' => ['#F3E8FF','#9C27B0'],
                     'stock'          => ['#FFF8E1','#F9A825'],
                     'delivery'       => ['#E3F2FD','#1565C0'],
+                    'kitchen'        => ['#FFF3E0','#E65100'],
                     'sync'           => ['#E6F4EA','var(--green)'],
                 ];
                 @endphp

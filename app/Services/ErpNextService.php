@@ -1188,25 +1188,55 @@ class ErpNextService
             return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
         }
 
-        $order         = $shipment->order;
-        $company       = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
-        $currency      = \App\Models\Setting::get('erpnext_currency', 'IDR');
-        $priceList     = \App\Models\Setting::get('erpnext_price_list', 'Standard Selling');
-        $namingSeries  = \App\Models\Setting::get('erp_dn_naming_series', 'MAT-DN-.YYYY.-');
-        $customer      = $order->customer->erp_customer_name ?: $order->customer->name;
-        $defaultWh     = Warehouse::getDefault()?->name;
-        $soName        = $order->erp_sales_order ?: null;
+        $order        = $shipment->order;
+        $company      = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $currency     = \App\Models\Setting::get('erpnext_currency', 'IDR');
+        $priceList    = \App\Models\Setting::get('erpnext_price_list', 'Standard Selling');
+        $namingSeries = \App\Models\Setting::get('erp_dn_naming_series', 'MAT-DN-.YYYY.-');
+        $customer     = $order->customer->erp_customer_name ?: $order->customer->name;
+        $defaultWh    = Warehouse::getDefault()?->name;
+        $soName       = $order->erp_sales_order ?: null;
 
-        $items = collect($shipment->items ?? [])->map(fn($item) => [
-            'item_code'           => $item['product_sku'] ?? $item['product_name'],
-            'item_name'           => $item['product_name'],
-            'description'         => $item['product_name'],
-            'qty'                 => (float) ($item['qty'] ?? 1),
-            'rate'                => (float) ($item['price'] ?? 0),
-            'uom'                 => 'Nos',
-            'warehouse'           => $defaultWh ?? '',
-            'against_sales_order' => $soName ?? '',
-        ])->filter(fn($i) => $i['qty'] > 0)->values()->toArray();
+        // Fetch SO from ERPNext to get item row-names (so_detail) for proper SO fulfilment linking
+        $soItemMap = []; // erp_item_code => so row name
+        if ($soName) {
+            try {
+                $soResp = $this->client->get('/api/resource/Sales%20Order/' . rawurlencode($soName));
+                $soData = json_decode($soResp->getBody()->getContents(), true);
+                foreach (($soData['data']['items'] ?? []) as $soItem) {
+                    $code = $soItem['item_code'] ?? '';
+                    if ($code && !isset($soItemMap[$code])) {
+                        $soItemMap[$code] = $soItem['name'];
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not fetch SO for DN linking', ['so' => $soName, 'error' => $e->getMessage()]);
+            }
+        }
+
+        $items = collect($shipment->items ?? [])->map(function ($item) use ($defaultWh, $soName, $soItemMap) {
+            // Resolve erp_item_code: prefer product lookup so it matches what was sent to the SO
+            $sku      = $item['product_sku'] ?? null;
+            $product  = $sku ? \App\Models\Product::where('sku', $sku)->first() : null;
+            $itemCode = $product?->erp_item_code ?? $sku ?? $item['product_name'];
+
+            $row = [
+                'item_code'           => $itemCode,
+                'item_name'           => $item['product_name'],
+                'description'         => $item['product_name'],
+                'qty'                 => (float) ($item['qty'] ?? 1),
+                'rate'                => (float) ($item['price'] ?? 0),
+                'uom'                 => $product?->unit ?? 'Nos',
+                'warehouse'           => $defaultWh ?? '',
+                'against_sales_order' => $soName ?? '',
+            ];
+
+            if ($soName && isset($soItemMap[$itemCode])) {
+                $row['so_detail'] = $soItemMap[$itemCode];
+            }
+
+            return $row;
+        })->filter(fn($i) => $i['qty'] > 0)->values()->toArray();
 
         $payload = [
             'doctype'             => 'Delivery Note',
@@ -1219,7 +1249,9 @@ class ErpNextService
             'selling_price_list'  => $priceList,
             'price_list_currency' => $currency,
             'plc_conversion_rate' => 1,
+            'ignore_pricing_rule' => 1,
             'set_warehouse'       => $defaultWh ?? '',
+            'shipping_address'    => $shipment->shipping_address,
             'items'               => $items,
             'remarks'             => implode("\n", array_filter([
                 'Order: ' . $order->order_no,

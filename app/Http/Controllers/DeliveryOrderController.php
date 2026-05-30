@@ -132,8 +132,11 @@ class DeliveryOrderController extends Controller
         if ($deliveryOrder->status !== 'draft') {
             return back()->with('error', 'Order sudah tidak dalam status draft.');
         }
-        $deliveryOrder->update(['status' => 'confirmed']);
-        return back()->with('success', 'Order dikonfirmasi.');
+        $deliveryOrder->update([
+            'status'         => 'confirmed',
+            'kitchen_status' => 'pending',
+        ]);
+        return back()->with('success', 'Order dikonfirmasi dan masuk antrian dapur.');
     }
 
     public function cancel(DeliveryOrder $deliveryOrder)

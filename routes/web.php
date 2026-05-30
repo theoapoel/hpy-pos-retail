@@ -7,7 +7,7 @@ use App\Http\Controllers\{
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
     BackupController, SetupController, OnlineReportController, UpdateController,
-    DeliveryOrderController, DeliveryNoteController
+    DeliveryOrderController, DeliveryNoteController, KitchenController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -191,6 +191,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/',                                     [DeliveryNoteController::class, 'index'])->name('index');
         Route::post('/{shipment}/mark-delivered',           [DeliveryNoteController::class, 'markDelivered'])->name('mark-delivered');
         Route::post('/{shipment}/sync-dn',                  [DeliveryNoteController::class, 'syncDeliveryNote'])->name('sync-dn');
+    });
+
+    // Kitchen Monitor
+    Route::prefix('kitchen')->name('kitchen.')->middleware('permission:kitchen')->group(function () {
+        Route::get('/',                                 [KitchenController::class, 'index'])->name('index');
+        Route::get('/poll',                             [KitchenController::class, 'poll'])->name('poll');
+        Route::post('/{order}/status',                  [KitchenController::class, 'updateStatus'])->name('update-status');
     });
 
     // Laporan Online — data historis langsung dari ERPNext
