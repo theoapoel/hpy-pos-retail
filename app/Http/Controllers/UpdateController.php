@@ -76,11 +76,14 @@ class UpdateController extends Controller
 
         $log     = [];
         $base    = base_path();
+        $safeDir = str_replace('\\', '/', $base);
         $pullUrl = 'https://' . $request->github_token . '@github.com/' . self::GITHUB_REPO . '.git';
 
         $log[] = '▶ git pull ' . self::GITHUB_BRANCH;
         exec(
-            'git -C ' . escapeshellarg($base) . ' pull ' . escapeshellarg($pullUrl) . ' ' . self::GITHUB_BRANCH . ' 2>&1',
+            'git -C ' . escapeshellarg($base)
+            . ' -c safe.directory=' . escapeshellarg($safeDir)
+            . ' pull ' . escapeshellarg($pullUrl) . ' ' . self::GITHUB_BRANCH . ' 2>&1',
             $pullOut,
             $code
         );
@@ -130,8 +133,9 @@ class UpdateController extends Controller
             $sha = $head;
         }
 
-        $logOut = [];
-        exec('git -C ' . escapeshellarg($base) . ' log -1 --format="%ci|||%s" HEAD 2>&1', $logOut);
+        $logOut  = [];
+        $safeDir = str_replace('\\', '/', $base);
+        exec('git -C ' . escapeshellarg($base) . ' -c safe.directory=' . escapeshellarg($safeDir) . ' log -1 --format="%ci|||%s" HEAD 2>&1', $logOut);
         $date = $message = '';
         if (!empty($logOut[0]) && str_contains($logOut[0], '|||')) {
             [$date, $message] = explode('|||', $logOut[0], 2);
