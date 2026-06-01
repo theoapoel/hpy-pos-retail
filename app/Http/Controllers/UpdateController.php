@@ -42,6 +42,24 @@ class UpdateController extends Controller
                 'author'  => $data['commit']['author']['name'] ?? '',
             ]);
 
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $status = $e->getResponse()->getStatusCode();
+            if ($status === 404) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'Token tidak memiliki akses ke repository (404). Pastikan token bertipe Classic PAT dengan scope "repo", atau Fine-grained PAT dengan permission "Contents: Read".',
+                ], 422);
+            }
+            if ($status === 401) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'Token tidak valid atau sudah kedaluwarsa (401). Buat token baru di GitHub → Settings → Developer settings → Personal access tokens.',
+                ], 422);
+            }
+            return response()->json([
+                'success' => false,
+                'error'   => 'GitHub API error ' . $status . ': ' . $e->getMessage(),
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
