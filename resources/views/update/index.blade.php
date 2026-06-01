@@ -59,11 +59,7 @@
     <div class="card-body">
         <div class="alert alert-info" style="margin-bottom:16px">
             <i class="fas fa-info-circle"></i>
-            Gunakan <strong>GitHub Personal Access Token</strong> yang memiliki akses ke repository ini.
-            <ul style="margin:6px 0 0 20px;font-size:13px">
-                <li><strong>Classic PAT</strong>: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → centang scope <code>repo</code></li>
-                <li><strong>Fine-grained PAT</strong>: pilih repository <code>resto-pos</code>, permission <code>Contents: Read</code></li>
-            </ul>
+            Token GitHub diberikan oleh HPY Solution. Masukkan token yang diterima, lalu klik <strong>Cek Update</strong>.
         </div>
         <div style="display:flex;gap:12px;align-items:flex-end">
             <div class="form-group" style="flex:1;margin-bottom:0">
