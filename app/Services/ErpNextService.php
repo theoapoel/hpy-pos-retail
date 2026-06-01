@@ -40,6 +40,31 @@ class ErpNextService
     }
 
     // =========================================================
+    // CONFIGURATION CHECK
+    // =========================================================
+    public function isConfigured(): bool
+    {
+        return !empty($this->baseUrl) && !empty($this->apiKey) && !empty($this->apiSecret);
+    }
+
+    public function quickPing(): bool
+    {
+        if (empty($this->baseUrl)) return false;
+        try {
+            $client = new Client([
+                'base_uri'    => $this->baseUrl,
+                'timeout'     => 4,
+                'verify'      => false,
+                'http_errors' => false,
+            ]);
+            $resp = $client->get('/api/method/frappe.utils.ping');
+            return $resp->getStatusCode() < 500;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    // =========================================================
     // TEST CONNECTION
     // =========================================================
     public function testConnection(): array
@@ -149,6 +174,9 @@ class ErpNextService
 
             return ['success' => true, 'docname' => $docname];
 
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::warning("ERPNext auto-sync: network unreachable for {$transaction->invoice_no}");
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
         } catch (RequestException $e) {
             $errorBody = $this->extractError($e);
 
@@ -1162,6 +1190,9 @@ class ErpNextService
             $response = $this->client->post('/api/resource/Sales%20Order', ['json' => $payload]);
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::warning('SO auto-sync: network unreachable', ['order' => $order->order_no]);
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
         } catch (RequestException $e) {
             $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
             Log::error('SO create failed', ['order' => $order->order_no, 'raw' => $rawBody]);
@@ -1456,5 +1487,75 @@ class ErpNextService
             'erp_docname'      => $docname,
             'error_message'    => $error,
         ]);
+    }
+
+    // =========================================================
+    // CREATE MATERIAL REQUEST → ERPNext (purpose: Manufacture)
+    // =========================================================
+    public function createMaterialRequest(\App\Models\StockRequest $stockRequest): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $company      = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $namingSeries = \App\Models\Setting::get('erp_mr_naming_series', 'MAT-MR-.YYYY.-');
+        $defaultWh    = Warehouse::getDefault()?->name ?? '';
+        $scheduleDate = $stockRequest->needed_date
+            ? $stockRequest->needed_date->format('Y-m-d')
+            : now()->format('Y-m-d');
+
+        $items = $stockRequest->items->map(fn($item) => [
+            'item_code'     => $item->item_code ?? $item->item_name,
+            'item_name'     => $item->item_name,
+            'qty'           => (float) $item->qty,
+            'uom'           => $item->uom ?: 'Nos',
+            'schedule_date' => $scheduleDate,
+            'warehouse'     => $defaultWh,
+            'description'   => $item->notes ?: $item->item_name,
+        ])->toArray();
+
+        $payload = [
+            'doctype'          => 'Material Request',
+            'naming_series'    => $namingSeries,
+            'purpose'          => 'Manufacture',
+            'transaction_date' => now()->format('Y-m-d'),
+            'schedule_date'    => $scheduleDate,
+            'company'          => $company,
+            'items'            => $items,
+            'remarks'          => implode("\n", array_filter([
+                'Request: ' . $stockRequest->request_no,
+                $stockRequest->notes,
+            ])),
+        ];
+
+        Log::info('StockRequest MR payload', ['request' => $stockRequest->request_no, 'payload' => $payload]);
+
+        try {
+            $response = $this->client->post('/api/resource/Material%20Request', ['json' => $payload]);
+            $data     = json_decode($response->getBody()->getContents(), true);
+            $docname  = $data['data']['name'] ?? null;
+
+            if ($docname) {
+                $this->submitDoc('Material Request', $docname);
+            }
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::warning('MR auto-sync: network unreachable', ['request' => $stockRequest->request_no]);
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('MR create failed', ['request' => $stockRequest->request_no, 'raw' => $rawBody]);
+            $error = $this->extractError($e);
+            $stockRequest->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+            return ['success' => false, 'error' => $error];
+        }
+
+        $stockRequest->update([
+            'erp_material_request' => $docname,
+            'erp_sync_status'      => 'synced',
+            'erp_sync_error'       => null,
+        ]);
+
+        return ['success' => true, 'docname' => $docname, 'material_request' => $docname];
     }
 }

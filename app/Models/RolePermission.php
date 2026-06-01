@@ -23,6 +23,7 @@ class RolePermission extends Model
             'stock'          => ['label' => 'Stok Barang',      'icon' => 'fa-boxes'],
             'delivery'       => ['label' => 'Delivery Order',   'icon' => 'fa-truck'],
             'kitchen'        => ['label' => 'Kitchen Monitor',  'icon' => 'fa-utensils'],
+            'stock_request'  => ['label' => 'Permintaan FG',    'icon' => 'fa-clipboard-check'],
             'sync'           => ['label' => 'Sync HPY',         'icon' => 'fa-sync-alt'],
         ];
     }

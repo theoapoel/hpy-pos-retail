@@ -55,6 +55,17 @@
         .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
         .sync-badge { background: var(--blue-light); color: var(--blue); font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 500; cursor: pointer; }
         .sync-badge.warn { background: #FEF3E2; color: #E37400; }
+        /* ERP connectivity indicator */
+        #erpStatus { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; padding:4px 10px; border-radius:12px; transition:background .3s,color .3s; white-space:nowrap; }
+        #erpStatus.st-online   { background:#E6F4EA; color:#1E6E3B; }
+        #erpStatus.st-offline  { background:#FCE8E6; color:#B31412; }
+        #erpStatus.st-checking { background:var(--surface2); color:var(--text3); }
+        #erpStatus.st-hidden   { display:none; }
+        .erp-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .st-online  .erp-dot { background:#34A853; }
+        .st-offline .erp-dot { background:#EA4335; animation:blink 1.4s ease-in-out infinite; }
+        .st-checking .erp-dot { background:#BDBDBD; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         .user-menu { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 10px; border-radius: 20px; transition: background .2s; }
         .user-menu:hover { background: var(--surface2); }
         .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--blue); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
@@ -254,6 +265,10 @@
                 style="height:52px;width:auto;object-fit:contain;">
         </a>
         <div class="header-right">
+            <div id="erpStatus" class="st-checking" title="Status koneksi ERP HPY">
+                <span class="erp-dot"></span>
+                <span id="erpStatusText">ERP…</span>
+            </div>
             @php $pendingSync = \App\Models\Transaction::where('erp_sync_status','pending')->where('status','completed')->count(); @endphp
             @if($pendingSync > 0)
             <a href="{{ route('sync.index') }}" class="sync-badge warn">
@@ -289,6 +304,7 @@
             $canSync          = $u->hasPermission('sync');
             $canDelivery      = $u->hasPermission('delivery');
             $canKitchen       = $u->hasPermission('kitchen');
+            $canStockRequest  = $u->hasPermission('stock_request');
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
         @endphp
 
@@ -329,11 +345,14 @@
         @endif
         @endif
 
-        @if($canDelivery || $canKitchen)
-        <div class="nav-section">Delivery</div>
+        @if($canDelivery || $canKitchen || $canStockRequest)
+        <div class="nav-section">Delivery & Dapur</div>
         @if($canDelivery)
         {!! $navItem(route('delivery-orders.index'), 'fas fa-truck', 'Delivery Order', request()->routeIs('delivery-orders.*')) !!}
         {!! $navItem(route('delivery-notes.index'), 'fas fa-map-marker-alt', 'Delivery Notes', request()->routeIs('delivery-notes.*')) !!}
+        @endif
+        @if($canStockRequest)
+        {!! $navItem(route('stock-requests.index'), 'fas fa-clipboard-check', 'Permintaan FG', request()->routeIs('stock-requests.*')) !!}
         @endif
         @if($canKitchen)
         {!! $navItem(route('kitchen.index'), 'fas fa-utensils', 'Kitchen Monitor', request()->routeIs('kitchen.*')) !!}
@@ -463,6 +482,49 @@
     window.addEventListener('resize', function() {
         if (!isMobile()) document.body.classList.remove('nav-open');
     });
+
+    // ── ERP connectivity indicator ────────────────────────────
+    (function() {
+        const pingUrl  = '{{ route("sync.ping") }}';
+        const el       = document.getElementById('erpStatus');
+        const txtEl    = document.getElementById('erpStatusText');
+        let lastOnline = null;
+
+        function setStatus(state, label) {
+            el.className = state;
+            txtEl.textContent = label;
+        }
+
+        async function checkErp() {
+            if (!navigator.onLine) {
+                setStatus('st-offline', 'Offline');
+                lastOnline = false;
+                return;
+            }
+            try {
+                const res  = await fetch(pingUrl, { headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf }, signal: AbortSignal.timeout(6000) });
+                const json = await res.json();
+                if (json.reason === 'not_configured') {
+                    setStatus('st-hidden', '');
+                } else if (json.reachable) {
+                    setStatus('st-online', 'ERP Online');
+                    lastOnline = true;
+                } else {
+                    setStatus('st-offline', 'ERP Offline');
+                    lastOnline = false;
+                }
+            } catch(e) {
+                setStatus('st-offline', 'ERP Offline');
+                lastOnline = false;
+            }
+        }
+
+        checkErp();
+        setInterval(checkErp, 30000);
+
+        window.addEventListener('online',  () => checkErp());
+        window.addEventListener('offline', () => setStatus('st-offline', 'Offline'));
+    })();
     </script>
     @stack('scripts')
 </body>

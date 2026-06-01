@@ -86,6 +86,11 @@
                 </button>
             </div>
             <div class="card-body">
+                @error('shipments')
+                <div class="alert alert-danger" style="margin-bottom:12px">
+                    <i class="fas fa-exclamation-circle"></i> {{ $message }}
+                </div>
+                @enderror
                 <div id="shipmentsContainer"></div>
             </div>
         </div>
@@ -99,9 +104,10 @@
                 <div id="summaryContent" style="color:var(--text3);font-size:13px">
                     Tambahkan item dan tujuan pengiriman terlebih dahulu.
                 </div>
+                <div id="allocationStatus" style="margin-top:12px"></div>
             </div>
         </div>
-        <button type="submit" class="btn btn-primary w-full btn-lg" style="border-radius:10px">
+        <button type="submit" id="btnSubmit" class="btn btn-primary w-full btn-lg" style="border-radius:10px">
             <i class="fas fa-save"></i> Simpan Delivery Order
         </button>
     </div>
@@ -268,7 +274,7 @@ function addShipItem(shipIdx, selectedName = '', qty = 1, price = 0) {
         <input type="number" name="shipments[${shipIdx}][items][${siIdx}][price]" value="${price}" min="0" step="1"
             class="form-control ship-item-price" style="font-size:12px;text-align:right" oninput="recalcShipItem(this)">
         <input type="text" class="form-control" readonly style="font-size:12px;text-align:right;background:var(--surface)">
-        <button type="button" onclick="this.closest('.ship-item-row-data').remove()" style="border:none;background:none;cursor:pointer;color:var(--red)">
+        <button type="button" onclick="this.closest('.ship-item-row-data').remove(); updateSummary()" style="border:none;background:none;cursor:pointer;color:var(--red)">
             <i class="fas fa-times" style="font-size:12px"></i>
         </button>
         <input type="hidden" name="shipments[${shipIdx}][items][${siIdx}][product_sku]" class="ship-item-sku" value="">
@@ -283,6 +289,7 @@ function onShipItemChange(sel) {
     row.querySelector('.ship-item-price').value = opt.dataset.price || 0;
     row.querySelector('.ship-item-sku').value   = opt.dataset.sku || '';
     recalcShipItem(row.querySelector('input[type=number]'));
+    updateSummary();
 }
 
 function recalcShipItem(input) {
@@ -292,10 +299,55 @@ function recalcShipItem(input) {
     const price = parseFloat(row.querySelectorAll('input[type=number]')[1]?.value || 0);
     const sub  = row.querySelectorAll('input[type=text]')[0];
     if (sub) sub.value = fmt(qty * price);
+    updateSummary();
 }
 
 function refreshShipmentItemOptions() {
     // Refresh product options in existing shipment item rows if needed
+}
+
+function getOrderQtyMap() {
+    const map = {};
+    document.querySelectorAll('.item-row').forEach(row => {
+        const name = row.querySelector('.item-name')?.value;
+        const qty  = parseFloat(row.querySelector('.item-qty')?.value || 0);
+        if (name) map[name] = (map[name] || 0) + qty;
+    });
+    return map;
+}
+
+function getShippedQtyMap() {
+    const map = {};
+    document.querySelectorAll('.ship-item-row-data').forEach(row => {
+        const name = row.querySelector('select')?.value;
+        const qty  = parseFloat(row.querySelectorAll('input[type=number]')[0]?.value || 0);
+        if (name && qty > 0) map[name] = (map[name] || 0) + qty;
+    });
+    return map;
+}
+
+function validateShipments() {
+    const orderMap   = getOrderQtyMap();
+    const shippedMap = getShippedQtyMap();
+    const errors = [];
+
+    for (const [name, orderQty] of Object.entries(orderMap)) {
+        const shippedQty = shippedMap[name] || 0;
+        const diff = shippedQty - orderQty;
+        if (Math.abs(diff) >= 0.001) {
+            if (diff < 0) {
+                errors.push(`<strong>${name}</strong>: kurang ${(orderQty - shippedQty).toLocaleString('id-ID')} (dipesan ${orderQty.toLocaleString('id-ID')}, dialokasi ${shippedQty.toLocaleString('id-ID')})`);
+            } else {
+                errors.push(`<strong>${name}</strong>: kelebihan ${(shippedQty - orderQty).toLocaleString('id-ID')} (dipesan ${orderQty.toLocaleString('id-ID')}, dialokasi ${shippedQty.toLocaleString('id-ID')})`);
+            }
+        }
+    }
+    for (const name of Object.keys(shippedMap)) {
+        if (!orderMap[name]) {
+            errors.push(`<strong>${name}</strong>: ada di pengiriman tapi tidak ada di item order`);
+        }
+    }
+    return errors;
 }
 
 function updateSummary() {
@@ -314,7 +366,58 @@ function updateSummary() {
             <span class="font-medium">Total Order</span>
             <span class="money font-bold text-blue">${total}</span>
         </div>`;
+
+    // Allocation status per item
+    const orderMap   = getOrderQtyMap();
+    const shippedMap = getShippedQtyMap();
+    const itemNames  = Object.keys(orderMap);
+    const statusEl   = document.getElementById('allocationStatus');
+
+    if (itemNames.length === 0) { statusEl.innerHTML = ''; return; }
+
+    const rows = itemNames.map(name => {
+        const ordered  = orderMap[name];
+        const shipped  = shippedMap[name] || 0;
+        const ok       = Math.abs(shipped - ordered) < 0.001;
+        const color    = ok ? 'var(--green)' : 'var(--red)';
+        const icon     = ok ? 'fa-check-circle' : 'fa-exclamation-circle';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--text2)">${name}</span>
+            <span style="color:${color};font-weight:600;white-space:nowrap;margin-left:8px">
+                <i class="fas ${icon}" style="margin-right:3px"></i>${shipped.toLocaleString('id-ID')} / ${ordered.toLocaleString('id-ID')}
+            </span>
+        </div>`;
+    }).join('');
+
+    const errors = validateShipments();
+    const allOk  = errors.length === 0;
+
+    statusEl.innerHTML = `
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+            Alokasi Item ke Pengiriman
+        </div>
+        ${rows}
+        <div style="margin-top:8px;padding:8px;border-radius:6px;font-size:12px;background:${allOk ? '#E8F5E9' : '#FFEBEE'};color:${allOk ? '#2E7D32' : '#C62828'}">
+            <i class="fas ${allOk ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i>
+            ${allOk ? 'Semua item sudah dialokasikan dengan benar.' : 'Item belum sesuai — periksa alokasi pengiriman.'}
+        </div>`;
+
+    const btn = document.getElementById('btnSubmit');
+    if (btn) {
+        btn.disabled = !allOk;
+        btn.style.opacity = allOk ? '1' : '0.5';
+        btn.title = allOk ? '' : 'Selesaikan alokasi item terlebih dahulu';
+    }
 }
+
+// Block submit if allocation invalid
+document.getElementById('doForm').addEventListener('submit', function(e) {
+    const errors = validateShipments();
+    if (errors.length > 0) {
+        e.preventDefault();
+        alert('Item pengiriman belum sesuai:\n\n• ' + errors.map(s => s.replace(/<[^>]+>/g, '')).join('\n• '));
+    }
+});
 
 // Init: add 1 item & 1 shipment
 addItem();

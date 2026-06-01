@@ -104,6 +104,7 @@ input:disabled + .toggle-slider { cursor:not-allowed; opacity:.55; }
                     'stock'          => ['#FFF8E1','#F9A825'],
                     'delivery'       => ['#E3F2FD','#1565C0'],
                     'kitchen'        => ['#FFF3E0','#E65100'],
+                    'stock_request'  => ['#E0F7FA','#00838F'],
                     'sync'           => ['#E6F4EA','var(--green)'],
                 ];
                 @endphp

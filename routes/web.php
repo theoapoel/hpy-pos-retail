@@ -7,7 +7,8 @@ use App\Http\Controllers\{
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
     BackupController, SetupController, OnlineReportController, UpdateController,
-    DeliveryOrderController, DeliveryNoteController, KitchenController
+    DeliveryOrderController, DeliveryNoteController, KitchenController,
+    StockRequestController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -193,6 +194,18 @@ Route::middleware('auth')->group(function () {
         Route::post('/{shipment}/sync-dn',                  [DeliveryNoteController::class, 'syncDeliveryNote'])->name('sync-dn');
     });
 
+    // Permintaan Bahan
+    Route::prefix('stock-requests')->name('stock-requests.')->middleware('permission:stock_request')->group(function () {
+        Route::get('/',                                          [StockRequestController::class, 'index'])->name('index');
+        Route::get('/create',                                    [StockRequestController::class, 'create'])->name('create');
+        Route::post('/',                                         [StockRequestController::class, 'store'])->name('store');
+        Route::get('/{stockRequest}',                            [StockRequestController::class, 'show'])->name('show');
+        Route::post('/{stockRequest}/submit',                    [StockRequestController::class, 'submit'])->name('submit');
+        Route::post('/{stockRequest}/cancel',                    [StockRequestController::class, 'cancel'])->name('cancel');
+        Route::post('/{stockRequest}/sync-erp',                  [StockRequestController::class, 'syncErp'])->name('sync-erp');
+        Route::post('/{stockRequest}/kitchen-status',            [StockRequestController::class, 'updateKitchenStatus'])->name('kitchen-status');
+    });
+
     // Kitchen Monitor
     Route::prefix('kitchen')->name('kitchen.')->middleware('permission:kitchen')->group(function () {
         Route::get('/',                                 [KitchenController::class, 'index'])->name('index');
@@ -210,6 +223,7 @@ Route::middleware('auth')->group(function () {
 
     // Sync HPY — jalankan (permission:sync), konfigurasi (admin only)
     Route::prefix('sync')->name('sync.')->group(function () {
+        Route::get('/ping', [ErpSyncController::class, 'pingErp'])->name('ping');
         Route::middleware('permission:sync')->group(function () {
             Route::get('/',                           [ErpSyncController::class, 'index'])->name('index');
             Route::post('/all',                       [ErpSyncController::class, 'syncAll'])->name('all');

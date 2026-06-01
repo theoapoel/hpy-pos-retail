@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Models\Warehouse;
+use App\Services\ErpNextService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -205,6 +206,16 @@ class PosController extends Controller
             }
 
             DB::commit();
+
+            // Auto-sync to ERPNext if configured and reachable
+            try {
+                $erp = new ErpNextService();
+                if ($erp->isConfigured()) {
+                    $erp->syncTransaction($transaction->load('items.product', 'customer'));
+                }
+            } catch (\Exception $e) {
+                // Silent — sync failure must not affect checkout response
+            }
 
             return response()->json([
                 'success' => true,

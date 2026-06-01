@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DeliveryOrder;
+use App\Models\StockRequest;
 use Illuminate\Http\Request;
 
 class KitchenController extends Controller
@@ -21,7 +22,22 @@ class KitchenController extends Controller
         $preparing = $orders->get('preparing', collect());
         $ready     = $orders->get('ready',     collect());
 
-        return view('kitchen.index', compact('pending', 'preparing', 'ready'));
+        $stockRequests = StockRequest::with(['requester', 'items'])
+            ->whereIn('kitchen_status', ['requested', 'preparing', 'done'])
+            ->where('status', 'submitted')
+            ->orderBy('needed_date')
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy('kitchen_status');
+
+        $srRequested = $stockRequests->get('requested', collect());
+        $srPreparing = $stockRequests->get('preparing', collect());
+        $srDone      = $stockRequests->get('done',      collect());
+
+        return view('kitchen.index', compact(
+            'pending', 'preparing', 'ready',
+            'srRequested', 'srPreparing', 'srDone'
+        ));
     }
 
     public function updateStatus(Request $request, DeliveryOrder $order)
@@ -52,10 +68,19 @@ class KitchenController extends Controller
             ->groupBy('kitchen_status')
             ->pluck('total', 'kitchen_status');
 
+        $srCounts = StockRequest::whereIn('kitchen_status', ['requested', 'preparing'])
+            ->where('status', 'submitted')
+            ->selectRaw('kitchen_status, count(*) as total')
+            ->groupBy('kitchen_status')
+            ->pluck('total', 'kitchen_status');
+
         return response()->json([
-            'pending'   => $counts->get('pending', 0),
-            'preparing' => $counts->get('preparing', 0),
-            'ready'     => $counts->get('ready', 0),
+            'pending'      => $counts->get('pending', 0),
+            'preparing'    => $counts->get('preparing', 0),
+            'ready'        => $counts->get('ready', 0),
+            'sr_requested' => $srCounts->get('requested', 0),
+            'sr_preparing' => $srCounts->get('preparing', 0),
+            'sr_done'      => $srCounts->get('done', 0),
         ]);
     }
 }

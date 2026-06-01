@@ -65,6 +65,41 @@ class DeliveryOrderController extends Controller
             'shipments.*.items'             => 'required|array|min:1',
         ]);
 
+        // Validate that shipment item qtys match order item qtys exactly
+        $orderQtyMap = [];
+        foreach ($request->items as $item) {
+            $name = $item['product_name'] ?? '';
+            if ($name) $orderQtyMap[$name] = ($orderQtyMap[$name] ?? 0) + (float)$item['qty'];
+        }
+        $shippedQtyMap = [];
+        foreach ($request->shipments as $ship) {
+            foreach ($ship['items'] ?? [] as $si) {
+                $name = $si['product_name'] ?? '';
+                $qty  = (float)($si['qty'] ?? 0);
+                if ($name && $qty > 0) $shippedQtyMap[$name] = ($shippedQtyMap[$name] ?? 0) + $qty;
+            }
+        }
+        $allocationErrors = [];
+        foreach ($orderQtyMap as $name => $orderQty) {
+            $shippedQty = $shippedQtyMap[$name] ?? 0;
+            if (abs($shippedQty - $orderQty) >= 0.001) {
+                $diff = $shippedQty - $orderQty;
+                $allocationErrors[] = $diff < 0
+                    ? "\"$name\": dipesan $orderQty, baru dialokasikan $shippedQty (kurang " . ($orderQty - $shippedQty) . ")"
+                    : "\"$name\": dipesan $orderQty, kelebihan " . ($shippedQty - $orderQty);
+            }
+        }
+        foreach (array_keys($shippedQtyMap) as $name) {
+            if (!isset($orderQtyMap[$name])) {
+                $allocationErrors[] = "\"$name\" ada di pengiriman tapi tidak ada di item order";
+            }
+        }
+        if (!empty($allocationErrors)) {
+            return back()->withInput()->withErrors([
+                'shipments' => 'Alokasi item pengiriman tidak sesuai: ' . implode('; ', $allocationErrors),
+            ]);
+        }
+
         DB::transaction(function () use ($request) {
             $order = DeliveryOrder::create([
                 'order_no'        => DeliveryOrder::generateOrderNo(),
@@ -136,7 +171,23 @@ class DeliveryOrderController extends Controller
             'status'         => 'confirmed',
             'kitchen_status' => 'pending',
         ]);
-        return back()->with('success', 'Order dikonfirmasi dan masuk antrian dapur.');
+
+        // Auto-sync Sales Order to ERPNext if configured and reachable
+        $syncMsg = '';
+        try {
+            $erp = new ErpNextService();
+            if ($erp->isConfigured()) {
+                $deliveryOrder->load('items.product', 'customer');
+                $result  = $erp->createSalesOrder($deliveryOrder);
+                $syncMsg = $result['success']
+                    ? ' SO ERP: ' . ($result['docname'] ?? 'synced') . '.'
+                    : ' (Sync ERP gagal: ' . ($result['error'] ?? '') . ')';
+            }
+        } catch (\Exception $e) {
+            // Silent — sync failure must not block confirmation
+        }
+
+        return back()->with('success', 'Order dikonfirmasi dan masuk antrian dapur.' . $syncMsg);
     }
 
     public function cancel(DeliveryOrder $deliveryOrder)

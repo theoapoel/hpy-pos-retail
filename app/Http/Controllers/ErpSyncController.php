@@ -73,6 +73,14 @@ class ErpSyncController extends Controller
         return response()->json($result);
     }
 
+    public function pingErp()
+    {
+        if (!$this->erp->isConfigured()) {
+            return response()->json(['reachable' => false, 'reason' => 'not_configured']);
+        }
+        return response()->json(['reachable' => $this->erp->quickPing()]);
+    }
+
     public function syncAll()
     {
         $result = $this->erp->syncPendingTransactions();
