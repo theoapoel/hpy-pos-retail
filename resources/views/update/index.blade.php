@@ -59,7 +59,9 @@
     <div class="card-body">
         <div class="alert alert-info" style="margin-bottom:16px">
             <i class="fas fa-info-circle"></i>
-            Token GitHub diberikan oleh HPY Solution. Masukkan token yang diterima, lalu klik <strong>Cek Update</strong>.
+            Gunakan <strong>Fine-grained personal access token</strong> dari GitHub.
+            Buat di: GitHub → Settings → Developer settings → Personal access tokens → <strong>Fine-grained tokens</strong>
+            → pilih repository <strong>resto-pos</strong> → permission <strong>Contents: Read-only</strong>.
         </div>
         <div style="display:flex;gap:12px;align-items:flex-end">
             <div class="form-group" style="flex:1;margin-bottom:0">
