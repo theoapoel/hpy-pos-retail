@@ -234,6 +234,19 @@ class ErpNextService
 
         $defaultWarehouse = Warehouse::getDefault()?->name;
 
+        // Gabungkan coupon_discount ke discount_amount untuk dikirim ke ERP.
+        // ERPNext tidak mengenal field coupon_discount lokal, sehingga
+        // potongan kupon harus dimasukkan ke discount_amount agar grand_total ERP cocok.
+        $couponDiscount  = (float) ($transaction->coupon_discount ?? 0);
+        $baseDiscAmt     = (float) $transaction->discount_amount;
+        $baseDiscPct     = (float) $transaction->discount_percent;
+        $totalDiscAmount = $baseDiscAmt + $couponDiscount;
+
+        // Jika ada kupon, kirim sebagai nominal (discount_amount) dan nol-kan persentase
+        // agar ERP tidak double-hitung.
+        $erpDiscPct = $couponDiscount > 0 ? 0 : $baseDiscPct;
+        $erpDiscAmt = $totalDiscAmount;
+
         $payload = [
             'doctype'                        => 'POS Invoice',
             'naming_series'                  => \App\Models\Setting::get('erpnext_naming_series', 'ACC-PSINV-.YYYY.-'),
@@ -246,10 +259,9 @@ class ErpNextService
             'set_posting_time'               => 1,
             'items'                          => $items,
             'payments'                       => $payments,
-            // apply_discount_on = 'Net Total' agar % dihitung dari net (setelah diskon item)
             'apply_discount_on'              => 'Net Total',
-            'additional_discount_percentage' => (float) $transaction->discount_percent,
-            'discount_amount'                => (float) $transaction->discount_amount,
+            'additional_discount_percentage' => $erpDiscPct,
+            'discount_amount'                => $erpDiscAmt,
         ];
 
         // Customer spesifik (sudah di-push ke ERPNext) diutamakan.
