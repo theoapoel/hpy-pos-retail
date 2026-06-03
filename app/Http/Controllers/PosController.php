@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Coupon;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\Category;
@@ -82,6 +83,41 @@ class PosController extends Controller
         }));
     }
 
+    public function validateCoupon(Request $request)
+    {
+        $code     = strtoupper(trim($request->code ?? ''));
+        $subtotal = (float) ($request->subtotal ?? 0);
+
+        if (!$code) {
+            return response()->json(['valid' => false, 'message' => 'Kode kupon tidak boleh kosong']);
+        }
+
+        $coupon = Coupon::where('code', $code)->first();
+        if (!$coupon) {
+            return response()->json(['valid' => false, 'message' => 'Kode kupon tidak ditemukan']);
+        }
+
+        $check = $coupon->isValid($subtotal);
+        if (!$check['valid']) {
+            return response()->json(['valid' => false, 'message' => $check['message']]);
+        }
+
+        $discount = $coupon->calculateDiscount($subtotal);
+
+        return response()->json([
+            'valid'   => true,
+            'message' => $check['message'],
+            'coupon'  => [
+                'id'             => $coupon->id,
+                'code'           => $coupon->code,
+                'description'    => $coupon->description,
+                'discount_type'  => $coupon->discount_type,
+                'discount_value' => (float) $coupon->discount_value,
+                'calculated_discount' => $discount,
+            ],
+        ]);
+    }
+
     public function checkout(Request $request)
     {
         $request->validate([
@@ -143,6 +179,21 @@ class PosController extends Controller
                 $discountAmount = $subtotal * ($discountPercent / 100);
             }
 
+            // Coupon discount
+            $couponCode     = null;
+            $couponDiscount = 0;
+            if ($request->coupon_code) {
+                $coupon = Coupon::where('code', strtoupper(trim($request->coupon_code)))->first();
+                if ($coupon) {
+                    $check = $coupon->isValid($subtotal);
+                    if ($check['valid']) {
+                        $couponCode     = $coupon->code;
+                        $couponDiscount = $coupon->calculateDiscount($subtotal);
+                        $coupon->increment('used_count');
+                    }
+                }
+            }
+
             $orderType        = $request->order_type ?? 'dine_in';
             $deliveryPlatform = $request->delivery_platform ?? null;
 
@@ -153,7 +204,7 @@ class PosController extends Controller
             $pb1Amount           = 0;
 
             if ($orderType === 'dine_in') {
-                $base = $subtotal - $discountAmount;
+                $base = $subtotal - $discountAmount - $couponDiscount;
 
                 $scEnabled = \App\Models\Setting::get('service_charge_enabled', '0') === '1';
                 if ($scEnabled) {
@@ -168,7 +219,7 @@ class PosController extends Controller
                 }
             }
 
-            $total      = $subtotal + $taxAmount - $discountAmount + $serviceChargeAmount + $pb1Amount;
+            $total      = $subtotal + $taxAmount - $discountAmount - $couponDiscount + $serviceChargeAmount + $pb1Amount;
             $paidAmount = $request->paid_amount;
             $change     = $paidAmount - $total;
 
@@ -180,6 +231,8 @@ class PosController extends Controller
                 'subtotal'              => $subtotal,
                 'discount_amount'       => $discountAmount,
                 'discount_percent'      => $discountPercent,
+                'coupon_code'           => $couponCode,
+                'coupon_discount'       => $couponDiscount,
                 'tax_amount'            => $taxAmount,
                 'total'                 => $total,
                 'paid_amount'           => $paidAmount,
@@ -207,10 +260,11 @@ class PosController extends Controller
 
             DB::commit();
 
-            // Auto-sync to ERPNext if configured and reachable
+            // Auto-sync to ERPNext if configured, reachable, and auto-sync is enabled
             try {
+                $autoSync = \App\Models\Setting::get('erp_auto_sync', '1') === '1';
                 $erp = new ErpNextService();
-                if ($erp->isConfigured()) {
+                if ($autoSync && $erp->isConfigured()) {
                     $erp->syncTransaction($transaction->load('items.product', 'customer'));
                 }
             } catch (\Exception $e) {

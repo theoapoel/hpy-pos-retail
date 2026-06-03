@@ -372,6 +372,7 @@
 
         @if($role === 'admin')
         <div class="nav-section">Sistem</div>
+        {!! $navItem(route('coupons.index'),     'fas fa-ticket-alt',      'Kupon',            request()->routeIs('coupons.*')) !!}
         {!! $navItem(route('users.index'),       'fas fa-users-cog',       'Manajemen User',   request()->routeIs('users.*')) !!}
         {!! $navItem(route('roles.index'),       'fas fa-layer-group',     'Manajemen Role',   request()->routeIs('roles.*')) !!}
         {!! $navItem(route('permissions.index'), 'fas fa-shield-alt',      'Hak Akses',        request()->routeIs('permissions.*')) !!}

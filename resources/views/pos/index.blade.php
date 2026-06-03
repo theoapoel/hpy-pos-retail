@@ -243,7 +243,7 @@
         .order-count { font-size: 11px; font-weight: 700; color: var(--primary); background: var(--primary-light); padding: 2px 8px; border-radius: 10px; }
 
         /* Cart Items */
-        .cart-items { flex: 1; overflow-y: auto; }
+        .cart-items { flex: 1; overflow-y: auto; min-height: 120px; }
         .cart-empty {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; color: var(--text3); gap: 12px;
@@ -295,13 +295,13 @@
         .note-btn:hover { border-color: var(--primary); color: var(--primary); }
 
         /* Cart Summary */
-        .cart-summary { border-top: 2px solid var(--border); padding: 12px 14px; flex-shrink: 0; }
-        .summary-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text2); }
+        .cart-summary { border-top: 2px solid var(--border); padding: 8px 14px; flex-shrink: 0; }
+        .summary-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text2); }
         .summary-row.total {
-            font-family: 'Google Sans', sans-serif; font-size: 20px; font-weight: 700; color: var(--text);
-            border-top: 1px solid var(--border); padding-top: 10px; margin-top: 6px; margin-bottom: 0;
+            font-family: 'Google Sans', sans-serif; font-size: 18px; font-weight: 700; color: var(--text);
+            border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px; margin-bottom: 0;
         }
-        .discount-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .discount-row { display: flex; gap: 8px; margin-bottom: 6px; }
         .discount-input {
             flex: 1; padding: 7px 10px; border: 2px solid var(--border);
             border-radius: 8px; font-size: 13px; font-weight: 700;
@@ -310,9 +310,17 @@
         .discount-input:focus { outline: none; border-color: var(--primary); }
 
         /* Payment */
-        .cart-payment { padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
-        .payment-methods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px; }
+        .cart-payment { padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+        /* Horizontal scroll — satu baris, tidak pernah wrap ke bawah */
+        .payment-methods {
+            display: flex; flex-wrap: nowrap; gap: 6px;
+            margin-bottom: 10px; overflow-x: auto; padding-bottom: 2px;
+            scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+        }
+        .payment-methods::-webkit-scrollbar { height: 3px; }
+        .payment-methods::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         .pay-btn {
+            flex-shrink: 0; min-width: 82px;
             padding: 8px 4px; border: 2px solid var(--border); border-radius: 10px;
             background: var(--surface2); cursor: pointer; text-align: center;
             font-size: 11px; font-weight: 800; color: var(--text2); transition: all .2s;
@@ -552,6 +560,30 @@
                 <span>Diskon</span>
                 <span id="discountDisplay" style="color:var(--red)">- Rp 0</span>
             </div>
+            <!-- Coupon -->
+            <div id="couponInputRow" style="margin-bottom:6px">
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap;flex-shrink:0">
+                        <i class="fas fa-ticket-alt"></i> Kupon
+                    </span>
+                    <input type="text" id="couponInput" class="discount-input" placeholder="Kode kupon" maxlength="50"
+                        style="flex:1;min-width:0;text-transform:uppercase;margin:0"
+                        oninput="this.value=this.value.toUpperCase()">
+                    <button onclick="applyCoupon()" id="couponApplyBtn"
+                        style="padding:0 10px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:11px;cursor:pointer;font-weight:700;white-space:nowrap;height:34px;flex-shrink:0">
+                        Terapkan
+                    </button>
+                </div>
+                <div id="couponMessage" style="font-size:11px;margin-top:2px;display:none;padding-left:2px"></div>
+            </div>
+            <div class="summary-row" id="couponDiscountRow" style="display:none">
+                <span>
+                    Kupon <span id="couponCodeLabel" style="font-family:monospace;font-weight:700"></span>
+                    <span onclick="removeCoupon()" title="Hapus kupon"
+                        style="cursor:pointer;color:var(--red);font-size:11px;margin-left:4px;font-weight:700">✕</span>
+                </span>
+                <span id="couponDiscountDisplay" style="color:var(--red)">- Rp 0</span>
+            </div>
             <div class="summary-row">
                 <span>Pajak</span>
                 <span id="taxDisplay">Rp 0</span>
@@ -737,6 +769,7 @@ let currentCategoryFilter = null;
 let lastReceipt = null;
 let noteItemId = null;
 let discItemId = null;
+let appliedCoupon = null;
 
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 const defaultPosClass = @json($posClass);
@@ -1016,6 +1049,7 @@ function clearCart() {
     cart = [];
     document.getElementById('discountAmt').value = '';
     document.getElementById('discountPct').value = '';
+    removeCoupon();
     renderCart();
 }
 
@@ -1198,6 +1232,61 @@ function syncTxDiscount(mode) {
     recalculate();
 }
 
+// ============================================================
+// COUPON
+// ============================================================
+async function applyCoupon() {
+    const code = document.getElementById('couponInput').value.trim().toUpperCase();
+    if (!code) { showCouponMsg('Masukkan kode kupon', 'err'); return; }
+    const subtotal = cartNetSubtotal();
+    if (subtotal === 0) { showCouponMsg('Tambahkan item terlebih dahulu', 'err'); return; }
+
+    const btn = document.getElementById('couponApplyBtn');
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        const resp = await fetch('{{ route("pos.validate-coupon") }}', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
+            body: JSON.stringify({ code, subtotal })
+        });
+        const data = await resp.json();
+        if (data.valid) {
+            appliedCoupon = data.coupon;
+            document.getElementById('couponInput').disabled = true;
+            btn.style.display = 'none';
+            showCouponMsg(data.message, 'ok');
+            recalculate();
+        } else {
+            showCouponMsg(data.message, 'err');
+        }
+    } catch(e) {
+        showCouponMsg('Gagal menghubungi server', 'err');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Terapkan';
+    }
+}
+
+function removeCoupon() {
+    appliedCoupon = null;
+    const inp = document.getElementById('couponInput');
+    inp.value = '';
+    inp.disabled = false;
+    document.getElementById('couponApplyBtn').style.display = '';
+    document.getElementById('couponMessage').style.display = 'none';
+    document.getElementById('couponDiscountRow').style.display = 'none';
+    recalculate();
+}
+
+function showCouponMsg(msg, type) {
+    const el = document.getElementById('couponMessage');
+    el.textContent = msg;
+    el.style.color = type === 'ok' ? 'var(--green)' : 'var(--red)';
+    el.style.display = '';
+}
+
 function recalculate() {
     const subtotal = cartNetSubtotal();
     const tax      = cart.reduce((s, i) => s + (Math.max(0, (i.price * i.qty) - (i.discount || 0)) * (i.tax / 100)), 0);
@@ -1205,7 +1294,21 @@ function recalculate() {
     const discPct  = parseFloat(document.getElementById('discountPct').value) || 0;
     if (discPct > 0) discAmt = subtotal * (discPct / 100);
 
-    const base = subtotal - discAmt;
+    // Coupon discount
+    let couponDiscount = 0;
+    if (appliedCoupon) {
+        couponDiscount = appliedCoupon.discount_type === 'percent'
+            ? Math.round(subtotal * appliedCoupon.discount_value / 100)
+            : Math.min(appliedCoupon.discount_value, subtotal);
+        appliedCoupon.calculated_discount = couponDiscount;
+        document.getElementById('couponDiscountRow').style.display = '';
+        document.getElementById('couponCodeLabel').textContent = appliedCoupon.code;
+        document.getElementById('couponDiscountDisplay').textContent = '- Rp ' + fmt(couponDiscount);
+    } else {
+        document.getElementById('couponDiscountRow').style.display = 'none';
+    }
+
+    const base = subtotal - discAmt - couponDiscount;
 
     // Service Charge & PB1 — only for Dine In
     let scAmt  = 0;
@@ -1421,6 +1524,7 @@ async function processCheckout() {
         paid_amount: paid,
         discount_amount: discAmt,
         discount_percent: discPct,
+        coupon_code: appliedCoupon?.code || null,
         pos_class: defaultPosClass || null,
         order_type: selectedOrderType,
         table_number: tableNumber || null,
@@ -1484,6 +1588,7 @@ function showReceipt(tx) {
         <hr class="receipt-divider">
         <div class="receipt-row"><span>Subtotal</span><span>Rp ${fmt(tx.subtotal)}</span></div>
         ${parseFloat(tx.discount_amount) > 0 ? `<div class="receipt-row"><span>Diskon</span><span>- Rp ${fmt(tx.discount_amount)}</span></div>` : ''}
+        ${tx.coupon_code && parseFloat(tx.coupon_discount||0) > 0 ? `<div class="receipt-row" style="color:var(--green)"><span>Kupon (${tx.coupon_code})</span><span>- Rp ${fmt(tx.coupon_discount)}</span></div>` : ''}
         ${parseFloat(tx.tax_amount) > 0 ? `<div class="receipt-row"><span>Pajak</span><span>Rp ${fmt(tx.tax_amount)}</span></div>` : ''}
         ${parseFloat(tx.service_charge_amount||0) > 0 ? `<div class="receipt-row" style="color:#E65100"><span>Service Charge (${tx.service_charge_pct}%)</span><span>Rp ${fmt(tx.service_charge_amount)}</span></div>` : ''}
         ${parseFloat(tx.pb1_amount||0) > 0 ? `<div class="receipt-row" style="color:#E65100"><span>PB1 (${tx.pb1_pct}%)</span><span>Rp ${fmt(tx.pb1_amount)}</span></div>` : ''}

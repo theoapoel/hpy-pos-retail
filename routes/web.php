@@ -8,7 +8,7 @@ use App\Http\Controllers\{
     UserController, PermissionController, RoleController, WarehouseController,
     BackupController, SetupController, OnlineReportController, UpdateController,
     DeliveryOrderController, DeliveryNoteController, KitchenController,
-    StockRequestController
+    StockRequestController, CouponController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -40,7 +40,11 @@ Route::post('/login', function (\Illuminate\Http\Request $req) {
 
         Auth::login($user, false);
         $req->session()->regenerate();
-        $landing = $user->role === 'cashier' ? route('pos.index') : route('dashboard');
+        $landing = match($user->role) {
+            'cashier' => route('pos.index'),
+            'dapur'   => route('kitchen.index'),
+            default   => route('dashboard'),
+        };
         return redirect()->intended($landing);
     }
 
@@ -96,7 +100,11 @@ Route::post('/login', function (\Illuminate\Http\Request $req) {
 
     Auth::login($user, $req->boolean('remember'));
     $req->session()->regenerate();
-    $landing = $user->role === 'cashier' ? route('pos.index') : route('dashboard');
+    $landing = match($user->role) {
+        'cashier' => route('pos.index'),
+        'dapur'   => route('kitchen.index'),
+        default   => route('dashboard'),
+    };
     return redirect()->intended($landing);
 })->name('login.post');
 
@@ -119,6 +127,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('pos')->name('pos.')->middleware('permission:pos')->group(function () {
         Route::get('/',                      [PosController::class, 'index'])->name('index');
         Route::get('/search-products',       [PosController::class, 'searchProducts'])->name('search-products');
+        Route::post('/validate-coupon',      [PosController::class, 'validateCoupon'])->name('validate-coupon');
         Route::post('/checkout',             [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}',   [PosController::class, 'printReceipt'])->name('print');
@@ -233,6 +242,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/pull-payment-methods',      [ErpSyncController::class, 'pullPaymentMethods'])->name('pull-payment-methods');
             Route::post('/pull-users',                [ErpSyncController::class, 'pullUsers'])->name('pull-users');
             Route::post('/pull-delivery-prices',      [ErpSyncController::class, 'pullDeliveryPrices'])->name('pull-delivery-prices');
+            Route::post('/pull-coupons',              [ErpSyncController::class, 'pullCoupons'])->name('pull-coupons');
             Route::post('/push-customer/{customer}',  [ErpSyncController::class, 'pushCustomer'])->name('push-customer');
         });
         Route::middleware('role:admin')->group(function () {
@@ -244,6 +254,9 @@ Route::middleware('auth')->group(function () {
 
     // ─── Admin only ──────────────────────────────────────────────────────────
     Route::middleware('role:admin')->group(function () {
+
+        // Kupon
+        Route::resource('coupons', CouponController::class)->only(['index', 'destroy']);
 
         // Pengaturan Toko
         Route::get('/settings',          [SettingsController::class, 'index'])->name('settings.index');

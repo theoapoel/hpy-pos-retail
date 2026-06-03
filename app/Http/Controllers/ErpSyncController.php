@@ -51,6 +51,7 @@ class ErpSyncController extends Controller
             'service_charge_erp_account'    => Setting::get('service_charge_erp_account', ''),
             'pb1_erp_type'                  => Setting::get('pb1_erp_type', 'On Net Total'),
             'pb1_erp_account'               => Setting::get('pb1_erp_account', ''),
+            'erp_auto_sync'                 => Setting::get('erp_auto_sync', '1'),
         ];
 
         return view('sync.index', compact('stats', 'recentLogs', 'failedTransactions', 'settings'));
@@ -290,6 +291,12 @@ class ErpSyncController extends Controller
         ]);
     }
 
+    public function pullCoupons()
+    {
+        $result = $this->erp->pullCoupons();
+        return response()->json($result);
+    }
+
     public function saveSettings(Request $request)
     {
         $chargeTypes = ['On Net Total','Actual','On Previous Row Total','On Previous Row Amount','On Item Qty'];
@@ -314,6 +321,7 @@ class ErpSyncController extends Controller
             'service_charge_erp_account'    => 'nullable|string|max:200',
             'pb1_erp_type'                  => 'nullable|in:' . implode(',', $chargeTypes),
             'pb1_erp_account'               => 'nullable|string|max:200',
+            'erp_auto_sync'                 => 'nullable|in:0,1',
         ]);
 
         $keys = [
@@ -330,6 +338,9 @@ class ErpSyncController extends Controller
             $group = str_starts_with($k, 'delivery_') ? 'delivery' : 'erpnext';
             Setting::set($k, $v, $group);
         }
+
+        // Checkbox — kirim '1' kalau centang, '0' kalau tidak
+        Setting::set('erp_auto_sync', $request->input('erp_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
 
         return response()->json(['success' => true]);
     }

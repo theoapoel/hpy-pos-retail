@@ -13,7 +13,7 @@ class Transaction extends Model
 
     protected $fillable = [
         'invoice_no', 'user_id', 'customer_id', 'status',
-        'subtotal', 'discount_amount', 'discount_percent', 'tax_amount',
+        'subtotal', 'discount_amount', 'discount_percent', 'coupon_code', 'coupon_discount', 'tax_amount',
         'total', 'paid_amount', 'change_amount', 'payment_method',
         'payment_details', 'notes', 'pos_class',
         'order_type', 'delivery_platform',
@@ -28,6 +28,7 @@ class Transaction extends Model
         'erp_synced_at'         => 'datetime',
         'subtotal'              => 'decimal:2',
         'discount_amount'       => 'decimal:2',
+        'coupon_discount'       => 'decimal:2',
         'tax_amount'            => 'decimal:2',
         'total'                 => 'decimal:2',
         'paid_amount'           => 'decimal:2',

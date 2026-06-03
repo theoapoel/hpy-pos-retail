@@ -71,6 +71,9 @@
     @if($transaction->discount_amount > 0)
         <div class="row"><span>Diskon</span><span>- Rp {{ number_format($transaction->discount_amount,0,',','.') }}</span></div>
     @endif
+    @if($transaction->coupon_code && $transaction->coupon_discount > 0)
+        <div class="row"><span>Kupon ({{ $transaction->coupon_code }})</span><span>- Rp {{ number_format($transaction->coupon_discount,0,',','.') }}</span></div>
+    @endif
     @if($transaction->tax_amount > 0)
         <div class="row"><span>Pajak</span><span>Rp {{ number_format($transaction->tax_amount,0,',','.') }}</span></div>
     @endif

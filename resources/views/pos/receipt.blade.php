@@ -100,6 +100,12 @@
                     <span>− Rp {{ number_format($transaction->discount_amount, 0, ',', '.') }}</span>
                 </div>
                 @endif
+                @if($transaction->coupon_code && $transaction->coupon_discount > 0)
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px;color:var(--green)">
+                    <span>Kupon ({{ $transaction->coupon_code }})</span>
+                    <span>− Rp {{ number_format($transaction->coupon_discount, 0, ',', '.') }}</span>
+                </div>
+                @endif
                 @if($transaction->tax_amount > 0)
                 <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px">
                     <span style="color:var(--text2)">Pajak</span>

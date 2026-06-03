@@ -154,6 +154,40 @@
                     </div>
                 </div>
 
+                {{-- Auto Sync Toggle --}}
+                <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;border:2px solid {{ $settings['erp_auto_sync'] === '1' ? 'var(--green)' : 'var(--border)' }}" id="autoSyncBox">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <i class="fas fa-bolt" style="color:{{ $settings['erp_auto_sync'] === '1' ? 'var(--green)' : 'var(--text3)' }}" id="autoSyncIcon"></i>
+                                Auto Sync ke ERP HPY
+                            </div>
+                            <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                                Setiap transaksi checkout langsung dikirim ke ERP HPY secara otomatis
+                            </div>
+                        </div>
+                        <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
+                            <input type="checkbox" id="autoSyncToggle" name="erp_auto_sync" value="1"
+                                {{ $settings['erp_auto_sync'] === '1' ? 'checked' : '' }}
+                                onchange="onAutoSyncChange(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="autoSyncNote" style="margin-top:8px;font-size:12px;{{ $settings['erp_auto_sync'] !== '1' ? '' : 'display:none' }};color:#E37400">
+                        <i class="fas fa-info-circle"></i>
+                        Auto Sync nonaktif — transaksi akan tersimpan sebagai <strong>pending</strong> dan bisa di-sync manual.
+                    </div>
+                </div>
+
+                <style>
+                .toggle-switch { position:relative;display:inline-block;width:44px;height:24px; }
+                .toggle-switch input { opacity:0;width:0;height:0; }
+                .toggle-slider { position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:24px;transition:.3s; }
+                .toggle-slider:before { position:absolute;content:"";height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s; }
+                .toggle-switch input:checked + .toggle-slider { background:var(--green); }
+                .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); }
+                </style>
+
                 <div style="display:flex;gap:8px">
                     <button type="button" class="btn btn-outline" onclick="testConnection()" id="testBtn">
                         <i class="fas fa-wifi"></i> Test
@@ -415,6 +449,9 @@ async function saveSettings() {
     const data = {};
     new FormData(form).forEach((v, k) => data[k] = v);
 
+    // Checkbox tidak dikirim FormData kalau tidak tercentang — kirim eksplisit
+    data['erp_auto_sync'] = document.getElementById('autoSyncToggle').checked ? '1' : '0';
+
     btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     btn.disabled = true;
 
@@ -427,6 +464,21 @@ async function saveSettings() {
     toast(result.success ? 'Pengaturan berhasil disimpan!' : 'Gagal menyimpan', result.success ? 'success' : 'error');
     btn.innerHTML = '<i class="fas fa-save"></i> Simpan';
     btn.disabled = false;
+}
+
+function onAutoSyncChange(el) {
+    const box  = document.getElementById('autoSyncBox');
+    const icon = document.getElementById('autoSyncIcon');
+    const note = document.getElementById('autoSyncNote');
+    if (el.checked) {
+        box.style.borderColor  = 'var(--green)';
+        icon.style.color       = 'var(--green)';
+        note.style.display     = 'none';
+    } else {
+        box.style.borderColor  = 'var(--border)';
+        icon.style.color       = 'var(--text3)';
+        note.style.display     = '';
+    }
 }
 
 async function syncAll() {

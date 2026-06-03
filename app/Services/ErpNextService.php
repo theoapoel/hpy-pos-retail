@@ -1490,6 +1490,162 @@ class ErpNextService
     }
 
     // =========================================================
+    // PULL COUPON CODES + PRICING RULES FROM ERPNext 13
+    // =========================================================
+    /**
+     * Fetch Coupon Codes + linked Pricing Rules from ERPNext 13 and upsert locally.
+     *
+     * ERPNext 13 Coupon Code confirmed fields (from source coupon_code.json):
+     *   name, coupon_code, coupon_name, pricing_rule,
+     *   valid_from, valid_upto, maximum_use, used, description
+     *   NOTE: NO is_active / disable field on Coupon Code itself.
+     *
+     * ERPNext 13 Pricing Rule confirmed fields (from source pricing_rule.json):
+     *   name, disable, rate_or_discount, discount_percentage,
+     *   discount_amount, min_amt, max_amt, apply_discount_on
+     *   Active/inactive is controlled by Pricing Rule's `disable` field.
+     */
+    public function pullCoupons(): array
+    {
+        if (!$this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            // 1. Fetch all Coupon Codes — no filter on is_active (field doesn't exist in v13)
+            //    Use %20 URL encoding; Guzzle may not encode path segments automatically.
+            $response = $this->client->get('/api/resource/Coupon%20Code', [
+                'query' => [
+                    'fields' => json_encode([
+                        'name', 'coupon_code', 'coupon_name',
+                        'pricing_rule', 'valid_from', 'valid_upto',
+                        'maximum_use', 'used',
+                    ]),
+                    'limit_page_length' => 500,
+                ],
+            ]);
+
+            $data    = json_decode($response->getBody()->getContents(), true);
+            $coupons = $data['data'] ?? $data['message'] ?? [];
+
+            if (empty($coupons)) {
+                return ['success' => true, 'imported' => 0, 'skipped' => 0,
+                        'message' => 'Tidak ada Coupon Code di ERP HPY.'];
+            }
+
+            // 2. Collect Pricing Rule names (non-empty, deduplicated)
+            $ruleNames    = array_values(array_filter(array_unique(array_column($coupons, 'pricing_rule'))));
+            $pricingRules = $this->fetchPricingRules($ruleNames);
+
+            $imported = 0;
+            $skipped  = 0;
+
+            foreach ($coupons as $c) {
+                // coupon_code = code customers enter; fall back to name if field is empty
+                $code        = strtoupper(trim($c['coupon_code'] ?? $c['name'] ?? ''));
+                $pricingName = $c['pricing_rule'] ?? null;
+
+                if (!$code) { $skipped++; continue; }
+
+                // Skip if no Pricing Rule linked
+                if (!$pricingName) { $skipped++; continue; }
+
+                // Active status = Pricing Rule not disabled
+                $rule           = $pricingRules[$pricingName] ?? null;
+                $pricingDisabled = $rule ? (bool) ($rule['disable'] ?? 0) : false;
+
+                // Resolve discount type + value from Pricing Rule
+                $discountType  = 'fixed';
+                $discountValue = 0;
+                $minPurchase   = 0;
+
+                if ($rule) {
+                    $rateOrDiscount = $rule['rate_or_discount'] ?? 'Discount Percentage';
+
+                    if ($rateOrDiscount === 'Discount Percentage') {
+                        $discountType  = 'percent';
+                        $discountValue = (float) ($rule['discount_percentage'] ?? 0);
+                    } else {
+                        // 'Discount Amount' or 'Rate'
+                        $discountType  = 'fixed';
+                        $discountValue = (float) ($rule['discount_amount'] ?? 0);
+                    }
+
+                    $minPurchase = (float) ($rule['min_amt'] ?? 0);
+                }
+
+                if ($discountValue <= 0) { $skipped++; continue; }
+
+                \App\Models\Coupon::updateOrCreate(
+                    ['code' => $code],
+                    [
+                        'erp_coupon_name'  => $c['name'],
+                        'erp_pricing_rule' => $pricingName,
+                        'description'      => $c['coupon_name'] ?: null,
+                        'discount_type'    => $discountType,
+                        'discount_value'   => $discountValue,
+                        'min_purchase'     => $minPurchase,
+                        'max_uses'         => ($c['maximum_use'] ?? 0) > 0 ? (int) $c['maximum_use'] : null,
+                        'used_count'       => (int) ($c['used'] ?? 0),
+                        'valid_from'       => $c['valid_from'] ?: null,
+                        'valid_until'      => $c['valid_upto'] ?: null,
+                        'is_active'        => !$pricingDisabled,
+                    ]
+                );
+
+                $imported++;
+            }
+
+            $msg = "Berhasil import {$imported} kupon dari ERP HPY.";
+            if ($skipped) {
+                $msg .= " {$skipped} dilewati (tidak ada pricing rule atau nilai diskon).";
+            }
+
+            return ['success' => true, 'imported' => $imported, 'skipped' => $skipped, 'message' => $msg];
+
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Fetch Pricing Rules by name.
+     * Returns associative array keyed by rule name.
+     * Uses URL-encoded path (/api/resource/Pricing%20Rule) for ERPNext 13 compatibility.
+     */
+    private function fetchPricingRules(array $names): array
+    {
+        if (empty($names)) return [];
+
+        try {
+            $response = $this->client->get('/api/resource/Pricing%20Rule', [
+                'query' => [
+                    'fields'  => json_encode([
+                        'name', 'title', 'disable', 'rate_or_discount',
+                        'discount_percentage', 'discount_amount',
+                        'min_amt', 'max_amt', 'apply_discount_on',
+                    ]),
+                    'filters'           => json_encode([['name', 'in', $names]]),
+                    'limit_page_length' => count($names),
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+            $map  = [];
+            foreach ($data['data'] ?? [] as $rule) {
+                $map[$rule['name']] = $rule;
+            }
+            return $map;
+
+        } catch (\Exception $e) {
+            Log::warning('pullCoupons: failed to fetch Pricing Rules: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    // =========================================================
     // CREATE MATERIAL REQUEST → ERPNext (purpose: Manufacture)
     // =========================================================
     public function createMaterialRequest(\App\Models\StockRequest $stockRequest): array
