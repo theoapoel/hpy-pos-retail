@@ -79,6 +79,12 @@ class UpdateController extends Controller
         $safeDir = str_replace('\\', '/', $base);
         $pullUrl = 'https://' . $request->github_token . '@github.com/' . self::GITHUB_REPO . '.git';
 
+        // Tulis safe.directory ke global git config — lebih reliable dari flag -c
+        // karena git spawn subprocess (remote helper) yang tidak mewarisi -c flag.
+        exec('git config --global --add safe.directory ' . escapeshellarg($safeDir) . ' 2>&1');
+        // Tambahkan juga versi backslash (Windows path) sebagai fallback
+        exec('git config --global --add safe.directory ' . escapeshellarg($base) . ' 2>&1');
+
         $log[] = '▶ git pull ' . self::GITHUB_BRANCH;
         exec(
             'git -C ' . escapeshellarg($base)
