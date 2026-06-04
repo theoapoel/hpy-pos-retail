@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DeliveryShipment;
 use App\Models\DeliveryOrder;
+use App\Models\Setting;
 use App\Services\ErpNextService;
 use Illuminate\Http\Request;
 
@@ -34,7 +35,9 @@ class DeliveryNoteController extends Controller
             ->groupBy('status')
             ->pluck('total', 'status');
 
-        return view('delivery-notes.index', compact('shipments', 'counts'));
+        $storeName = Setting::get('store_name', 'Mitra POS');
+
+        return view('delivery-notes.index', compact('shipments', 'counts', 'storeName'));
     }
 
     public function markDelivered(DeliveryShipment $shipment)

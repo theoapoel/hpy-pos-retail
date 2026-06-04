@@ -72,14 +72,25 @@
                 <th style="text-align:right">Total</th>
                 <th>Status</th>
                 <th>ERP DN</th>
-                <th></th>
+                <th style="width:120px"></th>
             </tr></thead>
             <tbody>
             @forelse($shipments as $ship)
             @php
-                $sColor = ['pending'=>'badge-gray','delivered'=>'badge-green'][$ship->status] ?? 'badge-gray';
+                $sColor  = ['pending'=>'badge-gray','delivered'=>'badge-green'][$ship->status] ?? 'badge-gray';
+                $resiData = json_encode([
+                    'store'      => $storeName,
+                    'order_no'   => $ship->order->order_no,
+                    'sequence'   => $ship->sequence,
+                    'date'       => $ship->order->delivery_date->isoFormat('D MMMM Y'),
+                    'name'       => $ship->recipient_name,
+                    'phone'      => $ship->recipient_phone ?? '',
+                    'address'    => $ship->shipping_address,
+                    'items'      => $ship->items ?? [],
+                ]);
             @endphp
-            <tr id="row-{{ $ship->id }}">
+            <tr id="row-{{ $ship->id }}"
+                data-resi="{{ $resiData }}">
                 <td>
                     <a href="{{ route('delivery-orders.show', $ship->order) }}" class="text-blue font-medium">
                         {{ $ship->order->order_no }}
@@ -113,6 +124,10 @@
                 </td>
                 <td>
                     <div style="display:flex;gap:6px">
+                        <button onclick="printResi(this.closest('tr').dataset.resi)"
+                            class="btn btn-ghost btn-sm" title="Print Resi">
+                            <i class="fas fa-print"></i>
+                        </button>
                         @if($ship->status !== 'delivered')
                         <button onclick="markDelivered(this)"
                             data-url="{{ route('delivery-notes.mark-delivered', $ship) }}"
@@ -152,6 +167,68 @@
 
 @push('scripts')
 <script>
+function printResi(rawJson) {
+    const d = JSON.parse(rawJson);
+
+    const itemRows = (d.items || []).map(it =>
+        `<tr>
+            <td style="padding:2mm 0">${it.product_name ?? ''}</td>
+            <td style="text-align:right;padding:2mm 0;padding-left:8mm">${Number(it.qty).toLocaleString('id-ID')} pcs</td>
+        </tr>`
+    ).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Resi ${d.order_no} #${d.sequence}</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Courier New', monospace; font-size: 11pt; color: #000; background: #fff; }
+.box { width: 80mm; margin: 0 auto; padding: 5mm; }
+.store  { font-size: 14pt; font-weight: bold; text-align: center; margin-bottom: 1mm; }
+.title  { text-align: center; font-size: 10pt; letter-spacing: 2px; margin-bottom: 3mm; }
+.hr     { border: none; border-top: 1px dashed #000; margin: 3mm 0; }
+.lbl    { font-size: 8pt; color: #555; margin-top: 2mm; }
+.val    { font-size: 11pt; font-weight: bold; }
+.addr   { font-size: 10pt; margin-top: 1mm; white-space: pre-wrap; line-height: 1.4; }
+table   { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+thead th { font-size: 9pt; text-align: left; border-bottom: 1px solid #000; padding: 1mm 0; }
+thead th:last-child { text-align: right; }
+@media print { @page { size: 80mm auto; margin: 0; } }
+</style>
+</head>
+<body>
+<div class="box">
+    <div class="store">${d.store}</div>
+    <div class="title">— RESI PENGIRIMAN —</div>
+    <hr class="hr">
+    <div class="lbl">No. Order</div>
+    <div class="val">${d.order_no} / Pengiriman #${d.sequence}</div>
+    <div class="lbl">Tgl Kirim</div>
+    <div class="val">${d.date}</div>
+    <hr class="hr">
+    <div class="lbl">Kepada</div>
+    <div class="val">${d.name}</div>
+    ${d.phone ? `<div class="lbl">${d.phone}</div>` : ''}
+    <div class="addr">${d.address}</div>
+    <hr class="hr">
+    <table>
+        <thead><tr><th>Nama Barang</th><th style="text-align:right">Qty</th></tr></thead>
+        <tbody>${itemRows}</tbody>
+    </table>
+    <hr class="hr">
+</div>
+<script>window.onload = function(){ window.print(); }<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=420,height=600,toolbar=0,menubar=0,location=0');
+    if (!win) { alert('Popup diblokir. Izinkan popup untuk halaman ini agar resi bisa dicetak.'); return; }
+    win.document.write(html);
+    win.document.close();
+}
+
 function filterStatus(val) {
     const form = document.querySelector('form[method="GET"]');
     document.getElementById('statusFilter').value = val;
