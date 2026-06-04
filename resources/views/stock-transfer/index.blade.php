@@ -14,6 +14,9 @@
         <p class="page-subtitle">Kirim & terima barang melalui ERP HPY Material Transfer</p>
     </div>
     <div style="display:flex;gap:8px;">
+        <a href="{{ route('stock-transfer.report') }}" class="btn btn-ghost btn-sm">
+            <i class="fas fa-file-alt"></i> Laporan Detail
+        </a>
         <a href="{{ route('stock-transfer.receive.create') }}" class="btn btn-outline">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;">
                 <path d="M12 5v14M5 12l7 7 7-7"/>

@@ -24,6 +24,7 @@ class RolePermission extends Model
             'delivery'       => ['label' => 'Delivery Order',   'icon' => 'fa-truck'],
             'kitchen'        => ['label' => 'Kitchen Monitor',  'icon' => 'fa-utensils'],
             'stock_request'  => ['label' => 'Permintaan FG',    'icon' => 'fa-clipboard-check'],
+            'rekap_order'    => ['label' => 'Rekap Order',       'icon' => 'fa-layer-group'],
             'sync'           => ['label' => 'Sync HPY',         'icon' => 'fa-sync-alt'],
         ];
     }

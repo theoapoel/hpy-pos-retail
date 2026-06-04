@@ -245,6 +245,19 @@ class StockTransferController extends Controller
     }
 
     // ----------------------------------------------------------
+    // SURAT JALAN — standalone print page
+    // ----------------------------------------------------------
+    public function suratJalan(StockTransfer $stockTransfer)
+    {
+        $stockTransfer->load(['items.product', 'user']);
+        $storeName = \App\Models\Setting::get('store_name', 'HPY');
+        return view('stock-transfer.surat-jalan', [
+            'transfer'  => $stockTransfer,
+            'storeName' => $storeName,
+        ]);
+    }
+
+    // ----------------------------------------------------------
     // RETRY SYNC to ERP HPY
     // ----------------------------------------------------------
     public function retry(StockTransfer $stockTransfer)

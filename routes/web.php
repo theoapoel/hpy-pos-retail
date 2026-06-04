@@ -8,7 +8,8 @@ use App\Http\Controllers\{
     UserController, PermissionController, RoleController, WarehouseController,
     BackupController, SetupController, OnlineReportController, UpdateController,
     DeliveryOrderController, DeliveryNoteController, KitchenController,
-    StockRequestController, CouponController
+    StockRequestController, CouponController, RekapOrderController,
+    StockTransferReportController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -176,13 +177,15 @@ Route::middleware('auth')->group(function () {
     // Stock Transfer
     Route::prefix('stock-transfer')->name('stock-transfer.')->middleware('permission:stock_transfer')->group(function () {
         Route::get('/',            [StockTransferController::class, 'index'])->name('index');
+        Route::get('/report',      [StockTransferReportController::class, 'index'])->name('report');
         Route::get('/send',        [StockTransferController::class, 'createSend'])->name('send.create');
         Route::post('/send',       [StockTransferController::class, 'storeSend'])->name('send.store');
         Route::get('/receive',     [StockTransferController::class, 'createReceive'])->name('receive.create');
         Route::post('/receive',    [StockTransferController::class, 'storeReceive'])->name('receive.store');
         Route::post('/load-items', [StockTransferController::class, 'loadEntryItems'])->name('load-items');
-        Route::get('/{stockTransfer}',        [StockTransferController::class, 'show'])->name('show');
-        Route::post('/{stockTransfer}/retry', [StockTransferController::class, 'retry'])->name('retry');
+        Route::get('/{stockTransfer}',             [StockTransferController::class, 'show'])->name('show');
+        Route::get('/{stockTransfer}/surat-jalan', [StockTransferController::class, 'suratJalan'])->name('surat-jalan');
+        Route::post('/{stockTransfer}/retry',      [StockTransferController::class, 'retry'])->name('retry');
     });
 
     // Delivery Order
@@ -213,6 +216,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/{stockRequest}/cancel',                    [StockRequestController::class, 'cancel'])->name('cancel');
         Route::post('/{stockRequest}/sync-erp',                  [StockRequestController::class, 'syncErp'])->name('sync-erp');
         Route::post('/{stockRequest}/kitchen-status',            [StockRequestController::class, 'updateKitchenStatus'])->name('kitchen-status');
+    });
+
+    // Rekap Order
+    Route::prefix('rekap-order')->name('rekap-order.')->middleware('permission:rekap_order')->group(function () {
+        Route::get('/', [RekapOrderController::class, 'index'])->name('index');
     });
 
     // Kitchen Monitor

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Path \"c:\\\\xampp\\\\htdocs\\\\larapos-fresh\" -Directory | ForEach-Object { $_.Name } | Sort-Object)",
+      "Bash(php artisan *)",
+      "Bash(Get-Content storage/logs/laravel.log -Tail 60)",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(git config *)",
+      "Bash(git init *)"
+    ]
+  }
+}

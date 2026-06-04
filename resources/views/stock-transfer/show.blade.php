@@ -25,6 +25,10 @@
                 <button class="btn btn-outline">Retry Sync ERP HPY</button>
             </form>
         @endif
+        <a href="{{ route('stock-transfer.surat-jalan', $transfer) }}" target="_blank" class="btn btn-primary btn-sm">
+            <i class="fas fa-print"></i>
+            {{ $transfer->type === 'incoming' ? 'Cetak Bukti Terima' : 'Cetak Surat Jalan' }}
+        </a>
         <a href="{{ route('stock-transfer.index') }}" class="btn btn-ghost">← Kembali</a>
     </div>
 </div>
