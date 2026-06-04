@@ -68,6 +68,26 @@ class UpdateController extends Controller
         }
     }
 
+    private function findGit(): string
+    {
+        // Cek apakah 'git' tersedia di PATH proses Apache saat ini
+        exec('git --version 2>&1', $out, $code);
+        if ($code === 0) return 'git';
+
+        // Fallback: lokasi instalasi umum Git for Windows
+        $candidates = [
+            'C:\\Program Files\\Git\\cmd\\git.exe',
+            'C:\\Program Files\\Git\\bin\\git.exe',
+            'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+            'C:\\Program Files (x86)\\Git\\bin\\git.exe',
+        ];
+        foreach ($candidates as $path) {
+            if (file_exists($path)) return '"' . $path . '"';
+        }
+
+        return 'git';
+    }
+
     public function run(Request $request)
     {
         $request->validate([
@@ -78,16 +98,17 @@ class UpdateController extends Controller
         $base    = base_path();
         $safeDir = str_replace('\\', '/', $base);
         $pullUrl = 'https://' . $request->github_token . '@github.com/' . self::GITHUB_REPO . '.git';
+        $git     = $this->findGit();
 
         // Tulis safe.directory ke global git config — lebih reliable dari flag -c
         // karena git spawn subprocess (remote helper) yang tidak mewarisi -c flag.
-        exec('git config --global --add safe.directory ' . escapeshellarg($safeDir) . ' 2>&1');
+        exec($git . ' config --global --add safe.directory ' . escapeshellarg($safeDir) . ' 2>&1');
         // Tambahkan juga versi backslash (Windows path) sebagai fallback
-        exec('git config --global --add safe.directory ' . escapeshellarg($base) . ' 2>&1');
+        exec($git . ' config --global --add safe.directory ' . escapeshellarg($base) . ' 2>&1');
 
         $log[] = '▶ git pull ' . self::GITHUB_BRANCH;
         exec(
-            'git -C ' . escapeshellarg($base)
+            $git . ' -C ' . escapeshellarg($base)
             . ' -c safe.directory=' . escapeshellarg($safeDir)
             . ' pull ' . escapeshellarg($pullUrl) . ' ' . self::GITHUB_BRANCH . ' 2>&1',
             $pullOut,
@@ -141,7 +162,8 @@ class UpdateController extends Controller
 
         $logOut  = [];
         $safeDir = str_replace('\\', '/', $base);
-        exec('git -C ' . escapeshellarg($base) . ' -c safe.directory=' . escapeshellarg($safeDir) . ' log -1 --format="%ci|||%s" HEAD 2>&1', $logOut);
+        $git     = $this->findGit();
+        exec($git . ' -C ' . escapeshellarg($base) . ' -c safe.directory=' . escapeshellarg($safeDir) . ' log -1 --format="%ci|||%s" HEAD 2>&1', $logOut);
         $date = $message = '';
         if (!empty($logOut[0]) && str_contains($logOut[0], '|||')) {
             [$date, $message] = explode('|||', $logOut[0], 2);
