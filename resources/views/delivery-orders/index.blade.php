@@ -53,6 +53,7 @@
         <table>
             <thead><tr>
                 <th>No. Order</th><th>Customer</th><th>Tgl Kirim</th>
+                <th>Jadwal Produksi</th>
                 <th>Tujuan</th><th>Total</th><th>Status</th><th>ERP SO</th><th></th>
             </tr></thead>
             <tbody>
@@ -64,6 +65,19 @@
                 <td><a href="{{ route('delivery-orders.show', $order) }}" class="text-blue font-medium">{{ $order->order_no }}</a></td>
                 <td>{{ $order->customer->name }}</td>
                 <td>{{ $order->delivery_date->isoFormat('D MMM Y') }}</td>
+                <td>
+                    @if($order->kitchen_scheduled_at)
+                        @php $sch = $order->kitchen_scheduled_at; @endphp
+                        <div style="font-size:13px;font-weight:600;color:{{ $sch->isFuture() ? 'var(--blue)' : 'var(--green)' }}">
+                            <i class="fas fa-calendar-check" style="margin-right:4px"></i>{{ $sch->isoFormat('D MMM Y') }}
+                        </div>
+                        <div style="font-size:11px;color:var(--text3)">
+                            {{ $sch->isFuture() ? 'Pukul ' . $sch->format('H:i') . ' — menunggu' : 'Pukul ' . $sch->format('H:i') . ' — aktif' }}
+                        </div>
+                    @else
+                        <span class="text-muted text-xs">—</span>
+                    @endif
+                </td>
                 <td><span class="badge badge-gray">{{ $order->shipments_count ?? $order->shipments()->count() }} tujuan</span></td>
                 <td class="money">Rp {{ number_format($order->total, 0, ',', '.') }}</td>
                 <td><span class="badge {{ $statusColor }}">{{ strtoupper($order->status) }}</span></td>
@@ -76,14 +90,17 @@
                         <span class="text-muted text-xs">—</span>
                     @endif
                 </td>
-                <td>
-                    <a href="{{ route('delivery-orders.show', $order) }}" class="btn btn-ghost btn-sm">
+                <td style="white-space:nowrap">
+                    <a href="{{ route('delivery-orders.show', $order) }}" class="btn btn-ghost btn-sm" title="Detail">
                         <i class="fas fa-eye"></i>
+                    </a>
+                    <a href="{{ route('delivery-orders.print-slip', $order) }}" target="_blank" class="btn btn-ghost btn-sm" title="Print Slip">
+                        <i class="fas fa-print"></i>
                     </a>
                 </td>
             </tr>
             @empty
-            <tr><td colspan="8" style="text-align:center;padding:40px;color:#80868B">Belum ada delivery order</td></tr>
+            <tr><td colspan="9" style="text-align:center;padding:40px;color:#80868B">Belum ada delivery order</td></tr>
             @endforelse
             </tbody>
         </table>

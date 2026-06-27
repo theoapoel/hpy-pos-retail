@@ -105,6 +105,32 @@
                     </div>
                 </div>
 
+                <div class="form-group">
+                    <label class="form-label">Layout Kasir</label>
+                    <input type="hidden" name="pos_layout" id="posLayoutInput" value="{{ $settings['pos_layout'] ?: 'index' }}">
+                    <div style="display:flex;gap:12px;margin-top:4px">
+                        <div class="pos-layout-opt" data-value="index" onclick="selectPosLayout(this)"
+                            style="flex:1;cursor:pointer;border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s">
+                            <div style="font-size:28px;margin-bottom:6px">🖼️</div>
+                            <div style="font-size:13px;font-weight:600">Kasir Klasik</div>
+                            <div style="font-size:11px;color:var(--text3);margin-top:2px">Grid produk + gambar</div>
+                        </div>
+                        <div class="pos-layout-opt" data-value="quick" onclick="selectPosLayout(this)"
+                            style="flex:1;cursor:pointer;border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s">
+                            <div style="font-size:28px;margin-bottom:6px">⚡</div>
+                            <div style="font-size:13px;font-weight:600">Kasir Cepat</div>
+                            <div style="font-size:11px;color:var(--text3);margin-top:2px">Cari + tabel pesanan</div>
+                        </div>
+                        <div class="pos-layout-opt" data-value="express" onclick="selectPosLayout(this)"
+                            style="flex:1;cursor:pointer;border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s">
+                            <div style="font-size:28px;margin-bottom:6px">💰</div>
+                            <div style="font-size:13px;font-weight:600">Kasir Express</div>
+                            <div style="font-size:11px;color:var(--text3);margin-top:2px">Total besar, tanpa tipe pesanan</div>
+                        </div>
+                    </div>
+                    <p style="font-size:12px;color:var(--text3);margin-top:6px">Menentukan tampilan yang dibuka saat kasir klik menu Kasir</p>
+                </div>
+
                 {{-- Service Charge & PB1 --}}
                 <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:16px">
                     <div style="font-weight:700;font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">
@@ -158,44 +184,6 @@
                     </div>
                 </div>
 
-                {{-- Logo Struk --}}
-                <div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
-                    <div style="font-weight:700;font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">
-                        <i class="fas fa-image" style="color:var(--blue)"></i>
-                        Logo Struk
-                    </div>
-
-                    <div id="logoPreviewWrap" style="margin-bottom:12px">
-                        @if($settings['store_logo'])
-                        <div style="display:flex;align-items:center;gap:12px">
-                            <img id="logoImg" src="{{ asset($settings['store_logo']) }}"
-                                style="height:64px;max-width:160px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff">
-                            <button type="button" onclick="removeLogo()" class="btn btn-danger btn-sm">
-                                <i class="fas fa-trash"></i> Hapus Logo
-                            </button>
-                        </div>
-                        @else
-                        <div id="noLogoMsg" style="color:var(--text3);font-size:13px;display:flex;align-items:center;gap:8px">
-                            <i class="fas fa-image" style="font-size:32px;color:var(--border)"></i>
-                            Belum ada logo
-                        </div>
-                        @endif
-                    </div>
-
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <label for="logoFile" class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">
-                            <i class="fas fa-upload"></i> Pilih Gambar
-                        </label>
-                        <input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp"
-                            style="display:none" onchange="uploadLogo(this)">
-                        <span id="logoUploadStatus" class="text-sm text-muted"></span>
-                    </div>
-                    <p style="font-size:11px;color:var(--text3);margin-top:8px">
-                        Format: JPG, PNG, GIF, WebP &mdash; Maks. 2 MB.
-                        Akan tampil di bagian atas struk digital dan cetak.
-                    </p>
-                </div>
-
                 <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveSettings()">
                     <i class="fas fa-save"></i> Simpan Pengaturan
                 </button>
@@ -203,9 +191,11 @@
         </div>
     </div>
 
-    {{-- Preview Struk --}}
-    <div>
-        <div class="card" style="position:sticky;top:80px;">
+    {{-- Kolom Kanan: Logo + Preview --}}
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+        {{-- Preview Struk --}}
+        <div class="card">
             <div class="card-header">
                 <span class="card-title"><i class="fas fa-receipt text-blue" style="margin-right:6px;"></i>Preview Struk</span>
                 <span style="font-size:12px;color:var(--text3);">Tampilan thermal printer</span>
@@ -216,7 +206,44 @@
                 </div>
             </div>
         </div>
-    </div>
+
+        {{-- Logo Struk --}}
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title"><i class="fas fa-image text-blue" style="margin-right:6px;"></i>Logo Struk</span>
+            </div>
+            <div class="card-body">
+                <div id="logoPreviewWrap" style="margin-bottom:12px">
+                    @if($settings['store_logo'])
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <img id="logoImg" src="{{ asset($settings['store_logo']) }}"
+                            style="height:64px;max-width:160px;object-fit:contain;border:1px solid var(--border);border-radius:8px;padding:4px;background:#fff">
+                        <button type="button" onclick="removeLogo()" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> Hapus Logo
+                        </button>
+                    </div>
+                    @else
+                    <div id="noLogoMsg" style="color:var(--text3);font-size:13px;display:flex;align-items:center;gap:8px">
+                        <i class="fas fa-image" style="font-size:32px;color:var(--border)"></i>
+                        Belum ada logo
+                    </div>
+                    @endif
+                </div>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <label for="logoFile" class="btn btn-outline btn-sm" style="cursor:pointer;margin:0">
+                        <i class="fas fa-upload"></i> Pilih Gambar
+                    </label>
+                    <input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp"
+                        style="display:none" onchange="uploadLogo(this)">
+                    <span id="logoUploadStatus" class="text-sm text-muted"></span>
+                </div>
+                <p style="font-size:11px;color:var(--text3);margin-top:8px">
+                    Format: JPG, PNG, GIF, WebP &mdash; Maks. 2 MB.
+                    Akan tampil di bagian atas struk digital dan cetak.
+                </p>
+            </div>
+        </div>
+    </div>{{-- end kolom kanan --}}
 </div>
 @endsection
 
@@ -241,6 +268,22 @@ function updateProdDisplayUI() {
 document.querySelectorAll('.prod-display-radio').forEach(r => {
     r.addEventListener('change', updateProdDisplayUI);
 });
+
+// Layout Kasir selector
+function selectPosLayout(el) {
+    document.getElementById('posLayoutInput').value = el.dataset.value;
+    document.querySelectorAll('.pos-layout-opt').forEach(o => {
+        const active = o === el;
+        o.style.borderColor = active ? 'var(--blue)' : 'var(--border)';
+        o.style.background  = active ? 'var(--blue-light, #E8F0FE)' : '';
+    });
+}
+(function initPosLayout() {
+    const cur = document.getElementById('posLayoutInput').value;
+    document.querySelectorAll('.pos-layout-opt').forEach(o => {
+        if (o.dataset.value === cur) selectPosLayout(o);
+    });
+})();
 
 function val(name) {
     return document.querySelector(`[name="${name}"]`)?.value?.trim() ?? '';

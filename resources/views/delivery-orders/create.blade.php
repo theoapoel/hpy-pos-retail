@@ -40,9 +40,9 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Tanggal Pengiriman <span style="color:var(--red)">*</span></label>
-                        <input type="date" name="delivery_date" class="form-control" required
-                            min="{{ now()->format('Y-m-d') }}" value="{{ old('delivery_date') }}">
+                        <label class="form-label">Tanggal Pembuatan <span style="color:var(--red)">*</span></label>
+                        <input type="date" name="order_date" class="form-control" required
+                            value="{{ old('order_date', now()->format('Y-m-d')) }}">
                     </div>
                 </div>
                 <div class="form-group">
@@ -122,6 +122,9 @@
 @push('scripts')
 <script>
 const products  = JSON.parse(document.getElementById('productData').textContent);
+const today     = new Date().toISOString().split('T')[0];
+const hourOptions   = Array.from({length:24}, (_,h) => `<option value="${String(h).padStart(2,'0')}">${String(h).padStart(2,'0')}</option>`).join('');
+const minuteOptions = ['00','05','10','15','20','25','30','35','40','45','50','55'].map(m => `<option value="${m}">${m}</option>`).join('');
 let itemCount   = 0;
 let shipCount   = 0;
 
@@ -216,6 +219,19 @@ function addShipment() {
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" style="font-size:12px">No. HP</label>
                 <input type="text" name="shipments[${idx}][recipient_phone]" class="form-control" style="font-size:13px" placeholder="08xx-xxxx-xxxx">
+            </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label" style="font-size:12px">Tanggal Pengiriman *</label>
+            <div style="display:flex;gap:8px;align-items:center">
+                <input type="date" name="shipments[${idx}][delivery_date]" class="form-control" required style="font-size:13px;flex:1" value="${today}">
+                <select name="shipments[${idx}][delivery_hour]" class="form-control form-select" style="font-size:13px;width:80px">
+                    ${hourOptions}
+                </select>
+                <span style="font-size:13px;color:var(--text3);flex-shrink:0">:</span>
+                <select name="shipments[${idx}][delivery_minute]" class="form-control form-select" style="font-size:13px;width:80px">
+                    ${minuteOptions}
+                </select>
             </div>
         </div>
         <div class="form-group" style="margin-bottom:10px">

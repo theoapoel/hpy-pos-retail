@@ -9,16 +9,17 @@ class DeliveryShipment extends Model
 {
     protected $fillable = [
         'delivery_order_id', 'sequence',
-        'recipient_name', 'recipient_phone', 'shipping_address',
+        'recipient_name', 'recipient_phone', 'shipping_address', 'delivery_date',
         'notes', 'items', 'total',
         'status', 'erp_delivery_note', 'erp_sync_status', 'erp_sync_error',
         'delivered_at',
     ];
 
     protected $casts = [
-        'items'        => 'array',
-        'total'        => 'decimal:2',
-        'delivered_at' => 'datetime',
+        'items'         => 'array',
+        'total'         => 'decimal:2',
+        'delivery_date' => 'datetime',
+        'delivered_at'  => 'datetime',
     ];
 
     public function order(): BelongsTo

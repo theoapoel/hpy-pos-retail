@@ -7,8 +7,8 @@ use App\Http\Controllers\{
     FactoryResetController, SettingsController,
     UserController, PermissionController, RoleController, WarehouseController,
     BackupController, SetupController, OnlineReportController, UpdateController,
-    DeliveryOrderController, DeliveryNoteController, KitchenController,
-    StockRequestController, CouponController, RekapOrderController,
+    DeliveryOrderController, DeliveryNoteController, DeliveryOrderPaymentController,
+    KitchenController, StockRequestController, CouponController, RekapOrderController,
     StockTransferReportController
 };
 use Illuminate\Support\Facades\Route;
@@ -127,6 +127,9 @@ Route::middleware('auth')->group(function () {
     // POS
     Route::prefix('pos')->name('pos.')->middleware('permission:pos')->group(function () {
         Route::get('/',                      [PosController::class, 'index'])->name('index');
+        Route::get('/quick',                 [PosController::class, 'quickIndex'])->name('quick');
+        Route::get('/express',               [PosController::class, 'expressIndex'])->name('express');
+        Route::get('/kasir',                 [PosController::class, 'kasirRedirect'])->name('kasir');
         Route::get('/search-products',       [PosController::class, 'searchProducts'])->name('search-products');
         Route::post('/validate-coupon',      [PosController::class, 'validateCoupon'])->name('validate-coupon');
         Route::post('/checkout',             [PosController::class, 'checkout'])->name('checkout');
@@ -197,6 +200,17 @@ Route::middleware('auth')->group(function () {
         Route::post('/{deliveryOrder}/confirm', [DeliveryOrderController::class, 'confirm'])->name('confirm');
         Route::post('/{deliveryOrder}/cancel',  [DeliveryOrderController::class, 'cancel'])->name('cancel');
         Route::post('/{deliveryOrder}/sync-so', [DeliveryOrderController::class, 'syncSalesOrder'])->name('sync-so');
+
+        // Payment
+        Route::post('/{deliveryOrder}/payments',                       [DeliveryOrderPaymentController::class, 'store'])->name('payments.store');
+        Route::delete('/{deliveryOrder}/payments/{payment}',           [DeliveryOrderPaymentController::class, 'destroy'])->name('payments.destroy');
+        Route::post('/{deliveryOrder}/payments/{payment}/sync',        [DeliveryOrderPaymentController::class, 'sync'])->name('payments.sync');
+
+        // Jadwal Produksi
+        Route::post('/{deliveryOrder}/schedule',                       [DeliveryOrderController::class, 'schedule'])->name('schedule');
+
+        // Print slip (2 lembar: Gudang + QC)
+        Route::get('/{deliveryOrder}/print-slip',                      [DeliveryOrderController::class, 'printSlip'])->name('print-slip');
     });
 
     // Delivery Notes (Shipments)
@@ -227,6 +241,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('kitchen')->name('kitchen.')->middleware('permission:kitchen')->group(function () {
         Route::get('/',                                 [KitchenController::class, 'index'])->name('index');
         Route::get('/poll',                             [KitchenController::class, 'poll'])->name('poll');
+        Route::get('/calendar',                         [KitchenController::class, 'calendar'])->name('calendar');
         Route::post('/{order}/status',                  [KitchenController::class, 'updateStatus'])->name('update-status');
     });
 

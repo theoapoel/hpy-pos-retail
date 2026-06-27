@@ -432,7 +432,7 @@
         <img src="{{ asset('images/happypos.png') }}" alt="HPYSync" style="height:30px;width:auto;object-fit:contain;">
     </a>
     <div class="topbar-divider"></div>
-    <div class="topbar-info"><i class="fas fa-utensils"></i> POS Restoran</div>
+    <div class="topbar-info"><i class="fas fa-utensils"></i> {{ $storeSettings['pos_profile'] ?: $storeSettings['store_name'] }}</div>
     <div class="topbar-divider"></div>
     <div class="topbar-info"><i class="fas fa-user-circle"></i> {{ auth()->user()->name }}</div>
     <span id="clock"></span>

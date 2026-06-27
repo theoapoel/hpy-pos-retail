@@ -3,10 +3,14 @@
 
 @section('content')
 @php
-    $statusColor = ['draft'=>'badge-gray','confirmed'=>'badge-blue','delivering'=>'badge-yellow','completed'=>'badge-green','cancelled'=>'badge-red'][$order->status] ?? 'badge-gray';
+    $statusColor    = ['draft'=>'badge-gray','confirmed'=>'badge-blue','delivering'=>'badge-yellow','completed'=>'badge-green','cancelled'=>'badge-red'][$order->status] ?? 'badge-gray';
+    $payStatusColor = ['unpaid'=>'badge-red','partial'=>'badge-yellow','paid'=>'badge-green'][$order->payment_status] ?? 'badge-gray';
+    $payStatusLabel = ['unpaid'=>'Belum Lunas','partial'=>'DP / Sebagian','paid'=>'Lunas'][$order->payment_status] ?? '-';
     $canEdit    = in_array($order->status, ['draft','confirmed']);
     $canConfirm = $order->status === 'draft';
     $canCancel  = !in_array($order->status, ['completed','cancelled']);
+    $totalPaid  = $order->payments->sum('amount');
+    $outstanding = max(0, $order->total - $totalPaid);
 @endphp
 
 <div class="page-header">
@@ -17,12 +21,13 @@
             </a>
             <div>
                 <div class="page-title"><i class="fas fa-truck text-blue"></i> {{ $order->order_no }}</div>
-                <div class="page-subtitle">{{ $order->delivery_date->isoFormat('dddd, D MMMM Y') }}</div>
+                <div class="page-subtitle">{{ ($order->order_date ?? $order->created_at)->isoFormat('dddd, D MMMM Y') }}</div>
             </div>
         </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
         <span class="badge {{ $statusColor }}" style="font-size:13px;padding:6px 14px">{{ strtoupper($order->status) }}</span>
+        <span class="badge {{ $payStatusColor }}" style="font-size:12px;padding:5px 12px"><i class="fas fa-money-bill-wave" style="margin-right:4px"></i>{{ $payStatusLabel }}</span>
         @if($canConfirm)
         <form method="POST" action="{{ route('delivery-orders.confirm', $order) }}" style="display:inline" onsubmit="return confirm('Konfirmasi order ini?')">
             @csrf
@@ -111,6 +116,14 @@
                             @endif
                         </div>
                         <div class="text-muted text-xs" style="margin-top:4px"><i class="fas fa-map-marker-alt"></i> {{ $ship->shipping_address }}</div>
+                        @if($ship->delivery_date)
+                        <div class="text-muted text-xs" style="margin-top:2px">
+                            <i class="fas fa-calendar-alt"></i> Pengiriman: {{ $ship->delivery_date->isoFormat('D MMMM Y') }}
+                            @if($ship->delivery_date->format('H:i') !== '00:00')
+                            <span style="margin-left:4px"><i class="fas fa-clock"></i> {{ $ship->delivery_date->format('H:i') }}</span>
+                            @endif
+                        </div>
+                        @endif
                         @if($ship->notes)
                         <div class="text-muted text-xs" style="margin-top:2px"><i class="fas fa-sticky-note"></i> {{ $ship->notes }}</div>
                         @endif
@@ -205,6 +218,229 @@
             </div>
         </div>
         @endif
+
+        {{-- Jadwal Produksi --}}
+        <div class="card">
+            <div class="card-header" style="padding:14px 16px;border-bottom:1px solid var(--border)">
+                <h4 style="font-size:13px;font-weight:700;margin:0;text-transform:uppercase;color:var(--text3)">
+                    <i class="fas fa-calendar-alt" style="margin-right:6px;color:var(--blue)"></i>Jadwal Produksi
+                </h4>
+            </div>
+            <div class="card-body" style="padding:14px 16px">
+
+                {{-- Status saat ini --}}
+                @if($order->kitchen_scheduled_at)
+                <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px">
+                    <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Dijadwalkan masuk dapur:</div>
+                    <div style="font-size:15px;font-weight:700;color:var(--blue)">
+                        <i class="fas fa-clock"></i>
+                        {{ $order->kitchen_scheduled_at->isoFormat('dddd, D MMMM Y') }}
+                    </div>
+                    <div style="font-size:13px;color:var(--text2);margin-top:2px">
+                        Pukul {{ $order->kitchen_scheduled_at->format('H:i') }} WIB
+                    </div>
+                    @if($order->kitchen_scheduled_at->isFuture())
+                    <div style="margin-top:8px">
+                        <span class="badge badge-yellow"><i class="fas fa-hourglass-half"></i> Menunggu jadwal</span>
+                    </div>
+                    @else
+                    <div style="margin-top:8px">
+                        <span class="badge badge-green"><i class="fas fa-check-circle"></i> Sudah aktif di dapur</span>
+                    </div>
+                    @endif
+                </div>
+                @else
+                <div class="text-muted text-sm" style="margin-bottom:12px;padding:8px;background:var(--surface2);border-radius:6px">
+                    <i class="fas fa-info-circle"></i> Belum ada jadwal produksi.
+                    @if($order->status === 'confirmed')
+                    Order sudah masuk antrian dapur secara langsung.
+                    @endif
+                </div>
+                @endif
+
+                {{-- Form set jadwal --}}
+                @if($order->status !== 'cancelled')
+                <form method="POST" action="{{ route('delivery-orders.schedule', $order) }}">
+                    @csrf
+                    <div class="form-group" style="margin-bottom:8px">
+                        <label class="form-label" style="font-size:12px">
+                            {{ $order->kitchen_scheduled_at ? 'Ubah Jadwal' : 'Set Jadwal Produksi' }}
+                        </label>
+                        @php
+                            $schH = $order->kitchen_scheduled_at ? $order->kitchen_scheduled_at->format('H') : '08';
+                            $schM = $order->kitchen_scheduled_at ? $order->kitchen_scheduled_at->format('i') : '00';
+                        @endphp
+                        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:6px;align-items:center">
+                            <input type="date" name="kitchen_scheduled_date" class="form-control"
+                                style="font-size:13px"
+                                value="{{ $order->kitchen_scheduled_at ? $order->kitchen_scheduled_at->format('Y-m-d') : now()->addDay()->format('Y-m-d') }}"
+                                required>
+                            <select name="kitchen_scheduled_hour" class="form-control form-select" style="font-size:13px;width:68px" required>
+                                @for($h = 0; $h < 24; $h++)
+                                @php $hh = str_pad($h, 2, '0', STR_PAD_LEFT); @endphp
+                                <option value="{{ $hh }}" {{ $schH === $hh ? 'selected' : '' }}>{{ $hh }}</option>
+                                @endfor
+                            </select>
+                            <span style="font-weight:700;color:var(--text2)">:</span>
+                            <select name="kitchen_scheduled_minute" class="form-control form-select" style="font-size:13px;width:68px" required>
+                                @foreach(['00','05','10','15','20','25','30','35','40','45','50','55'] as $mm)
+                                <option value="{{ $mm }}" {{ $schM === $mm ? 'selected' : '' }}>{{ $mm }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:4px">
+                            Order akan otomatis masuk antrian dapur pada waktu yang ditentukan.
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-outline w-full" style="font-size:13px">
+                        <i class="fas fa-calendar-check"></i>
+                        {{ $order->kitchen_scheduled_at ? 'Perbarui Jadwal' : 'Simpan Jadwal' }}
+                    </button>
+                </form>
+                @endif
+
+            </div>
+        </div>
+
+        {{-- Payment Card --}}
+        <div class="card">
+            <div class="card-header" style="padding:14px 16px;border-bottom:1px solid var(--border)">
+                <h4 style="font-size:13px;font-weight:700;margin:0;text-transform:uppercase;color:var(--text3)">
+                    <i class="fas fa-money-bill-wave" style="margin-right:6px;color:var(--green)"></i>Pembayaran
+                </h4>
+            </div>
+            <div class="card-body" style="padding:14px 16px">
+
+                {{-- Ringkasan --}}
+                <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px">
+                    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+                        <span class="text-muted">Total Order</span>
+                        <span class="font-medium money">Rp {{ number_format($order->total, 0, ',', '.') }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+                        <span class="text-muted">Sudah Dibayar</span>
+                        <span class="font-medium money" style="color:var(--green)">Rp {{ number_format($totalPaid, 0, ',', '.') }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:14px;border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+                        <span class="font-bold">Sisa Tagihan</span>
+                        <span class="font-bold money" style="color:{{ $outstanding > 0 ? 'var(--red)' : 'var(--green)' }}">
+                            Rp {{ number_format($outstanding, 0, ',', '.') }}
+                        </span>
+                    </div>
+                </div>
+
+                {{-- Daftar Payment --}}
+                @forelse($order->payments as $pmt)
+                <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:start">
+                        <div>
+                            <div style="font-size:13px;font-weight:600">
+                                <i class="fas {{ $pmt->methodIcon() }}" style="margin-right:4px;color:var(--blue)"></i>
+                                {{ $pmt->methodLabel() }}
+                            </div>
+                            <div class="text-muted" style="font-size:12px;margin-top:2px">
+                                {{ $pmt->payment_date->isoFormat('D MMM Y') }}
+                                @if($pmt->reference_no)
+                                    &bull; Ref: {{ $pmt->reference_no }}
+                                @endif
+                            </div>
+                            @if($pmt->notes)
+                            <div class="text-muted" style="font-size:11px;margin-top:2px">{{ $pmt->notes }}</div>
+                            @endif
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;margin-left:8px">
+                            <div class="money font-bold" style="font-size:14px;color:var(--green)">
+                                Rp {{ number_format($pmt->amount, 0, ',', '.') }}
+                            </div>
+                            <div style="margin-top:4px;display:flex;gap:4px;justify-content:flex-end;align-items:center">
+                                @if($pmt->erp_sync_status === 'synced')
+                                    <span class="badge badge-green" style="font-size:10px"><i class="fas fa-check-circle"></i> {{ $pmt->erp_payment_entry }}</span>
+                                @elseif($pmt->erp_sync_status === 'failed')
+                                    <span class="badge badge-red" style="font-size:10px" title="{{ $pmt->erp_sync_error }}">PE FAILED</span>
+                                    @if($order->erp_sales_order)
+                                    <button onclick="syncPayment(this)"
+                                        data-url="{{ route('delivery-orders.payments.sync', [$order, $pmt]) }}"
+                                        class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    @endif
+                                @else
+                                    @if($order->erp_sales_order)
+                                    <button onclick="syncPayment(this)"
+                                        data-url="{{ route('delivery-orders.payments.sync', [$order, $pmt]) }}"
+                                        class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px"
+                                        title="Sync ke ERP">
+                                        <i class="fas fa-sync-alt"></i> Sync PE
+                                    </button>
+                                    @else
+                                    <span class="badge badge-gray" style="font-size:10px">Belum Sync</span>
+                                    @endif
+                                @endif
+                                @if($pmt->erp_sync_status !== 'synced' && $order->status !== 'cancelled')
+                                <form method="POST"
+                                    action="{{ route('delivery-orders.payments.destroy', [$order, $pmt]) }}"
+                                    onsubmit="return confirm('Hapus payment ini?')" style="display:inline">
+                                    @csrf @method('DELETE')
+                                    <button type="submit" class="btn btn-ghost btn-sm" style="padding:2px 6px;color:var(--red);font-size:11px">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                @empty
+                <div class="text-muted text-sm" style="text-align:center;padding:8px 0">Belum ada payment.</div>
+                @endforelse
+
+                {{-- Form Tambah Payment --}}
+                @if($order->status !== 'cancelled')
+                <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+                    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+                        + Tambah Payment
+                    </div>
+                    <form method="POST" action="{{ route('delivery-orders.payments.store', $order) }}">
+                        @csrf
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label class="form-label" style="font-size:12px">Metode</label>
+                            <select name="payment_method" class="form-control form-select" style="font-size:13px" required>
+                                @foreach($mopList as $mop)
+                                <option value="{{ $mop }}">{{ $mop }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label class="form-label" style="font-size:12px">Jumlah (Rp) *</label>
+                            <input type="number" name="amount" class="form-control" required
+                                min="1" step="1" style="font-size:13px"
+                                placeholder="{{ number_format($outstanding, 0, ',', '.') }}"
+                                value="{{ $outstanding > 0 ? (int)$outstanding : '' }}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label class="form-label" style="font-size:12px">Tanggal</label>
+                            <input type="date" name="payment_date" class="form-control" required
+                                style="font-size:13px" value="{{ now()->format('Y-m-d') }}">
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label class="form-label" style="font-size:12px">No. Referensi</label>
+                            <input type="text" name="reference_no" class="form-control"
+                                style="font-size:13px" placeholder="Nomor transfer / kode unik">
+                        </div>
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label class="form-label" style="font-size:12px">Catatan</label>
+                            <input type="text" name="notes" class="form-control"
+                                style="font-size:13px" placeholder="Opsional">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-full" style="font-size:13px">
+                            <i class="fas fa-plus"></i> Simpan Payment
+                        </button>
+                    </form>
+                </div>
+                @endif
+
+            </div>
+        </div>
 
         {{-- ERP Sync Status --}}
         <div class="card">
@@ -314,6 +550,29 @@ async function syncDeliveryNote(btn) {
         toast('Error: ' + e.message, 'error');
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-sync-alt"></i> Sync DN';
+    }
+}
+
+async function syncPayment(btn) {
+    const url = btn.dataset.url;
+    btn.disabled = true;
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+        const res = await api.post(url);
+        if (res.success) {
+            toast('Payment Entry dibuat: ' + res.payment_entry, 'success');
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            toast('Sync Payment gagal: ' + (res.error ?? 'Unknown error'), 'error');
+            btn.disabled = false;
+            btn.innerHTML = orig;
+        }
+    } catch(e) {
+        toast('Error: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.innerHTML = orig;
     }
 }
 

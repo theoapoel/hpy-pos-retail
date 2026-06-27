@@ -116,6 +116,9 @@
         <a href="{{ route('delivery-orders.index') }}" class="btn btn-ghost btn-sm">
             <i class="fas fa-list"></i> Semua Order
         </a>
+        <a href="{{ route('kitchen.calendar') }}" class="btn btn-ghost btn-sm">
+            <i class="fas fa-calendar-alt"></i> Kalender
+        </a>
         <button onclick="refreshBoard()" class="btn btn-ghost btn-sm">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>

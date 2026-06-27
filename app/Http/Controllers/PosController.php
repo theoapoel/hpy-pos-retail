@@ -17,6 +17,64 @@ use Illuminate\Support\Facades\Auth;
 
 class PosController extends Controller
 {
+    public function kasirRedirect()
+    {
+        $layout = \App\Models\Setting::get('pos_layout', 'index');
+        return match($layout) {
+            'quick'   => redirect()->route('pos.quick'),
+            'express' => redirect()->route('pos.express'),
+            default   => redirect()->route('pos.index'),
+        };
+    }
+
+    public function quickIndex()
+    {
+        $categories        = Category::where('is_active', true)->get();
+        $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
+        $storeSettings     = SettingsController::storeSettings();
+        $posClass          = $storeSettings['pos_class'] ?? '';
+        $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
+        $posPaymentMethods  = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
+        $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
+        $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
+        $dineInCharges     = [
+            'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',
+            'service_charge_pct'     => (float) ($storeSettings['service_charge_pct'] ?? 0),
+            'pb1_enabled'            => $storeSettings['pb1_enabled'] === '1',
+            'pb1_pct'                => (float) ($storeSettings['pb1_pct'] ?? 0),
+        ];
+
+        return view('pos.quick', compact(
+            'categories', 'customers', 'posClass',
+            'walkinCustomerName', 'erpBaseUrl', 'deliveryPrices', 'dineInCharges',
+            'storeSettings', 'posPaymentMethods'
+        ));
+    }
+
+    public function expressIndex()
+    {
+        $categories        = Category::where('is_active', true)->get();
+        $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
+        $storeSettings     = SettingsController::storeSettings();
+        $posClass          = $storeSettings['pos_class'] ?? '';
+        $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
+        $posPaymentMethods  = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
+        $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
+        $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
+        $dineInCharges     = [
+            'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',
+            'service_charge_pct'     => (float) ($storeSettings['service_charge_pct'] ?? 0),
+            'pb1_enabled'            => $storeSettings['pb1_enabled'] === '1',
+            'pb1_pct'                => (float) ($storeSettings['pb1_pct'] ?? 0),
+        ];
+
+        return view('pos.express', compact(
+            'categories', 'customers', 'posClass',
+            'walkinCustomerName', 'erpBaseUrl', 'deliveryPrices', 'dineInCharges',
+            'storeSettings', 'posPaymentMethods'
+        ));
+    }
+
     public function index()
     {
         $categories = Category::where('is_active', true)->get();

@@ -118,12 +118,10 @@
                     <div class="form-group">
                         <label class="form-label">Naming Series SO</label>
                         <input type="text" name="erp_so_naming_series" class="form-control" value="{{ $settings['erp_so_naming_series'] ?? 'SAL-ORD-.YYYY.-' }}" placeholder="SAL-ORD-.YYYY.-">
-                        <div class="form-hint">Naming series Sales Order di ERPNext</div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Naming Series DN</label>
                         <input type="text" name="erp_dn_naming_series" class="form-control" value="{{ $settings['erp_dn_naming_series'] ?? 'MAT-DN-.YYYY.-' }}" placeholder="MAT-DN-.YYYY.-">
-                        <div class="form-hint">Naming series Delivery Note di ERPNext</div>
                     </div>
                 </div>
 

@@ -237,6 +237,7 @@ Klik **"Test"** → harus muncul status **"Terhubung"**, lalu klik **"Simpan"**.
 - Hitung kembalian otomatis, tombol nominal cepat
 - Pilih / tambah customer
 - Struk digital dan cetak struk thermal
+- Nama POS Profile ditampilkan di topbar
 
 ### Dashboard
 - Statistik penjualan hari ini
@@ -264,11 +265,55 @@ Klik **"Test"** → harus muncul status **"Terhubung"**, lalu klik **"Simpan"**.
 - Cetak ulang struk
 - Batalkan transaksi — stok otomatis dikembalikan (admin/manager)
 
+### Delivery Order
+- Buat DO dengan tanggal pembuatan dan multi tujuan pengiriman
+- Tanggal & jam pengiriman per tujuan (format 24 jam)
+- Alokasi item per tujuan pengiriman dengan validasi qty
+- Status: `draft` → `confirmed` → (cancel)
+- Sinkronisasi ke ERP HPY sebagai Sales Order
+
+**Payment Delivery Order:**
+- Catat DP / lunas sebelum order diproses
+- Metode pembayaran dinamis dari **Mode of Payment ERP HPY** (hanya yang enabled)
+- Status pembayaran per DO: `unpaid` / `partial` / `paid`
+- Sinkronisasi ke ERP HPY sebagai Payment Entry (linked ke Sales Order)
+- Auto-sync payment saat order dikonfirmasi jika SO sudah ada
+
+**Jadwal Produksi:**
+- Set tanggal & jam kapan order masuk antrian dapur
+- Picker waktu 24 jam (jam 00–23, menit per 5 menit)
+- Auto-aktivasi ke Kitchen Monitor saat jadwal tiba (via poll endpoint)
+- Kolom jadwal tampil di list Delivery Order
+
+**Print Slip (2 lembar, 80mm thermal):**
+- **Slip Gudang** — nomor order besar, nama & telepon customer, daftar item + qty, semua tujuan pengiriman
+- **Slip QC** — QR code (berisi nomor order), nomor ID 6 digit, nama & telepon customer, daftar item, tujuan pengiriman
+- QR code di-generate server-side (offline, tidak perlu internet)
+- Auto-print saat tab dibuka
+
+### Kitchen Monitor (Kanban Dapur)
+- Tiga kolom: **Antrian** → **Diproses** → **Siap Kirim**
+- Menampilkan Delivery Order dan Permintaan FG (Stock Request) dalam satu papan
+- Auto-refresh setiap 30 detik dengan notifikasi suara
+- Auto-aktivasi order terjadwal saat waktu produksi tiba
+- **Kalender Produksi**: tampilan grid bulanan, klik tanggal untuk melihat order yang dijadwalkan
+
+### Permintaan FG (Stock Request)
+- Buat permintaan bahan/produk jadi ke dapur
+- Status: `draft` → `submitted` → (cancel)
+- Kitchen status: `requested` → `preparing` → `done`
+- Sinkronisasi ke ERP HPY sebagai Material Request
+
+### Rekap Order
+- Agregasi item dari Delivery Order (filter by tanggal kirim) dan Stock Request (filter by needed date)
+- Merge by item code / SKU produk
+
 ### Multi-Warehouse & Stock Transfer
 - Manajemen beberapa gudang (pemetaan 1:1 ke ERP HPY Warehouse)
 - Transfer stok antar gudang dengan status lokal (`pending` / `submitted` / `cancelled`)
 - Sinkronisasi ke ERP HPY Warehouse Transfer document
-- Soft-delete untuk audit trail
+- Cetak Surat Jalan (standalone, 80mm thermal)
+- Laporan Transfer Barang dengan agregasi per item
 
 ### Stock Opname
 - Buat sesi stock opname per gudang
@@ -277,17 +322,23 @@ Klik **"Test"** → harus muncul status **"Terhubung"**, lalu klik **"Simpan"**.
 - Batalkan opname yang belum disubmit
 - Riwayat opname lengkap
 
+### Delivery Notes
+- Kelola pengiriman per shipment Delivery Order
+- Cetak resi pengiriman (80mm thermal)
+- Sinkronisasi ke ERP HPY sebagai Delivery Note
+
 ### Sinkronisasi ERP HPY
 - Test koneksi real-time
 - Pull produk, user kasir, payment methods, harga delivery dari ERP HPY
+- Pull Mode of Payment (hanya yang enabled) untuk dropdown payment DO
 - Push transaksi sebagai POS Invoice (auto-submit)
 - Retry transaksi gagal
 - Log sinkronisasi lengkap
 - Badge notifikasi pending sync
 
 ### Manajemen Pengguna & Hak Akses
-- CRUD user dengan role: `admin`, `manager`, `kasir`
-- Matriks permission per modul: `dashboard`, `pos`, `transactions`, `products`, `customers`, `stock_transfer`, `stock`, `sync`
+- CRUD user dengan role: `admin`, `manager`, `kasir`, `dapur`
+- Matriks permission per modul: `dashboard`, `pos`, `transactions`, `products`, `customers`, `stock_transfer`, `stock`, `delivery`, `kitchen`, `stock_request`, `rekap_order`, `sync`
 - Permission di-cache per role (300 detik)
 - Login dengan PIN untuk sesi kasir
 
@@ -299,15 +350,22 @@ Klik **"Test"** → harus muncul status **"Terhubung"**, lalu klik **"Simpan"**.
 resto-pos/
 ├── app/
 │   ├── Http/Controllers/
-│   │   ├── DashboardController.php       ← Dashboard & statistik
-│   │   ├── PosController.php             ← Kasir & checkout
-│   │   ├── ProductController.php         ← CRUD produk
-│   │   ├── CustomerController.php        ← CRUD customer
-│   │   ├── TransactionController.php     ← Riwayat transaksi
-│   │   ├── StockTransferController.php   ← Transfer stok antar gudang
-│   │   ├── StockController.php           ← Stok per gudang & sync Bin
-│   │   ├── StockOpnameController.php     ← Stock opname
-│   │   ├── ErpSyncController.php         ← Sinkronisasi ERP HPY
+│   │   ├── DashboardController.php           ← Dashboard & statistik
+│   │   ├── PosController.php                 ← Kasir & checkout
+│   │   ├── ProductController.php             ← CRUD produk
+│   │   ├── CustomerController.php            ← CRUD customer
+│   │   ├── TransactionController.php         ← Riwayat transaksi
+│   │   ├── DeliveryOrderController.php       ← Delivery Order (buat, konfirmasi, jadwal, print)
+│   │   ├── DeliveryOrderPaymentController.php← Payment per Delivery Order
+│   │   ├── DeliveryNoteController.php        ← Delivery Note & print resi
+│   │   ├── KitchenController.php             ← Kitchen Monitor kanban + kalender
+│   │   ├── StockRequestController.php        ← Permintaan FG
+│   │   ├── RekapOrderController.php          ← Rekap Order agregasi
+│   │   ├── StockTransferController.php       ← Transfer stok antar gudang
+│   │   ├── StockTransferReportController.php ← Laporan transfer
+│   │   ├── StockController.php               ← Stok per gudang & sync Bin
+│   │   ├── StockOpnameController.php         ← Stock opname
+│   │   ├── ErpSyncController.php             ← Sinkronisasi ERP HPY
 │   │   ├── UserController.php
 │   │   ├── PermissionController.php
 │   │   ├── RoleController.php
@@ -318,11 +376,16 @@ resto-pos/
 │   ├── Models/
 │   │   ├── User.php
 │   │   ├── Product.php
-│   │   ├── ProductStock.php              ← Stok per produk per gudang
+│   │   ├── ProductStock.php                  ← Stok per produk per gudang
 │   │   ├── Category.php
 │   │   ├── Customer.php
 │   │   ├── Transaction.php
 │   │   ├── TransactionItem.php
+│   │   ├── DeliveryOrder.php                 ← DO dengan payment status & jadwal produksi
+│   │   ├── DeliveryOrderItem.php
+│   │   ├── DeliveryOrderPayment.php          ← Payment per DO (sync ke ERP Payment Entry)
+│   │   ├── DeliveryShipment.php              ← Tujuan pengiriman + tanggal & jam kirim
+│   │   ├── StockRequest.php
 │   │   ├── StockTransfer.php
 │   │   ├── StockOpname.php
 │   │   ├── StockOpnameItem.php
@@ -331,14 +394,20 @@ resto-pos/
 │   │   ├── ErpSyncLog.php
 │   │   └── Setting.php
 │   └── Services/
-│       └── ErpNextService.php            ← Semua API call ke ERP HPY (Guzzle)
-├── database/
-│   ├── migrations/
-│   └── seeders/
-│       └── DatabaseSeeder.php
+│       └── ErpNextService.php                ← Semua API call ke ERP HPY (Guzzle)
+├── database/migrations/
 ├── resources/views/
 │   ├── layouts/app.blade.php
 │   ├── pos/
+│   ├── delivery-orders/
+│   │   ├── index.blade.php
+│   │   ├── create.blade.php
+│   │   ├── show.blade.php                    ← Payment, jadwal produksi, shipment detail
+│   │   └── print-slip.blade.php              ← 2 slip thermal: Gudang + QC (dengan QR code)
+│   ├── kitchen/
+│   │   ├── index.blade.php                   ← Kanban 3 kolom
+│   │   └── calendar.blade.php                ← Kalender produksi bulanan
+│   ├── delivery-notes/
 │   ├── products/
 │   ├── customers/
 │   ├── transactions/
@@ -362,7 +431,7 @@ resto-pos/
 # Reset database & isi ulang data demo
 php artisan migrate:fresh --seed
 
-# Bersihkan semua cache
+# Bersihkan semua cache (termasuk cache Mode of Payment ERP)
 php artisan cache:clear && php artisan config:clear && php artisan route:clear
 
 # Lihat semua route
@@ -414,6 +483,12 @@ php artisan storage:link
 ### ERP HPY: `Customer does not exist` / `NoneType error`
 - Klik **Pull Payment Methods** di halaman Sync HPY — walk-in customer akan di-set otomatis dari POS Profile
 - Pastikan customer yang dimaksud ada di ERP HPY
+
+### Mode of Payment tidak update / masih menampilkan MOP lama
+```bash
+php artisan cache:clear
+```
+MOP list di-cache 30 menit. Setelah clear cache, halaman Delivery Order akan fetch ulang dari ERP.
 
 ### Permission tidak berlaku setelah diubah
 Cache permission di-reset otomatis saat menyimpan perubahan, tapi jika masih bermasalah:

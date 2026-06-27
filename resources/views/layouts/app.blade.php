@@ -323,7 +323,7 @@
         {!! $navItem(route('dashboard'), 'fas fa-th-large', 'Dashboard', request()->routeIs('dashboard')) !!}
         @endif
         @if($canPos)
-        {!! $navItem(route('pos.index'), 'fas fa-cash-register', 'Kasir (POS)', request()->routeIs('pos.*')) !!}
+        {!! $navItem(route('pos.kasir'), 'fas fa-cash-register', 'Kasir', request()->routeIs('pos.index') || request()->routeIs('pos.quick') || request()->routeIs('pos.express')) !!}
         @endif
         @if($canTransactions)
         {!! $navItem(route('transactions.index'), 'fas fa-receipt', 'Transaksi', request()->routeIs('transactions.*')) !!}

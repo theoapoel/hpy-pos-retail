@@ -12,17 +12,19 @@ class DeliveryOrder extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'order_no', 'customer_id', 'billing_address', 'delivery_date',
-        'notes', 'status',
-        'kitchen_status', 'kitchen_started_at', 'kitchen_ready_at',
+        'order_no', 'customer_id', 'billing_address', 'order_date', 'delivery_date',
+        'notes', 'status', 'payment_status',
+        'kitchen_status', 'kitchen_started_at', 'kitchen_ready_at', 'kitchen_scheduled_at',
         'erp_sales_order', 'erp_sync_status', 'erp_sync_error',
         'subtotal', 'total', 'created_by',
     ];
 
     protected $casts = [
+        'order_date'         => 'date',
         'delivery_date'      => 'date',
-        'kitchen_started_at' => 'datetime',
-        'kitchen_ready_at'   => 'datetime',
+        'kitchen_started_at'    => 'datetime',
+        'kitchen_ready_at'      => 'datetime',
+        'kitchen_scheduled_at'  => 'datetime',
         'subtotal'           => 'decimal:2',
         'total'              => 'decimal:2',
     ];
@@ -45,6 +47,37 @@ class DeliveryOrder extends Model
     public function shipments(): HasMany
     {
         return $this->hasMany(DeliveryShipment::class)->orderBy('sequence');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(DeliveryOrderPayment::class)->orderBy('payment_date');
+    }
+
+    public function totalPaid(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function outstanding(): float
+    {
+        return max(0, (float) $this->total - $this->totalPaid());
+    }
+
+    public function recalculatePaymentStatus(): void
+    {
+        $paid = $this->totalPaid();
+        $total = (float) $this->total;
+
+        if ($paid <= 0) {
+            $status = 'unpaid';
+        } elseif ($paid >= $total) {
+            $status = 'paid';
+        } else {
+            $status = 'partial';
+        }
+
+        $this->update(['payment_status' => $status]);
     }
 
     public static function generateOrderNo(): string

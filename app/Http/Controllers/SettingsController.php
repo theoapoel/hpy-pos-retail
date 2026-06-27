@@ -10,7 +10,7 @@ class SettingsController extends Controller
     private const STORE_KEYS = [
         'store_name', 'store_tagline', 'store_address',
         'store_phone', 'store_email', 'receipt_footer', 'pos_class',
-        'pos_product_display',
+        'pos_layout', 'pos_product_display',
         'service_charge_enabled', 'service_charge_pct',
         'pb1_enabled', 'pb1_pct',
     ];
@@ -72,6 +72,7 @@ class SettingsController extends Controller
             'store_email'            => 'nullable|email|max:100',
             'receipt_footer'         => 'nullable|string|max:200',
             'pos_class'              => 'nullable|string|max:100',
+            'pos_layout'             => 'nullable|in:index,quick,express',
             'pos_product_display'    => 'nullable|in:image,text',
             'service_charge_enabled' => 'nullable|in:0,1',
             'service_charge_pct'     => 'nullable|numeric|min:0|max:100',
@@ -101,7 +102,9 @@ class SettingsController extends Controller
             'store_phone'            => Setting::get('store_phone', ''),
             'store_email'            => Setting::get('store_email', ''),
             'receipt_footer'         => Setting::get('receipt_footer', 'Terima kasih atas kunjungan Anda!'),
+            'pos_profile'            => Setting::get('erpnext_pos_profile', ''),
             'pos_class'              => Setting::get('pos_class', ''),
+            'pos_layout'             => Setting::get('pos_layout', 'index'),
             'pos_product_display'    => Setting::get('pos_product_display', 'image'),
             'service_charge_enabled' => Setting::get('service_charge_enabled', '0'),
             'service_charge_pct'     => (float) Setting::get('service_charge_pct', '0'),

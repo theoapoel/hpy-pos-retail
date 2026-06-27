@@ -1328,6 +1328,103 @@ class ErpNextService
     }
 
     // =========================================================
+    // MODE OF PAYMENT LIST
+    // =========================================================
+    public function getModeOfPaymentList(): array
+    {
+        if (empty($this->baseUrl)) {
+            return [];
+        }
+        $response = $this->client->get('/api/resource/Mode%20of%20Payment', [
+            'query' => [
+                'fields'  => '["name","type"]',
+                'filters' => '[["enabled","=",1]]',
+                'limit'   => 100,
+            ],
+        ]);
+        $data = json_decode($response->getBody(), true);
+        return collect($data['data'] ?? [])->pluck('name')->filter()->values()->toArray();
+    }
+
+    // CREATE PAYMENT ENTRY → ERPNext (linked ke Sales Order)
+    // =========================================================
+    public function createPaymentEntry(\App\Models\DeliveryOrderPayment $payment): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $order    = $payment->order;
+        $soName   = $order->erp_sales_order;
+        $customer = $order->customer->erp_customer_name ?: $order->customer->name;
+
+        if (empty($soName)) {
+            return ['success' => false, 'error' => 'Sales Order ERP belum ada. Konfirmasi order dan sync SO terlebih dahulu.'];
+        }
+        if (empty($customer)) {
+            return ['success' => false, 'error' => 'Customer belum memiliki nama ERP.'];
+        }
+
+        $company       = \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $currency      = \App\Models\Setting::get('erpnext_currency', 'IDR');
+        $namingSeries  = \App\Models\Setting::get('erp_pe_naming_series', 'ACC-PAY-.YYYY.-');
+
+        $modeOfPayment = $this->mapPaymentMethod($payment->payment_method);
+
+        $payload = [
+            'doctype'         => 'Payment Entry',
+            'naming_series'   => $namingSeries,
+            'payment_type'    => 'Receive',
+            'party_type'      => 'Customer',
+            'party'           => $customer,
+            'party_name'      => $order->customer->name,
+            'posting_date'    => $payment->payment_date->format('Y-m-d'),
+            'mode_of_payment' => $modeOfPayment,
+            'paid_amount'     => (float) $payment->amount,
+            'received_amount' => (float) $payment->amount,
+            'company'         => $company,
+            'paid_from_account_currency' => $currency,
+            'paid_to_account_currency'   => $currency,
+            'source_exchange_rate'       => 1,
+            'target_exchange_rate'       => 1,
+            'references' => [
+                [
+                    'reference_doctype' => 'Sales Order',
+                    'reference_name'    => $soName,
+                    'allocated_amount'  => (float) $payment->amount,
+                ],
+            ],
+            'remarks' => implode("\n", array_filter([
+                'Payment untuk DO: ' . $order->order_no,
+                $payment->reference_no ? 'Ref: ' . $payment->reference_no : null,
+                $payment->notes,
+            ])),
+        ];
+
+        Log::info('PaymentEntry payload', ['payment_id' => $payment->id, 'order' => $order->order_no]);
+
+        try {
+            $response = $this->client->post('/api/resource/Payment%20Entry', ['json' => $payload]);
+            $data     = json_decode($response->getBody()->getContents(), true);
+            $docname  = $data['data']['name'] ?? null;
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('PaymentEntry create failed', ['payment_id' => $payment->id, 'raw' => $rawBody]);
+            $error = $this->extractError($e);
+            $payment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+            return ['success' => false, 'error' => $error];
+        }
+
+        $payment->update([
+            'erp_payment_entry' => $docname,
+            'erp_sync_status'   => 'synced',
+            'erp_sync_error'    => null,
+        ]);
+
+        return ['success' => true, 'payment_entry' => $docname, 'docname' => $docname];
+    }
+
+    // =========================================================
     // FETCH HISTORICAL POS INVOICES FROM ERPNext (Online Report)
     // =========================================================
     public function fetchPosInvoices(

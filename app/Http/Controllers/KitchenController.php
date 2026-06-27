@@ -4,12 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\DeliveryOrder;
 use App\Models\StockRequest;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class KitchenController extends Controller
 {
     public function index()
     {
+        // Auto-aktifkan order yang jadwal produksinya sudah tiba
+        $this->activateScheduledOrders();
+
         $orders = DeliveryOrder::with(['customer', 'items'])
             ->whereIn('kitchen_status', ['pending', 'preparing', 'ready'])
             ->whereIn('status', ['confirmed', 'delivering', 'completed'])
@@ -62,6 +66,9 @@ class KitchenController extends Controller
 
     public function poll()
     {
+        // Auto-aktifkan order terjadwal setiap poll
+        $activated = $this->activateScheduledOrders();
+
         $counts = DeliveryOrder::whereIn('kitchen_status', ['pending', 'preparing', 'ready'])
             ->whereIn('status', ['confirmed', 'delivering', 'completed'])
             ->selectRaw('kitchen_status, count(*) as total')
@@ -81,6 +88,56 @@ class KitchenController extends Controller
             'sr_requested' => $srCounts->get('requested', 0),
             'sr_preparing' => $srCounts->get('preparing', 0),
             'sr_done'      => $srCounts->get('done', 0),
+            'newly_activated' => $activated,
         ]);
+    }
+
+    // ── Kalender Produksi ────────────────────────────────────────
+    public function calendar(Request $request)
+    {
+        $month = $request->month ? Carbon::parse($request->month . '-01') : Carbon::today()->startOfMonth();
+        $prev  = $month->copy()->subMonth();
+        $next  = $month->copy()->addMonth();
+
+        // Ambil semua DO bulan ini yang punya jadwal produksi
+        $scheduledOrders = DeliveryOrder::with('customer')
+            ->whereNotNull('kitchen_scheduled_at')
+            ->whereIn('status', ['draft', 'confirmed', 'delivering', 'completed'])
+            ->whereYear('kitchen_scheduled_at', $month->year)
+            ->whereMonth('kitchen_scheduled_at', $month->month)
+            ->orderBy('kitchen_scheduled_at')
+            ->get();
+
+        // Group per tanggal (Y-m-d)
+        $ordersByDate = $scheduledOrders->groupBy(fn($o) => $o->kitchen_scheduled_at->format('Y-m-d'));
+
+        // Tanggal yang dipilih (default: hari ini kalau ada, atau null)
+        $selectedDate = $request->date
+            ? Carbon::parse($request->date)
+            : null;
+
+        $selectedOrders = $selectedDate
+            ? ($ordersByDate->get($selectedDate->format('Y-m-d')) ?? collect())
+            : collect();
+
+        return view('kitchen.calendar', compact(
+            'month', 'prev', 'next', 'ordersByDate', 'selectedDate', 'selectedOrders'
+        ));
+    }
+
+    // ── Private helper ───────────────────────────────────────────
+    private function activateScheduledOrders(): int
+    {
+        $toActivate = DeliveryOrder::whereNull('kitchen_status')
+            ->whereIn('status', ['confirmed', 'delivering'])
+            ->whereNotNull('kitchen_scheduled_at')
+            ->where('kitchen_scheduled_at', '<=', now())
+            ->get();
+
+        foreach ($toActivate as $order) {
+            $order->update(['kitchen_status' => 'pending']);
+        }
+
+        return $toActivate->count();
     }
 }
