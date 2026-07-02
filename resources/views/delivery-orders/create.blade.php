@@ -19,6 +19,17 @@
     <a href="{{ route('delivery-orders.index') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Kembali</a>
 </div>
 
+@if ($errors->any())
+<div class="alert alert-danger" style="margin-bottom:16px">
+    <i class="fas fa-exclamation-circle"></i> Order belum bisa disimpan:
+    <ul style="margin:6px 0 0 18px">
+        @foreach ($errors->all() as $message)
+        <li>{{ $message }}</li>
+        @endforeach
+    </ul>
+</div>
+@endif
+
 <form id="doForm" method="POST" action="{{ route('delivery-orders.store') }}">
 @csrf
 <div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start">
@@ -35,7 +46,7 @@
                         <select name="customer_id" id="customerSelect" class="form-control form-select" required onchange="fillBillingAddress(this)">
                             <option value="">— Pilih Customer —</option>
                             @foreach($customers as $c)
-                            <option value="{{ $c->id }}" data-address="{{ $c->address }}">{{ $c->name }}</option>
+                            <option value="{{ $c->id }}" data-address="{{ $c->address }}" {{ old('customer_id') == $c->id ? 'selected' : '' }}>{{ $c->name }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -48,11 +59,11 @@
                 <div class="form-group">
                     <label class="form-label">Alamat Penagihan (Billing Address)</label>
                     <textarea name="billing_address" id="billingAddress" class="form-control" rows="2"
-                        placeholder="Alamat penagihan customer"></textarea>
+                        placeholder="Alamat penagihan customer">{{ old('billing_address') }}</textarea>
                 </div>
                 <div class="form-group" style="margin-bottom:0">
                     <label class="form-label">Catatan Order</label>
-                    <input type="text" name="notes" class="form-control" placeholder="Catatan tambahan (opsional)">
+                    <input type="text" name="notes" class="form-control" placeholder="Catatan tambahan (opsional)" value="{{ old('notes') }}">
                 </div>
             </div>
         </div>
@@ -147,7 +158,7 @@ function addItem(name = '', sku = '', price = 0, qty = 1, pid = '') {
     row.className = 'item-row';
     row.style = 'display:grid;grid-template-columns:1fr 80px 110px 100px 28px;gap:8px;margin-bottom:8px;align-items:center';
     row.innerHTML = `
-        <select name="items[${idx}][product_id]" class="form-control form-select item-product" onchange="onProductChange(this,${idx})" style="font-size:13px">
+        <select name="items[${idx}][product_id]" class="form-control form-select item-product" required onchange="onProductChange(this,${idx})" style="font-size:13px">
             <option value="">— Pilih Produk —</option>${opts}
         </select>
         <input type="number" name="items[${idx}][qty]" class="form-control item-qty" value="${qty}"
@@ -435,8 +446,43 @@ document.getElementById('doForm').addEventListener('submit', function(e) {
     }
 });
 
-// Init: add 1 item & 1 shipment
-addItem();
-addShipment();
+// Init: restore previously entered items/shipments if the save failed validation,
+// otherwise start with 1 empty item + 1 empty shipment.
+const oldItems     = @json(old('items', []));
+const oldShipments = @json(old('shipments', []));
+
+if (Object.keys(oldItems).length > 0) {
+    Object.values(oldItems).forEach(it => {
+        addItem(it.product_name || '', it.product_sku || '', it.price || 0, it.qty || 1, it.product_id || '');
+    });
+} else {
+    addItem();
+}
+
+if (Object.keys(oldShipments).length > 0) {
+    Object.values(oldShipments).forEach(ship => {
+        addShipment();
+        const idx = shipCount - 1;
+        const setVal = (field, val) => {
+            const el = document.querySelector(`[name="shipments[${idx}][${field}]"]`);
+            if (el && val !== undefined && val !== null) el.value = val;
+        };
+        setVal('recipient_name', ship.recipient_name);
+        setVal('recipient_phone', ship.recipient_phone);
+        setVal('shipping_address', ship.shipping_address);
+        setVal('delivery_date', ship.delivery_date);
+        if (ship.delivery_hour !== undefined) setVal('delivery_hour', String(ship.delivery_hour).padStart(2, '0'));
+        setVal('delivery_minute', ship.delivery_minute);
+        setVal('notes', ship.notes);
+        if (ship.items) {
+            Object.values(ship.items).forEach(si => {
+                addShipItem(idx, si.product_name || '', si.qty || 1, si.price || 0);
+            });
+        }
+    });
+} else {
+    addShipment();
+}
+recalcAll();
 </script>
 @endpush

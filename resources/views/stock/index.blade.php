@@ -342,7 +342,8 @@ async function syncFromBin() {
             const res = await resp.json();
 
             if (res.success) {
-                const detail = `Bin dari ERP: <strong>${res.bin_count}</strong> &nbsp;·&nbsp; Diperbarui: <strong>${res.updated}</strong> &nbsp;·&nbsp; Tidak cocok: <strong>${res.skipped}</strong> &nbsp;·&nbsp; Tersimpan di DB: <strong>${res.db_rows}</strong>`;
+                const removed = res.removed > 0 ? ` &nbsp;·&nbsp; Dihapus (tidak ada di ERP): <strong style="color:var(--red)">${res.removed}</strong>` : '';
+                const detail = `Bin dari ERP: <strong>${res.bin_count}</strong> &nbsp;·&nbsp; Diperbarui: <strong>${res.updated}</strong> &nbsp;·&nbsp; Tidak cocok: <strong>${res.skipped}</strong>${removed} &nbsp;·&nbsp; Tersimpan di DB: <strong>${res.db_rows}</strong>`;
                 addLogRow(rowId, 'done',
                     '<i class="fas fa-check-circle" style="color:var(--green)"></i>',
                     wh.label + (wh.is_default ? ' <span style="color:var(--blue);font-size:11px;">(default)</span>' : ''),

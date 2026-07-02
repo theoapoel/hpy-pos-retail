@@ -156,6 +156,18 @@ class StockRequestController extends Controller
 
         $stockRequest->update($data);
 
+        // Saat selesai: submit Material Request di ERP (docstatus=1)
+        if ($newStatus === 'done' && $stockRequest->erp_material_request) {
+            try {
+                $erp = new ErpNextService();
+                if ($erp->isConfigured()) {
+                    $erp->submitMaterialRequest($stockRequest);
+                }
+            } catch (\Exception $e) {
+                // silent — jangan block perubahan status kitchen
+            }
+        }
+
         return response()->json(['success' => true, 'kitchen_status' => $newStatus]);
     }
 }

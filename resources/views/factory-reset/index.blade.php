@@ -176,6 +176,14 @@
                         <span class="badge badge-red" id="countTransfers">—</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;">
+                        <span style="color:var(--text2);">Delivery Order</span>
+                        <span class="badge badge-red" id="countDeliveryOrders">—</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;">
+                        <span style="color:var(--text2);">Permintaan FG</span>
+                        <span class="badge badge-red" id="countStockRequests">—</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;">
                         <span style="color:var(--text2);">Log Sync</span>
                         <span class="badge badge-red" id="countLogs">—</span>
                     </div>
@@ -353,11 +361,13 @@ async function loadCounts() {
     try {
         const res = await api.get('{{ route("factory-reset.counts") }}');
         if (res.success) {
-            document.getElementById('countTransactions').textContent = res.transactions;
-            document.getElementById('countProducts').textContent     = res.products;
-            document.getElementById('countCustomers').textContent    = res.customers;
-            document.getElementById('countTransfers').textContent    = res.transfers;
-            document.getElementById('countLogs').textContent        = res.logs;
+            document.getElementById('countTransactions').textContent    = res.transactions;
+            document.getElementById('countProducts').textContent        = res.products;
+            document.getElementById('countCustomers').textContent       = res.customers;
+            document.getElementById('countTransfers').textContent       = res.transfers;
+            document.getElementById('countDeliveryOrders').textContent  = res.delivery_orders;
+            document.getElementById('countStockRequests').textContent   = res.stock_requests;
+            document.getElementById('countLogs').textContent            = res.logs;
         }
     } catch(_) {}
 }

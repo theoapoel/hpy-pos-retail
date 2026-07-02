@@ -63,7 +63,7 @@
             @endphp
             <tr>
                 <td><a href="{{ route('delivery-orders.show', $order) }}" class="text-blue font-medium">{{ $order->order_no }}</a></td>
-                <td>{{ $order->customer->name }}</td>
+                <td>{{ $order->customer?->name ?? '-' }}</td>
                 <td>{{ $order->delivery_date->isoFormat('D MMM Y') }}</td>
                 <td>
                     @if($order->kitchen_scheduled_at)

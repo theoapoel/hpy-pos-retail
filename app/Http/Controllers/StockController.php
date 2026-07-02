@@ -163,7 +163,8 @@ class StockController extends Controller
         $bins    = $result['data'];
         $updated = 0;
         $skipped = 0;
-        $writeError = null;
+        $writeError  = null;
+        $updatedIds  = [];
 
         foreach ($bins as $bin) {
             // Cocokkan bin.item_code dengan products.erp_item_code
@@ -188,6 +189,7 @@ class StockController extends Controller
                     $product->update(['stock' => $qty]);
                 }
 
+                $updatedIds[] = $product->id;
                 $updated++;
             } catch (\Exception $e) {
                 $writeError = $e->getMessage();
@@ -204,6 +206,11 @@ class StockController extends Controller
             ]);
         }
 
+        // Hapus baris stok lama yang tidak ada di ERP (sudah tidak relevan)
+        $removed = ProductStock::where('warehouse_id', $warehouse->id)
+            ->whereNotIn('product_id', $updatedIds)
+            ->delete();
+
         // Verifikasi: hitung baris yang tersimpan
         $savedRows = ProductStock::where('warehouse_id', $warehouse->id)->count();
 
@@ -215,6 +222,7 @@ class StockController extends Controller
             'bin_count'  => count($bins),
             'updated'    => $updated,
             'skipped'    => $skipped,
+            'removed'    => $removed,
             'db_rows'    => $savedRows,
         ]);
     }

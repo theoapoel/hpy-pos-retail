@@ -16,7 +16,7 @@
                 @endif
             </div>
             <div class="order-date"><i class="fas fa-calendar-alt"></i> {{ $order->delivery_date->isoFormat('D MMM Y') }}</div>
-            <div class="order-customer"><i class="fas fa-user"></i> {{ $order->customer->name }}</div>
+            <div class="order-customer"><i class="fas fa-user"></i> {{ $order->customer?->name ?? '-' }}</div>
         </div>
         <div class="elapsed" data-since="{{ $sinceTs }}">—</div>
     </div>

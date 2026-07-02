@@ -200,8 +200,8 @@
                 <h4 style="font-size:13px;font-weight:700;margin:0;text-transform:uppercase;color:var(--text3)">Customer</h4>
             </div>
             <div class="card-body" style="padding:14px 16px">
-                <div style="font-weight:600;font-size:14px">{{ $order->customer->name }}</div>
-                @if($order->customer->phone)
+                <div style="font-weight:600;font-size:14px">{{ $order->customer?->name ?? '-' }}</div>
+                @if($order->customer?->phone)
                 <div class="text-muted text-xs" style="margin-top:4px"><i class="fas fa-phone"></i> {{ $order->customer->phone }}</div>
                 @endif
             </div>

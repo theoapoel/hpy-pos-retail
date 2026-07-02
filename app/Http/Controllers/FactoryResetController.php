@@ -25,12 +25,14 @@ class FactoryResetController extends Controller
     public function counts()
     {
         return response()->json([
-            'success'      => true,
-            'transactions' => DB::table('transactions')->count(),
-            'products'     => DB::table('products')->count(),
-            'customers'    => DB::table('customers')->count(),
-            'transfers'    => DB::table('stock_transfers')->count(),
-            'logs'         => DB::table('erp_sync_logs')->count(),
+            'success'         => true,
+            'transactions'    => DB::table('transactions')->count(),
+            'products'        => DB::table('products')->count(),
+            'customers'       => DB::table('customers')->count(),
+            'transfers'       => DB::table('stock_transfers')->count(),
+            'delivery_orders' => DB::table('delivery_orders')->count(),
+            'stock_requests'  => DB::table('stock_requests')->count(),
+            'logs'            => DB::table('erp_sync_logs')->count(),
         ]);
     }
 
@@ -106,6 +108,15 @@ class FactoryResetController extends Controller
             DB::statement('SET FOREIGN_KEY_CHECKS=0');
 
             $tables = [
+                'delivery_order_payments',
+                'delivery_shipments',
+                'delivery_order_items',
+                'delivery_orders',
+                'stock_request_items',
+                'stock_requests',
+                'stock_opname_items',
+                'stock_opnames',
+                'product_stocks',
                 'stock_transfer_items',
                 'stock_transfers',
                 'transaction_items',

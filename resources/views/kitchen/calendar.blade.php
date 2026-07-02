@@ -198,7 +198,7 @@
                                 {{ $o->order_no }}
                             </a>
                             <div style="font-size:12px;color:var(--text2);margin-top:2px">
-                                <i class="fas fa-user" style="margin-right:4px"></i>{{ $o->customer->name }}
+                                <i class="fas fa-user" style="margin-right:4px"></i>{{ $o->customer?->name ?? '-' }}
                             </div>
                         </div>
                         <div style="text-align:right">

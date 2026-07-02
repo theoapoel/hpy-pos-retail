@@ -97,7 +97,7 @@
                     </a>
                     <div style="font-size:11px;color:var(--text3)">#{{ $ship->sequence }}</div>
                 </td>
-                <td>{{ $ship->order->customer->name }}</td>
+                <td>{{ $ship->order->customer?->name ?? '-' }}</td>
                 <td>{{ $ship->order->delivery_date->isoFormat('D MMM Y') }}</td>
                 <td>
                     <div style="font-weight:500">{{ $ship->recipient_name }}</div>

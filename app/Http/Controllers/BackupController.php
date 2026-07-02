@@ -18,6 +18,15 @@ class BackupController extends Controller
         'transaction_items',
         'stock_transfers',
         'stock_transfer_items',
+        'delivery_orders',
+        'delivery_order_items',
+        'delivery_shipments',
+        'delivery_order_payments',
+        'stock_requests',
+        'stock_request_items',
+        'product_stocks',
+        'stock_opnames',
+        'stock_opname_items',
         'erp_sync_logs',
     ];
 

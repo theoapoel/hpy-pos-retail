@@ -375,6 +375,45 @@ class ErpNextService
         ]);
     }
 
+    /**
+     * Resolve [paid_from, paid_to] accounts for a "Receive" Payment Entry.
+     * paid_from = company's Default Receivable Account, paid_to = Mode of Payment's
+     * default account for the company. Both can be overridden manually via Setting.
+     */
+    private function resolvePaymentAccounts(string $modeOfPayment, string $company): array
+    {
+        $paidToAccount = \App\Models\Setting::get('erp_pe_paid_to_account', '') ?: null;
+        if (!$paidToAccount) {
+            try {
+                $resp = $this->client->get('/api/resource/Mode%20of%20Payment/' . rawurlencode($modeOfPayment));
+                $data = json_decode($resp->getBody()->getContents(), true);
+                foreach (($data['data']['accounts'] ?? []) as $acc) {
+                    if (($acc['company'] ?? '') === $company && !empty($acc['default_account'])) {
+                        $paidToAccount = $acc['default_account'];
+                        break;
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not resolve Mode of Payment account', ['mode_of_payment' => $modeOfPayment, 'error' => $e->getMessage()]);
+            }
+        }
+
+        $paidFromAccount = \App\Models\Setting::get('erp_pe_paid_from_account', '') ?: null;
+        if (!$paidFromAccount) {
+            try {
+                $resp = $this->client->get('/api/resource/Company/' . rawurlencode($company), [
+                    'query' => ['fields' => '["default_receivable_account"]'],
+                ]);
+                $data = json_decode($resp->getBody()->getContents(), true);
+                $paidFromAccount = $data['data']['default_receivable_account'] ?? null;
+            } catch (\Exception $e) {
+                Log::warning('Could not resolve Company receivable account', ['company' => $company, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return [$paidFromAccount, $paidToAccount];
+    }
+
     // =========================================================
     // PULL PRODUCTS FROM ERPNext
     // =========================================================
@@ -1213,6 +1252,22 @@ class ErpNextService
             return ['success' => false, 'error' => $error];
         }
 
+        if ($docname) {
+            try {
+                $this->submitDoc('Sales Order', $docname);
+            } catch (RequestException $e) {
+                $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+                Log::error('SO submit failed', ['order' => $order->order_no, 'docname' => $docname, 'raw' => $rawBody]);
+                $error = 'SO ' . $docname . ' dibuat tapi gagal submit: ' . $this->extractError($e);
+                $order->update([
+                    'erp_sales_order' => $docname,
+                    'erp_sync_status' => 'failed',
+                    'erp_sync_error'  => $error,
+                ]);
+                return ['success' => false, 'error' => $error, 'docname' => $docname];
+            }
+        }
+
         $order->update([
             'erp_sales_order' => $docname,
             'erp_sync_status' => 'synced',
@@ -1371,6 +1426,15 @@ class ErpNextService
 
         $modeOfPayment = $this->mapPaymentMethod($payment->payment_method);
 
+        [$paidFromAccount, $paidToAccount] = $this->resolvePaymentAccounts($modeOfPayment, $company);
+
+        if (empty($paidToAccount)) {
+            return ['success' => false, 'error' => "Mode of Payment \"$modeOfPayment\" belum punya akun default untuk company \"$company\" di ERPNext (Mode of Payment > Accounts), atau set manual via Setting key erp_pe_paid_to_account."];
+        }
+        if (empty($paidFromAccount)) {
+            return ['success' => false, 'error' => "Company \"$company\" belum punya Default Receivable Account di ERPNext, atau set manual via Setting key erp_pe_paid_from_account."];
+        }
+
         $payload = [
             'doctype'         => 'Payment Entry',
             'naming_series'   => $namingSeries,
@@ -1383,6 +1447,8 @@ class ErpNextService
             'paid_amount'     => (float) $payment->amount,
             'received_amount' => (float) $payment->amount,
             'company'         => $company,
+            'paid_from'                  => $paidFromAccount,
+            'paid_to'                    => $paidToAccount,
             'paid_from_account_currency' => $currency,
             'paid_to_account_currency'   => $currency,
             'source_exchange_rate'       => 1,
@@ -1413,6 +1479,22 @@ class ErpNextService
             $error = $this->extractError($e);
             $payment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
             return ['success' => false, 'error' => $error];
+        }
+
+        if ($docname) {
+            try {
+                $this->submitDoc('Payment Entry', $docname);
+            } catch (RequestException $e) {
+                $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+                Log::error('PaymentEntry submit failed', ['payment_id' => $payment->id, 'docname' => $docname, 'raw' => $rawBody]);
+                $error = 'Payment Entry ' . $docname . ' dibuat tapi gagal submit: ' . $this->extractError($e);
+                $payment->update([
+                    'erp_payment_entry' => $docname,
+                    'erp_sync_status'   => 'failed',
+                    'erp_sync_error'    => $error,
+                ]);
+                return ['success' => false, 'error' => $error, 'docname' => $docname];
+            }
         }
 
         $payment->update([
@@ -1755,7 +1837,7 @@ class ErpNextService
     }
 
     // =========================================================
-    // CREATE MATERIAL REQUEST → ERPNext (purpose: Manufacture)
+    // CREATE MATERIAL REQUEST → ERPNext (material_request_type: Manufacture)
     // =========================================================
     public function createMaterialRequest(\App\Models\StockRequest $stockRequest): array
     {
@@ -1781,14 +1863,15 @@ class ErpNextService
         ])->toArray();
 
         $payload = [
-            'doctype'          => 'Material Request',
-            'naming_series'    => $namingSeries,
-            'purpose'          => 'Manufacture',
-            'transaction_date' => now()->format('Y-m-d'),
-            'schedule_date'    => $scheduleDate,
-            'company'          => $company,
-            'items'            => $items,
-            'remarks'          => implode("\n", array_filter([
+            'doctype'                => 'Material Request',
+            'naming_series'          => $namingSeries,
+            'material_request_type'  => 'Manufacture',
+            'transaction_date'       => now()->format('Y-m-d'),
+            'schedule_date'          => $scheduleDate,
+            'company'                => $company,
+            'status_permintaan'      => 'Diajukan',
+            'items'                => $items,
+            'remarks'              => implode("\n", array_filter([
                 'Request: ' . $stockRequest->request_no,
                 $stockRequest->notes,
             ])),
@@ -1800,10 +1883,6 @@ class ErpNextService
             $response = $this->client->post('/api/resource/Material%20Request', ['json' => $payload]);
             $data     = json_decode($response->getBody()->getContents(), true);
             $docname  = $data['data']['name'] ?? null;
-
-            if ($docname) {
-                $this->submitDoc('Material Request', $docname);
-            }
         } catch (\GuzzleHttp\Exception\ConnectException $e) {
             Log::warning('MR auto-sync: network unreachable', ['request' => $stockRequest->request_no]);
             return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
@@ -1822,5 +1901,36 @@ class ErpNextService
         ]);
 
         return ['success' => true, 'docname' => $docname, 'material_request' => $docname];
+    }
+
+    // =========================================================
+    // SUBMIT MATERIAL REQUEST → docstatus = 1 (Selesai)
+    // =========================================================
+    public function submitMaterialRequest(\App\Models\StockRequest $stockRequest): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $docname = $stockRequest->erp_material_request;
+
+        if (!$docname) {
+            return ['success' => false, 'error' => 'Material Request ERP belum dibuat untuk permintaan ini.'];
+        }
+
+        try {
+            $this->submitDoc('Material Request', $docname);
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            Log::warning('MR submit: network unreachable', ['docname' => $docname]);
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('MR submit failed', ['docname' => $docname, 'raw' => $rawBody]);
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+
+        Log::info('MR submitted (docstatus=1)', ['docname' => $docname, 'request' => $stockRequest->request_no]);
+
+        return ['success' => true, 'docname' => $docname];
     }
 }

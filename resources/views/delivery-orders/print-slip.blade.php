@@ -129,8 +129,8 @@ body {
     $orderNo   = $order->order_no;
     $orderDate = ($order->order_date ?? $order->created_at)->format('d/m/Y');
     $idPadded  = str_pad($order->id, 6, '0', STR_PAD_LEFT);
-    $custName  = $order->customer->name;
-    $custPhone = $order->customer->phone ?? '';
+    $custName  = $order->customer?->name ?? '-';
+    $custPhone = $order->customer?->phone ?? '';
 @endphp
 
 {{-- Partial: Tujuan Pengiriman (reused di kedua slip) --}}
