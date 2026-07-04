@@ -70,7 +70,7 @@
 <div class="page-header">
     <div>
         <div class="page-title"><i class="fas fa-calendar-alt text-blue"></i> Kalender Produksi</div>
-        <div class="page-subtitle">Jadwal masuk antrian dapur per Delivery Order</div>
+        <div class="page-subtitle">Jadwal masuk antrian dapur — Delivery Order & Permintaan FG</div>
     </div>
     <div style="display:flex;gap:8px">
         <a href="{{ route('kitchen.index') }}" class="btn btn-ghost">
@@ -175,30 +175,39 @@
 
                 @forelse($selectedOrders as $o)
                 @php
+                    $isDo = $o->entry_type === 'delivery';
                     $pColor = ['unpaid'=>'var(--red)','partial'=>'#F57F17','paid'=>'var(--green)'][$o->payment_status] ?? 'var(--text3)';
                     $pLabel = ['unpaid'=>'Belum Lunas','partial'=>'DP','paid'=>'Lunas'][$o->payment_status] ?? '-';
-                    $kLabel = match($o->kitchen_status) {
-                        'pending'   => 'Antrian',
-                        'preparing' => 'Diproses',
-                        'ready'     => 'Siap Kirim',
-                        default     => 'Belum Masuk',
-                    };
+                    $kLabel = $isDo
+                        ? match($o->kitchen_status) {
+                            'pending'   => 'Antrian',
+                            'preparing' => 'Diproses',
+                            'ready'     => 'Siap Kirim',
+                            default     => 'Belum Masuk',
+                        }
+                        : match($o->kitchen_status) {
+                            'requested' => 'Antrian',
+                            'preparing' => 'Diproses',
+                            'done'      => 'Selesai',
+                            default     => 'Belum Masuk',
+                        };
                     $kColor = match($o->kitchen_status) {
-                        'pending'   => 'badge-yellow',
+                        'pending', 'requested' => 'badge-yellow',
                         'preparing' => 'badge-blue',
-                        'ready'     => 'badge-green',
+                        'ready', 'done' => 'badge-green',
                         default     => 'badge-gray',
                     };
                 @endphp
                 <div class="order-list-card">
                     <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">
                         <div>
-                            <a href="{{ route('delivery-orders.show', $o) }}"
+                            <span class="{{ $isDo ? 'tag-do' : 'tag-fg' }}" style="font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-right:6px;{{ $isDo ? 'background:#E8F0FE;color:#1967D2' : 'background:#E6F4EA;color:#137333' }}">{{ $isDo ? 'DO' : 'FG' }}</span>
+                            <a href="{{ $o->route_show }}"
                                 style="font-weight:700;font-size:14px;color:var(--blue);text-decoration:none">
-                                {{ $o->order_no }}
+                                {{ $o->doc_no }}
                             </a>
                             <div style="font-size:12px;color:var(--text2);margin-top:2px">
-                                <i class="fas fa-user" style="margin-right:4px"></i>{{ $o->customer?->name ?? '-' }}
+                                <i class="fas fa-user" style="margin-right:4px"></i>{{ $o->party }}
                             </div>
                         </div>
                         <div style="text-align:right">
@@ -210,14 +219,18 @@
                             <i class="fas fa-clock" style="color:var(--blue);margin-right:4px"></i>
                             {{ $o->kitchen_scheduled_at->format('H:i') }} WIB
                         </div>
+                        @if($isDo)
                         <div style="font-weight:600;color:{{ $pColor }}">
                             {{ $pLabel }}
                         </div>
+                        @endif
                     </div>
                     <div style="font-size:12px;color:var(--text3);margin-top:6px">
                         <i class="fas fa-box" style="margin-right:4px"></i>
-                        {{ $o->items_count ?? $o->items->count() }} jenis item
+                        {{ $o->items_count }} jenis item
+                        @if($o->total !== null)
                         &bull; Rp {{ number_format($o->total, 0, ',', '.') }}
+                        @endif
                     </div>
                 </div>
                 @empty

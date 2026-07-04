@@ -75,6 +75,7 @@
                     <th>Status</th>
                     <th>Status Bayar</th>
                     <th>Total</th>
+                    <th>Sisa Bayar</th>
                     <th></th>
                 </tr>
             </thead>
@@ -109,6 +110,15 @@
                         @endif
                     </td>
                     <td class="money">{{ $row['total'] !== null ? 'Rp '.number_format($row['total'],0,',','.') : '—' }}</td>
+                    <td class="money">
+                        @if($row['outstanding'] !== null)
+                            <span style="font-weight:700;color:{{ $row['outstanding'] > 0 ? 'var(--red)' : 'var(--green)' }}">
+                                Rp {{ number_format($row['outstanding'],0,',','.') }}
+                            </span>
+                        @else
+                            <span class="text-muted text-xs">—</span>
+                        @endif
+                    </td>
                     <td style="white-space:nowrap">
                         <button type="button" class="btn btn-ghost btn-sm" title="Jadwal Produksi"
                             onclick="openScheduleModal('{{ $row['type'] }}', {{ $row['id'] }}, '{{ $row['doc_no'] }}', {{ $sch ? "'".$sch->format('Y-m-d')."'" : 'null' }}, {{ $sch ? $sch->format('H') : 'null' }}, {{ $sch ? "'".$sch->format('i')."'" : 'null' }})">
@@ -116,14 +126,14 @@
                         </button>
                         @if($row['type']==='delivery')
                         <button type="button" class="btn btn-ghost btn-sm" title="Tambah Payment"
-                            onclick="openPaymentModal({{ $row['id'] }}, '{{ $row['doc_no'] }}')">
+                            onclick="openPaymentModal({{ $row['id'] }}, '{{ $row['doc_no'] }}', {{ (float) $row['outstanding'] }})">
                             <i class="fas fa-money-bill-wave"></i>
                         </button>
                         @endif
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Tidak ada order yang sesuai filter</td></tr>
+                <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text3)">Tidak ada order yang sesuai filter</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -268,10 +278,10 @@ document.getElementById('scheduleForm').addEventListener('submit', async functio
 
 let paymentOrderId = null;
 
-function openPaymentModal(id, docNo) {
+function openPaymentModal(id, docNo, outstanding) {
     paymentOrderId = id;
     document.getElementById('paymentDocNo').textContent = docNo;
-    document.getElementById('paymentAmount').value = '';
+    document.getElementById('paymentAmount').value = outstanding > 0 ? Math.round(outstanding) : '';
     document.getElementById('paymentReference').value = '';
     document.getElementById('paymentNotes').value = '';
     document.getElementById('paymentModal').classList.add('open');

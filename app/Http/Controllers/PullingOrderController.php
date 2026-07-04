@@ -22,7 +22,7 @@ class PullingOrderController extends Controller
         $rows = collect();
 
         if (!$type || $type === 'delivery') {
-            $doQuery = DeliveryOrder::with('customer')
+            $doQuery = DeliveryOrder::with(['customer', 'payments'])
                 ->whereNull('deleted_at')
                 ->where('status', '!=', 'cancelled');
 
@@ -36,6 +36,8 @@ class PullingOrderController extends Controller
             if ($dateTo)   $doQuery->whereDate('delivery_date', '<=', $dateTo);
 
             foreach ($doQuery->get() as $order) {
+                $paid = (float) $order->payments->sum('amount');
+
                 $rows->push([
                     'type'            => 'delivery',
                     'type_label'      => 'Delivery Order',
@@ -44,6 +46,8 @@ class PullingOrderController extends Controller
                     'party'           => $order->customer?->name ?? '-',
                     'date'            => $order->delivery_date,
                     'total'           => $order->total,
+                    'paid'            => $paid,
+                    'outstanding'     => max(0, (float) $order->total - $paid),
                     'payment_status'  => $order->payment_status,
                     'status'          => $order->status,
                     'kitchen_scheduled_at' => $order->kitchen_scheduled_at,
@@ -71,6 +75,8 @@ class PullingOrderController extends Controller
                     'party'           => $sr->requester?->name ?? '-',
                     'date'            => $sr->needed_date,
                     'total'           => null,
+                    'paid'            => null,
+                    'outstanding'     => null,
                     'payment_status'  => null,
                     'status'          => $sr->status,
                     'kitchen_scheduled_at' => $sr->kitchen_scheduled_at,

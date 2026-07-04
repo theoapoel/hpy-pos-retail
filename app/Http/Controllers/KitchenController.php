@@ -99,14 +99,45 @@ class KitchenController extends Controller
         $prev  = $month->copy()->subMonth();
         $next  = $month->copy()->addMonth();
 
-        // Ambil semua DO bulan ini yang punya jadwal produksi
-        $scheduledOrders = DeliveryOrder::with('customer')
+        // Ambil semua Delivery Order bulan ini yang punya jadwal produksi
+        $scheduledDo = DeliveryOrder::with('customer', 'items')
             ->whereNotNull('kitchen_scheduled_at')
             ->whereIn('status', ['draft', 'confirmed', 'delivering', 'completed'])
             ->whereYear('kitchen_scheduled_at', $month->year)
             ->whereMonth('kitchen_scheduled_at', $month->month)
-            ->orderBy('kitchen_scheduled_at')
-            ->get();
+            ->get()
+            ->map(fn ($o) => (object) [
+                'entry_type'      => 'delivery',
+                'doc_no'          => $o->order_no,
+                'party'           => $o->customer?->name ?? '-',
+                'kitchen_scheduled_at' => $o->kitchen_scheduled_at,
+                'kitchen_status'  => $o->kitchen_status,
+                'payment_status'  => $o->payment_status,
+                'total'           => $o->total,
+                'items_count'     => $o->items->count(),
+                'route_show'      => route('delivery-orders.show', $o),
+            ]);
+
+        // Ambil semua Permintaan FG bulan ini yang punya jadwal produksi
+        $scheduledSr = StockRequest::with('requester', 'items')
+            ->whereNotNull('kitchen_scheduled_at')
+            ->where('status', 'submitted')
+            ->whereYear('kitchen_scheduled_at', $month->year)
+            ->whereMonth('kitchen_scheduled_at', $month->month)
+            ->get()
+            ->map(fn ($sr) => (object) [
+                'entry_type'      => 'fg_request',
+                'doc_no'          => $sr->request_no,
+                'party'           => $sr->requester?->name ?? '-',
+                'kitchen_scheduled_at' => $sr->kitchen_scheduled_at,
+                'kitchen_status'  => $sr->kitchen_status,
+                'payment_status'  => null,
+                'total'           => null,
+                'items_count'     => $sr->items->count(),
+                'route_show'      => route('stock-requests.show', $sr),
+            ]);
+
+        $scheduledOrders = $scheduledDo->concat($scheduledSr)->sortBy('kitchen_scheduled_at')->values();
 
         // Group per tanggal (Y-m-d)
         $ordersByDate = $scheduledOrders->groupBy(fn($o) => $o->kitchen_scheduled_at->format('Y-m-d'));
