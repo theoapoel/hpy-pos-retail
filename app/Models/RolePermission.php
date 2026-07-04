@@ -25,6 +25,7 @@ class RolePermission extends Model
             'kitchen'        => ['label' => 'Kitchen Monitor',  'icon' => 'fa-utensils'],
             'stock_request'  => ['label' => 'Permintaan FG',    'icon' => 'fa-clipboard-check'],
             'rekap_order'    => ['label' => 'Rekap Order',       'icon' => 'fa-layer-group'],
+            'pulling_order'  => ['label' => 'Pulling Order',     'icon' => 'fa-list-check'],
             'sync'           => ['label' => 'Sync HPY',         'icon' => 'fa-sync-alt'],
         ];
     }

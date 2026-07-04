@@ -11,15 +11,16 @@ class StockRequest extends Model
 
     protected $fillable = [
         'request_no', 'requested_by', 'status',
-        'kitchen_status', 'kitchen_started_at', 'kitchen_done_at',
+        'kitchen_status', 'kitchen_started_at', 'kitchen_done_at', 'kitchen_scheduled_at',
         'erp_material_request', 'erp_sync_status', 'erp_sync_error',
         'needed_date', 'notes',
     ];
 
     protected $casts = [
-        'needed_date'         => 'date',
-        'kitchen_started_at'  => 'datetime',
-        'kitchen_done_at'     => 'datetime',
+        'needed_date'           => 'date',
+        'kitchen_started_at'    => 'datetime',
+        'kitchen_done_at'       => 'datetime',
+        'kitchen_scheduled_at'  => 'datetime',
     ];
 
     public function requester()

@@ -54,12 +54,14 @@
             <thead><tr>
                 <th>No. Order</th><th>Customer</th><th>Tgl Kirim</th>
                 <th>Jadwal Produksi</th>
-                <th>Tujuan</th><th>Total</th><th>Status</th><th>ERP SO</th><th></th>
+                <th>Tujuan</th><th>Total</th><th>Status</th><th>Status Bayar</th><th>ERP SO</th><th></th>
             </tr></thead>
             <tbody>
             @forelse($orders as $order)
             @php
                 $statusColor = ['draft'=>'badge-gray','confirmed'=>'badge-blue','delivering'=>'badge-yellow','completed'=>'badge-green','cancelled'=>'badge-red'][$order->status] ?? 'badge-gray';
+                $payStatusColor = ['unpaid'=>'badge-red','partial'=>'badge-yellow','paid'=>'badge-green'][$order->payment_status] ?? 'badge-gray';
+                $payStatusLabel = ['unpaid'=>'Belum Lunas','partial'=>'DP / Sebagian','paid'=>'Lunas'][$order->payment_status] ?? '-';
             @endphp
             <tr>
                 <td><a href="{{ route('delivery-orders.show', $order) }}" class="text-blue font-medium">{{ $order->order_no }}</a></td>
@@ -81,6 +83,7 @@
                 <td><span class="badge badge-gray">{{ $order->shipments_count ?? $order->shipments()->count() }} tujuan</span></td>
                 <td class="money">Rp {{ number_format($order->total, 0, ',', '.') }}</td>
                 <td><span class="badge {{ $statusColor }}">{{ strtoupper($order->status) }}</span></td>
+                <td><span class="badge {{ $payStatusColor }}">{{ $payStatusLabel }}</span></td>
                 <td>
                     @if($order->erp_sales_order)
                         <span class="badge badge-green text-xs">{{ $order->erp_sales_order }}</span>
@@ -100,7 +103,7 @@
                 </td>
             </tr>
             @empty
-            <tr><td colspan="9" style="text-align:center;padding:40px;color:#80868B">Belum ada delivery order</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:40px;color:#80868B">Belum ada delivery order</td></tr>
             @endforelse
             </tbody>
         </table>

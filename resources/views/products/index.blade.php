@@ -29,21 +29,26 @@
         <form method="GET" style="display:flex;gap:10px;flex:1">
             <input type="text" name="search" class="form-control" placeholder="Cari produk..." value="{{ request('search') }}" style="max-width:280px">
             <select name="category_id" class="form-control form-select" style="max-width:160px">
-                <option value="">Semua Kategori</option>
+                <option value="">Semua Item Group</option>
                 @foreach($categories as $cat)<option value="{{ $cat->id }}" {{ request('category_id')==$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach
+            </select>
+            <select name="item_category_id" class="form-control form-select" style="max-width:160px">
+                <option value="">Semua Kategori</option>
+                @foreach($itemCategories as $cat)<option value="{{ $cat->id }}" {{ request('item_category_id')==$cat->id?'selected':'' }}>{{ $cat->name }}</option>@endforeach
             </select>
             <button type="submit" class="btn btn-outline"><i class="fas fa-search"></i> Cari</button>
         </form>
     </div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Produk</th><th>SKU</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status Sync</th><th>Aktif</th><th>Aksi</th></tr></thead>
+            <thead><tr><th>Produk</th><th>SKU</th><th>Item Group</th><th>Kategori</th><th>Harga</th><th>Stok</th><th>Status Sync</th><th>Aktif</th><th>Aksi</th></tr></thead>
             <tbody>
             @forelse($products as $p)
             <tr>
                 <td class="font-medium">{{ $p->name }}</td>
                 <td class="text-sm text-muted font-medium">{{ $p->sku }}</td>
                 <td>{{ $p->category?->name ?? '-' }}</td>
+                <td>{{ $p->itemCategory?->name ?? '-' }}</td>
                 <td class="money text-blue">Rp {{ number_format($p->price,0,',','.') }}</td>
                 <td><span class="{{ $p->isLowStock() ? 'text-red font-bold' : '' }}">{{ $p->track_stock ? $p->stock.' '.$p->unit : '∞' }}</span></td>
                 <td>
@@ -59,7 +64,7 @@
                 </td>
             </tr>
             @empty
-            <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Belum ada produk</td></tr>
+            <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Belum ada produk</td></tr>
             @endforelse
             </tbody>
         </table>

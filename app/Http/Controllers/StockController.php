@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Category;
+use App\Models\ItemCategory;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\Warehouse;
@@ -323,7 +323,7 @@ class StockController extends Controller
 
         $selectedWarehouse = $warehouses->firstWhere('id', $selectedWarehouseId);
 
-        $query = ProductStock::with(['product.category'])
+        $query = ProductStock::with(['product.category', 'product.itemCategory'])
             ->where('warehouse_id', $selectedWarehouseId)
             ->whereHas('product', fn($q) => $q->where('is_active', true)->where('track_stock', true));
 
@@ -335,8 +335,8 @@ class StockController extends Controller
             });
         }
 
-        if ($request->category_id) {
-            $query->whereHas('product', fn($q) => $q->where('category_id', $request->category_id));
+        if ($request->item_category_id) {
+            $query->whereHas('product', fn($q) => $q->where('item_category_id', $request->item_category_id));
         }
 
         if ($request->status === 'empty') {
@@ -366,10 +366,10 @@ class StockController extends Controller
             ->count();
         $totalSafe     = $totalProducts - $totalEmpty - $totalLow;
 
-        $categories = Category::where('is_active', true)->orderBy('name')->get();
+        $itemCategories = ItemCategory::active()->orderBy('name')->get();
 
         return view('stock.index', compact(
-            'stocks', 'categories', 'warehouses', 'selectedWarehouse', 'selectedWarehouseId',
+            'stocks', 'itemCategories', 'warehouses', 'selectedWarehouse', 'selectedWarehouseId',
             'totalProducts', 'totalEmpty', 'totalLow', 'totalSafe'
         ));
     }

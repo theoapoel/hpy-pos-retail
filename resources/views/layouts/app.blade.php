@@ -306,6 +306,7 @@
             $canKitchen       = $u->hasPermission('kitchen');
             $canStockRequest  = $u->hasPermission('stock_request');
             $canRekapOrder    = $u->hasPermission('rekap_order');
+            $canPullingOrder  = $u->hasPermission('pulling_order');
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
         @endphp
 
@@ -346,7 +347,7 @@
         @endif
         @endif
 
-        @if($canDelivery || $canKitchen || $canStockRequest || $canRekapOrder)
+        @if($canDelivery || $canKitchen || $canStockRequest || $canRekapOrder || $canPullingOrder)
         <div class="nav-section">Delivery & Dapur</div>
         @if($canDelivery)
         {!! $navItem(route('delivery-orders.index'), 'fas fa-truck', 'Delivery Order', request()->routeIs('delivery-orders.*')) !!}
@@ -354,6 +355,9 @@
         @endif
         @if($canStockRequest)
         {!! $navItem(route('stock-requests.index'), 'fas fa-clipboard-check', 'Permintaan FG', request()->routeIs('stock-requests.*')) !!}
+        @endif
+        @if($canPullingOrder)
+        {!! $navItem(route('pulling-order.index'), 'fas fa-list-check', 'Pulling Order', request()->routeIs('pulling-order.*')) !!}
         @endif
         @if($canRekapOrder)
         {!! $navItem(route('rekap-order.index'), 'fas fa-layer-group', 'Rekap Order', request()->routeIs('rekap-order.*')) !!}

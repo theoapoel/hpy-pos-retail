@@ -301,10 +301,24 @@ async function uploadLogo(input) {
     fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
 
     try {
-        const res  = await fetch('{{ route("settings.logo.upload") }}', { method: 'POST', body: fd });
-        const json = await res.json();
+        const res  = await fetch('{{ route("settings.logo.upload") }}', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            body: fd,
+        });
+        const text = await res.text();
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch (e) {
+            console.error('Non-JSON response from settings.logo.upload:', text.substring(0, 300));
+            throw new Error('Server error (HTTP ' + res.status + '). Cek Laravel log.');
+        }
 
-        if (!json.success) throw new Error(json.message || 'Gagal');
+        if (!json.success) {
+            const msg = json.errors?.logo?.[0] || json.message || 'Gagal';
+            throw new Error(msg);
+        }
 
         currentLogoUrl = json.url;
         document.getElementById('logoPreviewWrap').innerHTML = `
@@ -331,9 +345,19 @@ async function removeLogo() {
     try {
         const res  = await fetch('{{ route("settings.logo.remove") }}', {
             method: 'DELETE',
-            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+            },
         });
-        const json = await res.json();
+        const text = await res.text();
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch (e) {
+            console.error('Non-JSON response from settings.logo.remove:', text.substring(0, 300));
+            throw new Error('Server error (HTTP ' + res.status + '). Cek Laravel log.');
+        }
         if (!json.success) throw new Error('Gagal');
 
         currentLogoUrl = '';

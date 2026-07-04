@@ -6,6 +6,20 @@
 .item-row { animation: fadeIn .2s ease; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
 .item-grid { display:grid; grid-template-columns:2fr 90px 90px 1fr 28px; gap:8px; align-items:center; margin-bottom:8px; }
+
+.product-search-wrap { position:relative; }
+.product-dropdown {
+    display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:20;
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    max-height:260px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.12);
+}
+.product-dropdown.open { display:block; }
+.product-dropdown-item { padding:8px 12px; cursor:pointer; font-size:13px; }
+.product-dropdown-item:hover, .product-dropdown-item.active { background:var(--surface2); }
+.product-dropdown-item .pname { font-weight:500; color:var(--text); }
+.product-dropdown-item .pmeta { font-size:11px; color:var(--text3); margin-top:1px; }
+.product-dropdown-empty { padding:10px 12px; font-size:13px; color:var(--text3); text-align:center; }
+.item-product-search.invalid { border-color:var(--red); }
 </style>
 @endpush
 
@@ -93,17 +107,22 @@ const uomOptions = ['Nos','Pcs','Box','Pack','Kg','Gram','Liter','ml','Lusin','B
 
 function addItem(pid = '', qty = 1, uom = 'Nos', notes = '') {
     const idx  = itemCount++;
-    const opts = products.map(p =>
-        `<option value="${p.id}" data-name="${p.name}" data-uom="${p.unit||'Nos'}" data-sku="${p.sku||''}" ${p.id==pid?'selected':''}>${p.name}</option>`
-    ).join('');
+    const selectedProduct = pid ? products.find(p => p.id == pid) : null;
 
     const row = document.createElement('div');
     row.className = 'item-row item-grid';
     row.innerHTML = `
-        <select name="items[${idx}][product_id]" class="form-control form-select item-product"
-            style="font-size:13px" onchange="onProductChange(this,${idx})" required>
-            <option value="">— Pilih Produk —</option>${opts}
-        </select>
+        <div class="product-search-wrap">
+            <input type="text" class="form-control item-product-search" style="font-size:13px"
+                placeholder="Ketik nama / SKU produk..." autocomplete="off"
+                value="${selectedProduct ? selectedProduct.name : ''}"
+                oninput="onProductSearchInput(this,${idx})"
+                onfocus="onProductSearchInput(this,${idx})"
+                onblur="setTimeout(() => closeProductDropdown(${idx}), 150)">
+            <input type="hidden" name="items[${idx}][product_id]" class="item-product-id" value="${pid}">
+            <input type="hidden" name="items[${idx}][item_name]" class="item-name" value="${selectedProduct ? selectedProduct.name : ''}">
+            <div class="product-dropdown" id="productDropdown${idx}"></div>
+        </div>
         <input type="number" name="items[${idx}][qty]" class="form-control item-qty" value="${qty}"
             min="0.01" step="0.01" style="text-align:right;font-size:13px" required oninput="updateSummary()">
         <select name="items[${idx}][uom]" class="form-control form-select item-uom" style="font-size:13px">
@@ -115,23 +134,59 @@ function addItem(pid = '', qty = 1, uom = 'Nos', notes = '') {
             style="border:none;background:none;cursor:pointer;color:var(--red);font-size:16px">
             <i class="fas fa-times"></i>
         </button>
-        <input type="hidden" name="items[${idx}][item_name]" class="item-name" value="">
     `;
     document.getElementById('itemsContainer').appendChild(row);
     if (pid) updateSummary();
 }
 
-function onProductChange(sel, idx) {
-    const opt = sel.options[sel.selectedIndex];
-    const row = sel.closest('.item-row');
-    row.querySelector('.item-name').value = opt.text || '';
-    if (opt.dataset.uom) {
-        const uomSel = row.querySelector('.item-uom');
-        for (let o of uomSel.options) {
-            if (o.value === opt.dataset.uom) { o.selected = true; break; }
-        }
+function onProductSearchInput(input, idx) {
+    const row  = input.closest('.item-row');
+    const dropdown = document.getElementById(`productDropdown${idx}`);
+    const q = input.value.trim().toLowerCase();
+
+    // Mengetik ulang membatalkan pilihan sebelumnya sampai user memilih lagi dari dropdown
+    row.querySelector('.item-product-id').value = '';
+    input.classList.remove('invalid');
+
+    const filtered = (q
+        ? products.filter(p => p.name.toLowerCase().includes(q) || (p.sku && p.sku.toLowerCase().includes(q)))
+        : products
+    ).slice(0, 30);
+
+    dropdown.innerHTML = filtered.length
+        ? filtered.map(p => `
+            <div class="product-dropdown-item" onmousedown="selectProduct(event,${idx},${p.id})">
+                <div class="pname">${p.name}</div>
+                <div class="pmeta">${p.sku ? 'SKU: ' + p.sku + ' · ' : ''}${p.unit || 'Nos'}</div>
+            </div>`).join('')
+        : '<div class="product-dropdown-empty">Produk tidak ditemukan</div>';
+
+    dropdown.classList.add('open');
+}
+
+function selectProduct(e, idx, pid) {
+    e.preventDefault();
+    const product = products.find(p => p.id == pid);
+    if (!product) return;
+
+    const row = document.querySelector(`#productDropdown${idx}`).closest('.item-row');
+    row.querySelector('.item-product-search').value = product.name;
+    row.querySelector('.item-product-search').classList.remove('invalid');
+    row.querySelector('.item-product-id').value = product.id;
+    row.querySelector('.item-name').value = product.name;
+
+    const uomSel = row.querySelector('.item-uom');
+    const targetUom = product.unit || 'Nos';
+    for (let o of uomSel.options) {
+        if (o.value === targetUom) { o.selected = true; break; }
     }
+
+    closeProductDropdown(idx);
     updateSummary();
+}
+
+function closeProductDropdown(idx) {
+    document.getElementById(`productDropdown${idx}`)?.classList.remove('open');
 }
 
 function updateSummary() {
@@ -143,11 +198,11 @@ function updateSummary() {
     }
     let html = '';
     rows.forEach(row => {
-        const sel  = row.querySelector('.item-product');
-        const name = sel?.options[sel.selectedIndex]?.text || '—';
+        const pid  = row.querySelector('.item-product-id')?.value;
+        const name = row.querySelector('.item-name')?.value || '—';
         const qty  = row.querySelector('.item-qty')?.value || '0';
         const uom  = row.querySelector('.item-uom')?.value || '';
-        if (sel?.value) {
+        if (pid) {
             html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--border)">
                 <span style="color:var(--text2)">${name}</span>
                 <span class="font-medium">${parseFloat(qty).toLocaleString('id-ID')} ${uom}</span>
@@ -159,6 +214,23 @@ function updateSummary() {
         `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${filled} Produk</div>` +
         (html || '<span style="color:var(--text3)">Pilih produk terlebih dahulu.</span>');
 }
+
+document.getElementById('srForm').addEventListener('submit', function (e) {
+    let firstInvalid = null;
+    document.querySelectorAll('.item-row').forEach(row => {
+        const search = row.querySelector('.item-product-search');
+        const pid    = row.querySelector('.item-product-id');
+        if (!pid.value) {
+            search.classList.add('invalid');
+            if (!firstInvalid) firstInvalid = search;
+        }
+    });
+    if (firstInvalid) {
+        e.preventDefault();
+        toast('Pilih produk yang valid dari daftar pencarian untuk semua baris.', 'error');
+        firstInvalid.focus();
+    }
+});
 
 addItem();
 </script>

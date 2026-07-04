@@ -9,7 +9,7 @@ use App\Http\Controllers\{
     BackupController, SetupController, OnlineReportController, UpdateController,
     DeliveryOrderController, DeliveryNoteController, DeliveryOrderPaymentController,
     KitchenController, StockRequestController, CouponController, RekapOrderController,
-    StockTransferReportController
+    StockTransferReportController, PullingOrderController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -235,6 +235,14 @@ Route::middleware('auth')->group(function () {
     // Rekap Order
     Route::prefix('rekap-order')->name('rekap-order.')->middleware('permission:rekap_order')->group(function () {
         Route::get('/', [RekapOrderController::class, 'index'])->name('index');
+    });
+
+    // Pulling Order — edit pembayaran & jadwal produksi lintas Delivery Order + Permintaan FG
+    Route::prefix('pulling-order')->name('pulling-order.')->middleware('permission:pulling_order')->group(function () {
+        Route::get('/',                                              [PullingOrderController::class, 'index'])->name('index');
+        Route::post('/delivery-orders/{deliveryOrder}/schedule',     [PullingOrderController::class, 'scheduleDeliveryOrder'])->name('delivery.schedule');
+        Route::post('/delivery-orders/{deliveryOrder}/payments',     [PullingOrderController::class, 'storePayment'])->name('delivery.payment');
+        Route::post('/stock-requests/{stockRequest}/schedule',       [PullingOrderController::class, 'scheduleStockRequest'])->name('sr.schedule');
     });
 
     // Kitchen Monitor

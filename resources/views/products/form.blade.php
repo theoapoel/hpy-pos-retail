@@ -25,10 +25,17 @@
                     <input type="text" name="barcode" class="form-control" value="{{ old('barcode',$product->barcode??'') }}">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Kategori</label>
+                    <label class="form-label">Item Group</label>
                     <select name="category_id" class="form-control form-select">
-                        <option value="">-- Tanpa Kategori --</option>
+                        <option value="">-- Tanpa Item Group --</option>
                         @foreach($categories as $c)<option value="{{ $c->id }}" {{ old('category_id',$product->category_id??'')==$c->id?'selected':'' }}>{{ $c->name }}</option>@endforeach
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Kategori</label>
+                    <select name="item_category_id" class="form-control form-select">
+                        <option value="">-- Tanpa Kategori --</option>
+                        @foreach($itemCategories as $c)<option value="{{ $c->id }}" {{ old('item_category_id',$product->item_category_id??'')==$c->id?'selected':'' }}>{{ $c->name }}</option>@endforeach
                     </select>
                 </div>
                 <div class="form-group">

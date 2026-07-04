@@ -297,6 +297,10 @@
             <div style="background:var(--surface2);border-radius:10px;padding:16px">
                 <div style="font-weight:700;font-size:14px;margin-bottom:4px"><i class="fas fa-arrow-down text-green"></i> Pull dari HPY</div>
                 <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Ambil data produk dan user kasir dari HPY ke lokal</div>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:10px;cursor:pointer">
+                    <input type="checkbox" id="resetProductsCheckbox">
+                    Reset & sinkron ulang dari nol (nonaktifkan produk yang sudah tidak ada di ERP, bersihkan kategori kosong)
+                </label>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn btn-success" onclick="pullProducts()" id="pullProductsBtn">
                         <i class="fas fa-box"></i> Pull Produk
@@ -544,7 +548,13 @@ async function pullPaymentMethods() {
 }
 
 async function pullProducts() {
-    const btn = document.getElementById('pullProductsBtn');
+    const btn    = document.getElementById('pullProductsBtn');
+    const reset  = document.getElementById('resetProductsCheckbox').checked;
+
+    if (reset && !confirm('Reset & sinkron ulang dari nol akan menonaktifkan produk lokal yang sudah tidak ada di ERP, dan menghapus kategori yang tidak dipakai produk manapun. Lanjutkan?')) {
+        return;
+    }
+
     btn.innerHTML = '<span class="spinner"></span> Menarik semua produk...';
     btn.disabled = true;
 
@@ -554,14 +564,16 @@ async function pullProducts() {
     resultEl.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Menarik produk dari HPY, harap tunggu... (data besar mungkin butuh beberapa menit)';
 
     try {
-        const resp = await fetch('{{ route("sync.pull-products") }}', {
+        const resp = await fetch('{{ route("sync.pull-products") }}' + (reset ? '?reset=1' : ''), {
             method:'POST',
             headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}
         });
         const data = await resp.json();
         if (data.success) {
             showSyncResult({...data, label: 'Produk'});
-            toast(`Produk: ${data.imported} baru, ${data.updated} diupdate — total ${data.total} record`, 'success');
+            let msg = `Produk: ${data.imported} baru, ${data.updated} diupdate — total ${data.total} record`;
+            if (reset) msg += `, ${data.deactivated} dinonaktifkan, ${data.categories_pruned} kategori dibersihkan`;
+            toast(msg, 'success');
         } else {
             resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${data.error}`;
             toast('Gagal pull produk: ' + (data.error||'Error'), 'error');
@@ -654,7 +666,9 @@ function showSyncResult(data) {
         el.innerHTML = `<i class="fas fa-check-circle" style="color:#34A853"></i> <strong>${data.label}:</strong> `
             + `<span style="color:var(--green);font-weight:600;">${data.imported ?? 0} baru</span>, `
             + `<span style="color:var(--blue);font-weight:600;">${data.updated ?? 0} diupdate</span> `
-            + `— total <strong>${data.total ?? 0}</strong> record diproses`;
+            + `— total <strong>${data.total ?? 0}</strong> record diproses`
+            + (data.deactivated ? `, <span style="color:var(--red);font-weight:600;">${data.deactivated} dinonaktifkan</span>` : '')
+            + (data.categories_pruned ? `, <span style="color:var(--text3);">${data.categories_pruned} kategori dibersihkan</span>` : '');
     } else {
         el.innerHTML = `<i class="fas fa-sync-alt" style="color:#4285F4"></i> <strong>Sync selesai:</strong> ${data.success} berhasil, ${data.failed} gagal dari ${data.total} transaksi`;
     }

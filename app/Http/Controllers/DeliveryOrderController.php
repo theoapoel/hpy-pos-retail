@@ -252,7 +252,7 @@ class DeliveryOrderController extends Controller
 
         $request->validate([
             'kitchen_scheduled_date'   => 'required|date',
-            'kitchen_scheduled_hour'   => 'required|integer|between:0,23',
+            'kitchen_scheduled_hour'   => 'required|numeric|between:0,23',
             'kitchen_scheduled_minute' => 'required|in:00,05,10,15,20,25,30,35,40,45,50,55',
         ]);
 

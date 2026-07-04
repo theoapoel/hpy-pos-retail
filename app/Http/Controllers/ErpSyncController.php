@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\DeliveryPrice;
 use App\Models\ErpSyncLog;
 use App\Models\Category;
+use App\Models\ItemCategory;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\ErpNextService;
@@ -110,14 +111,17 @@ class ErpSyncController extends Controller
         return response()->json($result);
     }
 
-    public function pullProducts()
+    public function pullProducts(Request $request)
     {
         set_time_limit(0);
+
+        $reset = $request->boolean('reset');
 
         $imported = 0;
         $updated  = 0;
         $page     = 0;
         $pageSize = 100;
+        $seenItemCodes = [];
 
         do {
             $result = $this->erp->pullProducts($pageSize, $page * $pageSize);
@@ -134,6 +138,8 @@ class ErpSyncController extends Controller
             $batch = $result['data'];
 
             foreach ($batch as $item) {
+                $seenItemCodes[] = $item['name'];
+
                 $category = null;
                 if (!empty($item['item_group'])) {
                     $category = Category::firstOrCreate(
@@ -142,20 +148,30 @@ class ErpSyncController extends Controller
                     );
                 }
 
+                $itemCategory = null;
+                if (!empty($item['kategori'])) {
+                    $itemCategory = ItemCategory::firstOrCreate(
+                        ['name' => $item['kategori']],
+                        ['erp_last_sync' => now()]
+                    );
+                    $itemCategory->update(['erp_last_sync' => now()]);
+                }
+
                 $exists   = Product::where('erp_item_code', $item['name'])->first();
                 $erpImage = $item['image'] ?? null;
 
                 $data = [
-                    'name'          => $item['item_name'] ?? $item['name'],
-                    'sku'           => $item['item_code'] ?? $item['name'],
-                    'price'         => (float) ($item['standard_rate'] ?? 0),
-                    'cost_price'    => (float) ($item['valuation_rate'] ?? 0),
-                    'unit'          => $item['stock_uom'] ?? 'Nos',
-                    'barcode'       => $item['barcode'] ?? null,
-                    'category_id'   => $category?->id,
-                    'erp_item_code' => $item['name'],
-                    'erp_last_sync' => now(),
-                    'is_active'     => !($item['disabled'] ?? false),
+                    'name'             => $item['item_name'] ?? $item['name'],
+                    'sku'              => $item['item_code'] ?? $item['name'],
+                    'price'            => (float) ($item['standard_rate'] ?? 0),
+                    'cost_price'       => (float) ($item['valuation_rate'] ?? 0),
+                    'unit'             => $item['stock_uom'] ?? 'Nos',
+                    'barcode'          => $item['barcode'] ?? null,
+                    'category_id'      => $category?->id,
+                    'item_category_id' => $itemCategory?->id,
+                    'erp_item_code'    => $item['name'],
+                    'erp_last_sync'    => now(),
+                    'is_active'        => !($item['disabled'] ?? false),
                 ];
 
                 // Download image only when ERPNext has one and the path has changed
@@ -184,11 +200,29 @@ class ErpSyncController extends Controller
 
         } while (count($batch) >= $pageSize);
 
+        $deactivated      = 0;
+        $categoriesPruned = 0;
+
+        if ($reset) {
+            // Produk lokal yang sudah punya erp_item_code tapi tidak lagi muncul di ERP saat ini —
+            // dinonaktifkan (bukan dihapus, supaya riwayat transaksi/order lama tetap utuh).
+            $deactivated = Product::whereNotNull('erp_item_code')
+                ->whereNotIn('erp_item_code', $seenItemCodes)
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
+            // Bersihkan kategori/item group lokal yang sudah tidak dipakai produk manapun
+            $categoriesPruned = Category::doesntHave('products')->delete()
+                + ItemCategory::doesntHave('products')->delete();
+        }
+
         return response()->json([
-            'success'  => true,
-            'imported' => $imported,
-            'updated'  => $updated,
-            'total'    => $imported + $updated,
+            'success'           => true,
+            'imported'          => $imported,
+            'updated'           => $updated,
+            'total'             => $imported + $updated,
+            'deactivated'       => $deactivated,
+            'categories_pruned' => $categoriesPruned,
         ]);
     }
 

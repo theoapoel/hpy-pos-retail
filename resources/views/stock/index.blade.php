@@ -14,6 +14,8 @@
     .warehouse-tab { padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--text2); transition: all .2s; }
     .warehouse-tab:hover { border-color: var(--blue); color: var(--blue); }
     .warehouse-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .filter-tabs-group { margin-bottom: 12px; }
+    .filter-tabs-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
 
     /* ── Sync Modal ── */
     #syncModal { display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9999; background:rgba(0,0,0,.5); align-items:center; justify-content:center; }
@@ -62,17 +64,39 @@
 
 {{-- Warehouse Tabs --}}
 @if($warehouses->count() > 1)
-<div class="warehouse-tabs mb-4" style="margin-bottom:20px;">
-    @foreach($warehouses as $wh)
-        @php
-            $tabUrl = request()->fullUrlWithQuery(['warehouse_id' => $wh->id, 'page' => null]);
-        @endphp
-        <a href="{{ $tabUrl }}" class="warehouse-tab {{ $wh->id == $selectedWarehouseId ? 'active' : '' }}">
-            <i class="fas fa-warehouse" style="margin-right:4px;font-size:11px;"></i>
-            {{ $wh->warehouse_name ?: $wh->name }}
-            @if($wh->is_default) <span style="font-size:10px;opacity:.8;">(default)</span> @endif
+<div class="filter-tabs-group">
+    <div class="filter-tabs-label">Gudang</div>
+    <div class="warehouse-tabs">
+        @foreach($warehouses as $wh)
+            @php
+                $tabUrl = request()->fullUrlWithQuery(['warehouse_id' => $wh->id, 'page' => null]);
+            @endphp
+            <a href="{{ $tabUrl }}" class="warehouse-tab {{ $wh->id == $selectedWarehouseId ? 'active' : '' }}">
+                <i class="fas fa-warehouse" style="margin-right:4px;font-size:11px;"></i>
+                {{ $wh->warehouse_name ?: $wh->name }}
+                @if($wh->is_default) <span style="font-size:10px;opacity:.8;">(default)</span> @endif
+            </a>
+        @endforeach
+    </div>
+</div>
+@endif
+
+{{-- Kategori Tabs (sumber: field kategori di ERP) --}}
+@if($itemCategories->count() > 0)
+<div class="filter-tabs-group" style="margin-bottom:20px;">
+    <div class="filter-tabs-label">Kategori</div>
+    <div class="warehouse-tabs">
+        <a href="{{ request()->fullUrlWithQuery(['item_category_id' => null, 'page' => null]) }}"
+            class="warehouse-tab {{ !request('item_category_id') ? 'active' : '' }}">
+            <i class="fas fa-layer-group" style="margin-right:4px;font-size:11px;"></i> Semua
         </a>
-    @endforeach
+        @foreach($itemCategories as $cat)
+            <a href="{{ request()->fullUrlWithQuery(['item_category_id' => $cat->id, 'page' => null]) }}"
+                class="warehouse-tab {{ request('item_category_id') == $cat->id ? 'active' : '' }}">
+                {{ $cat->name }}
+            </a>
+        @endforeach
+    </div>
 </div>
 @endif
 
@@ -113,14 +137,9 @@
     <div class="card-header" style="padding:16px 20px;">
         <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <input type="hidden" name="warehouse_id" value="{{ $selectedWarehouseId }}">
+            <input type="hidden" name="item_category_id" value="{{ request('item_category_id') }}">
             <input type="text" name="search" value="{{ request('search') }}"
                 class="form-control" placeholder="Cari nama / SKU..." style="width:240px;">
-            <select name="category_id" class="form-control form-select" style="width:180px;">
-                <option value="">Semua Kategori</option>
-                @foreach($categories as $cat)
-                    <option value="{{ $cat->id }}" @selected(request('category_id') == $cat->id)>{{ $cat->name }}</option>
-                @endforeach
-            </select>
             <select name="status" class="form-control form-select" style="width:160px;">
                 <option value="">Semua Status</option>
                 <option value="safe"  @selected(request('status')==='safe')>Aman</option>
@@ -128,7 +147,7 @@
                 <option value="empty" @selected(request('status')==='empty')>Habis</option>
             </select>
             <button type="submit" class="btn btn-outline">Filter</button>
-            @if(request()->hasAny(['search','category_id','status']))
+            @if(request()->hasAny(['search','item_category_id','status']))
                 <a href="{{ route('stock.index', ['warehouse_id' => $selectedWarehouseId]) }}" class="btn btn-ghost">Reset</a>
             @endif
         </form>
@@ -141,6 +160,7 @@
                 <tr>
                     <th>Produk</th>
                     <th>SKU</th>
+                    <th>Item Group</th>
                     <th>Kategori</th>
                     <th style="text-align:right;">Stok</th>
                     <th style="text-align:right;">Min Stok</th>
@@ -177,6 +197,13 @@
                             <span style="color:var(--text3);">—</span>
                         @endif
                     </td>
+                    <td>
+                        @if($product->itemCategory)
+                            <span class="badge badge-gray" style="font-size:12px;">{{ $product->itemCategory->name }}</span>
+                        @else
+                            <span style="color:var(--text3);">—</span>
+                        @endif
+                    </td>
                     <td style="text-align:right;">
                         <span style="font-family:'Google Sans',sans-serif;font-size:16px;font-weight:700;
                             color:{{ $isEmpty ? 'var(--red)' : ($isLow ? '#E37400' : 'var(--text)') }};">
@@ -199,7 +226,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="7" style="text-align:center;padding:48px;color:var(--text2);">
+                    <td colspan="8" style="text-align:center;padding:48px;color:var(--text2);">
                         @if(!$selectedWarehouse)
                             Belum ada warehouse yang dikonfigurasi
                         @else

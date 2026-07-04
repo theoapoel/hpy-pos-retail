@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\Category;
+use App\Models\ItemCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -11,19 +12,22 @@ class ProductController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Product::with('category');
+        $query = Product::with(['category', 'itemCategory']);
         if ($request->search) $query->search($request->search);
         if ($request->category_id) $query->where('category_id', $request->category_id);
+        if ($request->item_category_id) $query->where('item_category_id', $request->item_category_id);
         if ($request->status !== null) $query->where('is_active', $request->status);
         $products = $query->latest()->paginate(20);
         $categories = Category::all();
-        return view('products.index', compact('products', 'categories'));
+        $itemCategories = ItemCategory::active()->orderBy('name')->get();
+        return view('products.index', compact('products', 'categories', 'itemCategories'));
     }
 
     public function create()
     {
         $categories = Category::where('is_active', true)->get();
-        return view('products.form', compact('categories'));
+        $itemCategories = ItemCategory::active()->orderBy('name')->get();
+        return view('products.form', compact('categories', 'itemCategories'));
     }
 
     public function store(Request $request)
@@ -33,6 +37,7 @@ class ProductController extends Controller
             'sku' => 'required|string|unique:products',
             'barcode' => 'nullable|string',
             'category_id' => 'nullable|exists:categories,id',
+            'item_category_id' => 'nullable|exists:item_categories,id',
             'price' => 'required|numeric|min:0',
             'cost_price' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',
@@ -50,7 +55,8 @@ class ProductController extends Controller
     public function edit(Product $product)
     {
         $categories = Category::where('is_active', true)->get();
-        return view('products.form', compact('product', 'categories'));
+        $itemCategories = ItemCategory::active()->orderBy('name')->get();
+        return view('products.form', compact('product', 'categories', 'itemCategories'));
     }
 
     public function update(Request $request, Product $product)
@@ -60,6 +66,7 @@ class ProductController extends Controller
             'sku' => 'required|string|unique:products,sku,' . $product->id,
             'barcode' => 'nullable|string',
             'category_id' => 'nullable|exists:categories,id',
+            'item_category_id' => 'nullable|exists:item_categories,id',
             'price' => 'required|numeric|min:0',
             'cost_price' => 'nullable|numeric|min:0',
             'stock' => 'required|integer|min:0',

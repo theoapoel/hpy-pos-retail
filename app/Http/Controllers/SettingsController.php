@@ -43,7 +43,16 @@ class SettingsController extends Controller
         $file = $request->file('logo');
         $ext  = $file->getClientOriginalExtension();
         $name = 'store-logo.' . strtolower($ext);
-        $file->move(public_path(self::LOGO_DIR), $name);
+        $dir  = public_path(self::LOGO_DIR);
+
+        try {
+            $file->move($dir, $name);
+        } catch (\Symfony\Component\HttpFoundation\File\Exception\FileException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => "Server tidak bisa menulis ke folder \"public/images\". Hubungi admin server untuk memastikan folder tersebut writable oleh web server (chmod/chown).",
+            ], 500);
+        }
 
         $path = self::LOGO_DIR . '/' . $name;
         Setting::set('store_logo', $path, 'store');

@@ -8,6 +8,7 @@ use App\Models\ProductStock;
 use App\Models\StockTransfer;
 use App\Models\ErpSyncLog;
 use App\Models\Warehouse;
+use App\Models\Coupon;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Exception\RequestException;
@@ -234,18 +235,30 @@ class ErpNextService
 
         $defaultWarehouse = Warehouse::getDefault()?->name;
 
-        // Gabungkan coupon_discount ke discount_amount untuk dikirim ke ERP.
-        // ERPNext tidak mengenal field coupon_discount lokal, sehingga
-        // potongan kupon harus dimasukkan ke discount_amount agar grand_total ERP cocok.
-        $couponDiscount  = (float) ($transaction->coupon_discount ?? 0);
-        $baseDiscAmt     = (float) $transaction->discount_amount;
-        $baseDiscPct     = (float) $transaction->discount_percent;
-        $totalDiscAmount = $baseDiscAmt + $couponDiscount;
+        $couponDiscount = (float) ($transaction->coupon_discount ?? 0);
+        $baseDiscAmt    = (float) $transaction->discount_amount;
+        $baseDiscPct    = (float) $transaction->discount_percent;
 
-        // Jika ada kupon, kirim sebagai nominal (discount_amount) dan nol-kan persentase
-        // agar ERP tidak double-hitung.
-        $erpDiscPct = $couponDiscount > 0 ? 0 : $baseDiscPct;
-        $erpDiscAmt = $totalDiscAmount;
+        // Kupon di ERPNext bekerja lewat field `coupon_code` yang memicu Pricing Rule
+        // terkait — ERP menghitung sendiri potongannya dari rule tsb, bukan dari angka
+        // yang kita kirim manual. Kalau kita kirim coupon_code, JANGAN juga masukkan
+        // coupon_discount ke discount_amount (hindari double discount).
+        $erpCouponCode = null;
+        if ($couponDiscount > 0 && $transaction->coupon_code) {
+            $coupon = Coupon::where('code', $transaction->coupon_code)->first();
+            $erpCouponCode = $coupon?->erp_coupon_name ?: null;
+        }
+
+        if ($erpCouponCode) {
+            $erpDiscPct = $baseDiscPct;
+            $erpDiscAmt = $baseDiscAmt;
+        } else {
+            // Fallback: kupon lokal tidak punya link erp_coupon_name (mis. kupon manual,
+            // bukan hasil pull dari ERP) — tetap masukkan potongannya manual ke discount_amount
+            // seperti sebelumnya, supaya diskon tidak hilang sama sekali.
+            $erpDiscPct = $couponDiscount > 0 ? 0 : $baseDiscPct;
+            $erpDiscAmt = $baseDiscAmt + $couponDiscount;
+        }
 
         $payload = [
             'doctype'                        => 'POS Invoice',
@@ -272,6 +285,10 @@ class ErpNextService
 
         if ($priceList) {
             $payload['selling_price_list'] = $priceList;
+        }
+
+        if ($erpCouponCode) {
+            $payload['coupon_code'] = $erpCouponCode;
         }
 
         $payload['taxes'] = $this->buildTaxesPayload($transaction, $company);
@@ -420,8 +437,8 @@ class ErpNextService
     public function pullProducts(int $limit = 100, int $start = 0): array
     {
         try {
-            $fields  = '["name","item_name","item_code","description","item_group","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","image"]';
-            $filters = '[["is_sales_item","=",1],["disabled","=",0]]';
+            $fields  = '["name","item_name","item_code","description","item_group","kategori","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","image"]';
+            $filters = '[["disabled","=",0]]';
 
             $response = $this->client->get('/api/resource/Item', [
                 'timeout' => 120,
