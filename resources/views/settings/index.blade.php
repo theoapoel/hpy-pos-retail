@@ -80,6 +80,38 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">🧾 Thermal Printer (ESC/POS)</label>
+                    <p style="font-size:12px;color:var(--text3);margin:2px 0 8px;">
+                        Untuk fitur "Print Thermal" langsung ke printer 58mm.
+                        Server ini terdeteksi sebagai <strong>{{ $settings['os_family'] }}</strong> —
+                        field yang aktif ditandai di bawah.
+                    </p>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:200px">
+                            <label class="form-label" style="font-size:12px">
+                                Device Path (Linux){{ $settings['os_family'] !== 'Windows' ? ' • aktif' : '' }}
+                            </label>
+                            <input type="text" name="thermal_printer_device" class="form-control"
+                                value="{{ $settings['thermal_printer_device'] }}"
+                                placeholder="/dev/usb/lp1" maxlength="255">
+                        </div>
+                        <div style="flex:1;min-width:200px">
+                            <label class="form-label" style="font-size:12px">
+                                Nama Printer (Windows){{ $settings['os_family'] === 'Windows' ? ' • aktif' : '' }}
+                            </label>
+                            <input type="text" name="thermal_printer_name" class="form-control"
+                                value="{{ $settings['thermal_printer_name'] }}"
+                                placeholder="EPPOS58" maxlength="255">
+                        </div>
+                    </div>
+                    <p style="font-size:12px;color:var(--text3);margin-top:4px;">
+                        Windows: gunakan nama <em>shared printer</em> (mis. <code>EPPOS58</code>).
+                        Linux: path device USB printer (mis. <code>/dev/usb/lp1</code>).
+                    </p>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Tampilan Produk di Kasir</label>
                     <div style="display:flex;gap:12px;margin-top:4px">
                         <label style="flex:1;cursor:pointer">

@@ -354,4 +354,24 @@ class PosController extends Controller
         $store = SettingsController::storeSettings();
         return view('pos.print-receipt', compact('transaction', 'store'));
     }
+
+    public function directPrint(Transaction $transaction)
+    {
+        $transaction->load('items.product', 'customer', 'user');
+        $store = SettingsController::storeSettings();
+
+        try {
+            (new \App\Services\ThermalPrintService())->printReceipt($transaction, $store);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Struk berhasil dikirim ke printer.',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

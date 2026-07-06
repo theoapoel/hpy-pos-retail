@@ -102,9 +102,31 @@
 
     <div class="no-print" style="text-align:center;margin-top:20px">
         <button onclick="window.print()" style="padding:8px 20px;background:#4285F4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Print</button>
+        <button id="thermalBtn" onclick="directPrint()" style="padding:8px 20px;background:#0F9D58;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px;margin-left:8px">🧾 Print Thermal</button>
         <button onclick="window.close()" style="padding:8px 20px;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:14px;margin-left:8px">Tutup</button>
     </div>
     <script>
+        function directPrint() {
+            const btn = document.getElementById('thermalBtn');
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Mengirim…';
+
+            fetch('{{ route('pos.direct-print', $transaction->id) }}')
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'Gagal mencetak ke printer.');
+                    }
+                    alert(data.message || 'Struk berhasil dikirim ke printer.');
+                })
+                .catch((err) => alert('❌ ' + err.message))
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.textContent = original;
+                });
+        }
+
         window.onload = () => window.print();
     </script>
 </body>

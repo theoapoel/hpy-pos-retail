@@ -61,7 +61,7 @@
             <i class="fas fa-info-circle"></i>
             Gunakan <strong>Fine-grained personal access token</strong> dari GitHub.
             Buat di: GitHub → Settings → Developer settings → Personal access tokens → <strong>Fine-grained tokens</strong>
-            → pilih repository <strong>resto-pos</strong> → permission <strong>Contents: Read-only</strong>.
+            → pilih repository <strong>hpy-pos</strong> → permission <strong>Contents: Read-only</strong>.
         </div>
         <div style="display:flex;gap:12px;align-items:flex-end">
             <div class="form-group" style="flex:1;margin-bottom:0">

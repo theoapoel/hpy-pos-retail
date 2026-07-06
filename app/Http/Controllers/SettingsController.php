@@ -13,6 +13,7 @@ class SettingsController extends Controller
         'pos_layout', 'pos_product_display',
         'service_charge_enabled', 'service_charge_pct',
         'pb1_enabled', 'pb1_pct',
+        'thermal_printer_device', 'thermal_printer_name',
     ];
 
     private const LOGO_DIR = 'images';
@@ -24,6 +25,9 @@ class SettingsController extends Controller
             $settings[$key] = Setting::get($key, '');
         }
         $settings['store_logo'] = Setting::get('store_logo', '');
+        $settings['thermal_printer_device'] = Setting::get('thermal_printer_device', '/dev/usb/lp1');
+        $settings['thermal_printer_name']   = Setting::get('thermal_printer_name', 'EPPOS58');
+        $settings['os_family'] = PHP_OS_FAMILY;
 
         return view('settings.index', compact('settings'));
     }
@@ -87,6 +91,8 @@ class SettingsController extends Controller
             'service_charge_pct'     => 'nullable|numeric|min:0|max:100',
             'pb1_enabled'            => 'nullable|in:0,1',
             'pb1_pct'                => 'nullable|numeric|min:0|max:100',
+            'thermal_printer_device' => 'nullable|string|max:255',
+            'thermal_printer_name'   => 'nullable|string|max:255',
         ]);
 
         // Checkboxes: jika tidak dicentang, request tidak mengirim nilai → default '0'

@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 
 class UpdateController extends Controller
 {
-    private const GITHUB_REPO   = 'theoapoel/resto-pos';
+    private const GITHUB_REPO   = 'hpySolution/hpy-pos';
     private const GITHUB_BRANCH = 'main';
 
     public function index()

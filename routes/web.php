@@ -135,6 +135,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/checkout',             [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}',   [PosController::class, 'printReceipt'])->name('print');
+        Route::get('/direct-print/{transaction}', [PosController::class, 'directPrint'])->name('direct-print');
     });
 
     // Transaksi

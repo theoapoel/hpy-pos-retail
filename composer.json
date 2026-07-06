@@ -7,6 +7,7 @@
         "guzzlehttp/guzzle": "^7.5",
         "laravel/framework": "^11.0",
         "laravel/tinker": "^2.9",
+        "mike42/escpos-php": "^5.0",
         "simplesoftwareio/simple-qrcode": "^4.2"
     },
     "require-dev": {
