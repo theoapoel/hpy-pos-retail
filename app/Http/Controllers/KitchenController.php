@@ -102,6 +102,7 @@ class KitchenController extends Controller
         // Ambil semua Delivery Order bulan ini yang punya jadwal produksi
         $scheduledDo = DeliveryOrder::with('customer', 'items')
             ->whereNotNull('kitchen_scheduled_at')
+            ->whereNotNull('kitchen_confirmed_at') // hanya yang sudah dikonfirmasi di Pulling Order
             ->whereIn('status', ['draft', 'confirmed', 'delivering', 'completed'])
             ->whereYear('kitchen_scheduled_at', $month->year)
             ->whereMonth('kitchen_scheduled_at', $month->month)
@@ -162,6 +163,7 @@ class KitchenController extends Controller
         $toActivate = DeliveryOrder::whereNull('kitchen_status')
             ->whereIn('status', ['confirmed', 'delivering'])
             ->whereNotNull('kitchen_scheduled_at')
+            ->whereNotNull('kitchen_confirmed_at') // gate: hanya yang sudah dikonfirmasi di Pulling Order
             ->where('kitchen_scheduled_at', '<=', now())
             ->get();
 

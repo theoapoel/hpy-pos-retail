@@ -85,7 +85,7 @@
         </div>
         <div class="alert alert-info" style="margin-bottom:12px;font-size:13px">
             <i class="fas fa-info-circle"></i>
-            Setelah disimpan, klik <strong>Ajukan</strong> untuk mengirim ke dapur dan sinkronisasi ke ERP sebagai Material Request.
+            Setelah disimpan, klik <strong>Ajukan Sekarang</strong> untuk mengirim ke dapur dan sinkronisasi ke ERP sebagai Material Request.
         </div>
         <button type="submit" class="btn btn-primary w-full btn-lg" style="border-radius:10px">
             <i class="fas fa-save"></i> Simpan sebagai Draft

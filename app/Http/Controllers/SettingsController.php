@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Models\Category;
 use Illuminate\Http\Request;
 
 class SettingsController extends Controller
@@ -18,6 +19,13 @@ class SettingsController extends Controller
 
     private const LOGO_DIR = 'images';
 
+    /** Item Group (category) filter settings, one per screen. Stored as JSON arrays of category IDs. */
+    private const ITEM_GROUP_KEYS = [
+        'pos_item_groups',
+        'delivery_item_groups',
+        'stock_request_item_groups',
+    ];
+
     public function index()
     {
         $settings = [];
@@ -29,7 +37,14 @@ class SettingsController extends Controller
         $settings['thermal_printer_name']   = Setting::get('thermal_printer_name', 'EPPOS58');
         $settings['os_family'] = PHP_OS_FAMILY;
 
-        return view('settings.index', compact('settings'));
+        // Item Group filters — decode stored JSON arrays of category IDs (default: empty = all)
+        foreach (self::ITEM_GROUP_KEYS as $key) {
+            $decoded = json_decode(Setting::get($key, '[]'), true);
+            $settings[$key] = is_array($decoded) ? array_map('intval', $decoded) : [];
+        }
+        $itemGroups = Category::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+
+        return view('settings.index', compact('settings', 'itemGroups'));
     }
 
     public function uploadLogo(Request $request)
@@ -102,6 +117,13 @@ class SettingsController extends Controller
 
         foreach ($data as $key => $value) {
             Setting::set($key, $value ?? '', 'store');
+        }
+
+        // Item Group filters arrive as CSV of category IDs (e.g. "1,3,5"); store as JSON array.
+        foreach (self::ITEM_GROUP_KEYS as $key) {
+            $csv = (string) $request->input($key, '');
+            $ids = array_values(array_filter(array_map('intval', explode(',', $csv))));
+            Setting::set($key, json_encode($ids), 'store');
         }
 
         return response()->json(['success' => true]);

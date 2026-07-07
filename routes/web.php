@@ -212,6 +212,10 @@ Route::middleware('auth')->group(function () {
 
         // Print slip (2 lembar: Gudang + QC)
         Route::get('/{deliveryOrder}/print-slip',                      [DeliveryOrderController::class, 'printSlip'])->name('print-slip');
+
+        // Print Proforma Invoice & Invoice
+        Route::get('/{deliveryOrder}/proforma',                        [DeliveryOrderController::class, 'printInvoice'])->defaults('type', 'proforma')->name('proforma');
+        Route::get('/{deliveryOrder}/invoice',                         [DeliveryOrderController::class, 'printInvoice'])->defaults('type', 'invoice')->name('invoice');
     });
 
     // Delivery Notes (Shipments)
@@ -242,6 +246,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('pulling-order')->name('pulling-order.')->middleware('permission:pulling_order')->group(function () {
         Route::get('/',                                              [PullingOrderController::class, 'index'])->name('index');
         Route::post('/delivery-orders/{deliveryOrder}/schedule',     [PullingOrderController::class, 'scheduleDeliveryOrder'])->name('delivery.schedule');
+        Route::post('/delivery-orders/{deliveryOrder}/confirm-kitchen', [PullingOrderController::class, 'confirmKitchen'])->name('delivery.confirm-kitchen');
         Route::post('/delivery-orders/{deliveryOrder}/payments',     [PullingOrderController::class, 'storePayment'])->name('delivery.payment');
         Route::post('/stock-requests/{stockRequest}/schedule',       [PullingOrderController::class, 'scheduleStockRequest'])->name('sr.schedule');
     });

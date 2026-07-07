@@ -8,6 +8,16 @@
 .ship-card { border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; background:var(--surface); }
 .ship-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 .ship-item-row { display:grid; grid-template-columns:1fr 80px 110px 100px 28px; gap:8px; align-items:center; margin-bottom:8px; }
+/* Item search (textbox like POS) */
+.do-search-dropdown { position:absolute; left:0; right:0; top:100%; margin-top:4px; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); max-height:320px; overflow-y:auto; z-index:50; display:none; }
+.do-search-dropdown.show { display:block; }
+.do-dd-item { display:grid; grid-template-columns:1fr auto; grid-template-areas:"name price" "meta price"; gap:0 12px; padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--border); }
+.do-dd-item:last-child { border-bottom:none; }
+.do-dd-item:hover { background:var(--surface2); }
+.do-dd-name { grid-area:name; font-size:13px; font-weight:600; }
+.do-dd-meta { grid-area:meta; font-size:11px; color:var(--text3); }
+.do-dd-price { grid-area:price; align-self:center; font-size:13px; font-weight:700; color:var(--blue); white-space:nowrap; }
+.do-dd-empty { padding:12px; text-align:center; color:var(--text3); font-size:13px; }
 </style>
 @endpush
 
@@ -53,6 +63,7 @@
                     <div class="form-group">
                         <label class="form-label">Tanggal Pembuatan <span style="color:var(--red)">*</span></label>
                         <input type="date" name="order_date" class="form-control" required
+                            onfocus="try{this.showPicker()}catch(e){}" onclick="try{this.showPicker()}catch(e){}"
                             value="{{ old('order_date', now()->format('Y-m-d')) }}">
                     </div>
                 </div>
@@ -72,11 +83,18 @@
         <div class="card" style="margin-bottom:16px">
             <div class="card-header">
                 <div class="card-title"><i class="fas fa-box text-blue"></i> Item Order</div>
-                <button type="button" onclick="addItem()" class="btn btn-outline btn-sm">
-                    <i class="fas fa-plus"></i> Tambah Item
-                </button>
             </div>
             <div class="card-body" style="padding:0">
+                {{-- Pencarian item (textbox, seperti di kasir) --}}
+                <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+                    <div style="position:relative" id="itemSearchWrap">
+                        <i class="fas fa-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px"></i>
+                        <input type="text" id="itemSearch" class="form-control" autocomplete="off"
+                            placeholder="Cari produk untuk ditambahkan..." style="padding-left:34px"
+                            oninput="onItemSearch(this.value)" onfocus="onItemSearch(this.value)">
+                        <div id="itemSearchDropdown" class="do-search-dropdown"></div>
+                    </div>
+                </div>
                 <div style="display:grid;grid-template-columns:1fr 80px 110px 100px 28px;gap:8px;padding:10px 16px;background:var(--surface2);font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">
                     <span>Produk</span><span>Qty</span><span>Harga</span><span>Subtotal</span><span></span>
                 </div>
@@ -145,43 +163,111 @@ function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
 function fillBillingAddress(sel) {
     const opt = sel.options[sel.selectedIndex];
     document.getElementById('billingAddress').value = opt.dataset.address || '';
+    applyBuyerToShip0();
 }
+
+// ── Tujuan 1: samakan nama & alamat dengan pembeli ───────────
+function currentBuyer() {
+    const sel  = document.getElementById('customerSelect');
+    const opt  = sel.options[sel.selectedIndex];
+    const name = (sel.value && opt) ? opt.text.trim() : '';
+    const addr = document.getElementById('billingAddress').value || '';
+    return { name, addr };
+}
+
+function applyBuyerToShip0() {
+    const cb = document.getElementById('sameAsBuyer');
+    if (!cb || !cb.checked) return;
+    const { name, addr } = currentBuyer();
+    const nameEl = document.querySelector('[name="shipments[0][recipient_name]"]');
+    const addrEl = document.querySelector('[name="shipments[0][shipping_address]"]');
+    if (nameEl) nameEl.value = name;
+    if (addrEl) addrEl.value = addr;
+    updateSummary();
+}
+
+function toggleSameAsBuyer(cb) {
+    const nameEl = document.querySelector('[name="shipments[0][recipient_name]"]');
+    const addrEl = document.querySelector('[name="shipments[0][shipping_address]"]');
+    [nameEl, addrEl].forEach(el => {
+        if (!el) return;
+        el.readOnly = cb.checked;
+        el.style.background = cb.checked ? 'var(--surface2)' : '';
+    });
+    if (cb.checked) applyBuyerToShip0();
+}
+
+// ── Item Search (textbox, seperti di kasir) ──────────────────
+function onItemSearch(term) {
+    term = (term || '').trim().toLowerCase();
+    const dd = document.getElementById('itemSearchDropdown');
+    if (!term) { dd.classList.remove('show'); dd.innerHTML = ''; return; }
+    const matches = products.filter(p =>
+        (p.name && p.name.toLowerCase().includes(term)) ||
+        (p.sku && String(p.sku).toLowerCase().includes(term))
+    ).slice(0, 30);
+    if (!matches.length) {
+        dd.innerHTML = '<div class="do-dd-empty">Produk tidak ditemukan</div>';
+    } else {
+        dd.innerHTML = matches.map(p =>
+            `<div class="do-dd-item" onmousedown="addItemFromSearch(${p.id})">
+                <div class="do-dd-name">${p.name}</div>
+                <div class="do-dd-meta">${p.sku || ''}</div>
+                <div class="do-dd-price">${fmt(p.price || 0)}</div>
+            </div>`
+        ).join('');
+    }
+    dd.classList.add('show');
+}
+
+function addItemFromSearch(pid) {
+    const p = products.find(x => x.id === pid);
+    if (!p) return;
+    // Gabungkan ke baris yang sudah ada jika produk sama, seperti perilaku kasir
+    const existing = [...document.querySelectorAll('.item-row')]
+        .find(r => r.querySelector('.item-pid')?.value === String(pid));
+    if (existing) {
+        const qtyEl = existing.querySelector('.item-qty');
+        qtyEl.value = parseFloat(qtyEl.value || 0) + 1;
+        recalcAll();
+    } else {
+        addItem(p.name, p.sku || '', p.price || 0, 1, p.id);
+    }
+    const input = document.getElementById('itemSearch');
+    input.value = '';
+    document.getElementById('itemSearchDropdown').classList.remove('show');
+    input.focus();
+}
+
+// Tutup dropdown saat klik di luar area pencarian
+document.addEventListener('click', e => {
+    if (!e.target.closest('#itemSearchWrap')) {
+        document.getElementById('itemSearchDropdown')?.classList.remove('show');
+    }
+});
 
 // ── Order Items ──────────────────────────────────────────────
 function addItem(name = '', sku = '', price = 0, qty = 1, pid = '') {
     const idx = itemCount++;
-    const opts = products.map(p =>
-        `<option value="${p.id}" data-sku="${p.sku||''}" data-price="${p.price||0}" ${p.id==pid?'selected':''}>${p.name}</option>`
-    ).join('');
 
     const row = document.createElement('div');
     row.className = 'item-row';
     row.style = 'display:grid;grid-template-columns:1fr 80px 110px 100px 28px;gap:8px;margin-bottom:8px;align-items:center';
     row.innerHTML = `
-        <select name="items[${idx}][product_id]" class="form-control form-select item-product" required onchange="onProductChange(this,${idx})" style="font-size:13px">
-            <option value="">— Pilih Produk —</option>${opts}
-        </select>
+        <div class="item-product-name" title="${name}" style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name || '—'}</div>
         <input type="number" name="items[${idx}][qty]" class="form-control item-qty" value="${qty}"
             min="0.01" step="0.01" style="text-align:right;font-size:13px" oninput="recalcItem(${idx})">
         <input type="number" name="items[${idx}][price]" class="form-control item-price" value="${price}"
-            min="0" step="1" style="text-align:right;font-size:13px" oninput="recalcItem(${idx})">
+            min="0" step="1" readonly style="text-align:right;font-size:13px;background:var(--surface2)" tabindex="-1">
         <input type="text" class="form-control item-subtotal" readonly style="text-align:right;font-size:13px;background:var(--surface2)">
         <button type="button" onclick="this.closest('.item-row').remove(); recalcAll()" style="border:none;background:none;cursor:pointer;color:var(--red);font-size:16px">
             <i class="fas fa-times"></i>
         </button>
+        <input type="hidden" name="items[${idx}][product_id]" class="item-pid" value="${pid}">
         <input type="hidden" name="items[${idx}][product_name]" class="item-name" value="${name}">
         <input type="hidden" name="items[${idx}][product_sku]" class="item-sku" value="${sku}">
     `;
     document.getElementById('itemsContainer').appendChild(row);
-    recalcItem(idx);
-}
-
-function onProductChange(sel, idx) {
-    const opt  = sel.options[sel.selectedIndex];
-    const row  = sel.closest('.item-row');
-    row.querySelector('.item-price').value = opt.dataset.price || 0;
-    row.querySelector('.item-name').value  = opt.text;
-    row.querySelector('.item-sku').value   = opt.dataset.sku || '';
     recalcItem(idx);
 }
 
@@ -222,6 +308,11 @@ function addShipment() {
                 <i class="fas fa-trash"></i>
             </button>
         </div>
+        ${idx === 0 ? `
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;padding:8px 10px;background:var(--surface2);border-radius:8px">
+            <input type="checkbox" id="sameAsBuyer" onchange="toggleSameAsBuyer(this)" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+            Nama &amp; alamat sama dengan pembeli (Informasi Order)
+        </label>` : ''}
         <div class="grid-2" style="margin-bottom:10px">
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label" style="font-size:12px">Nama Penerima *</label>
@@ -235,7 +326,7 @@ function addShipment() {
         <div class="form-group" style="margin-bottom:10px">
             <label class="form-label" style="font-size:12px">Tanggal Pengiriman *</label>
             <div style="display:flex;gap:8px;align-items:center">
-                <input type="date" name="shipments[${idx}][delivery_date]" class="form-control" required style="font-size:13px;flex:1" value="${today}">
+                <input type="date" name="shipments[${idx}][delivery_date]" class="form-control" required style="font-size:13px;flex:1" value="${today}" onfocus="try{this.showPicker()}catch(e){}" onclick="try{this.showPicker()}catch(e){}">
                 <select name="shipments[${idx}][delivery_hour]" class="form-control form-select" style="font-size:13px;width:80px">
                     ${hourOptions}
                 </select>
@@ -299,7 +390,7 @@ function addShipItem(shipIdx, selectedName = '', qty = 1, price = 0) {
         <input type="number" name="shipments[${shipIdx}][items][${siIdx}][qty]" value="${qty}" min="0" step="0.01"
             class="form-control" style="font-size:12px;text-align:right" oninput="recalcShipItem(this)">
         <input type="number" name="shipments[${shipIdx}][items][${siIdx}][price]" value="${price}" min="0" step="1"
-            class="form-control ship-item-price" style="font-size:12px;text-align:right" oninput="recalcShipItem(this)">
+            readonly class="form-control ship-item-price" style="font-size:12px;text-align:right;background:var(--surface2)" tabindex="-1">
         <input type="text" class="form-control" readonly style="font-size:12px;text-align:right;background:var(--surface)">
         <button type="button" onclick="this.closest('.ship-item-row-data').remove(); updateSummary()" style="border:none;background:none;cursor:pointer;color:var(--red)">
             <i class="fas fa-times" style="font-size:12px"></i>
@@ -455,9 +546,8 @@ if (Object.keys(oldItems).length > 0) {
     Object.values(oldItems).forEach(it => {
         addItem(it.product_name || '', it.product_sku || '', it.price || 0, it.qty || 1, it.product_id || '');
     });
-} else {
-    addItem();
 }
+// Mulai tanpa baris item — item ditambahkan lewat kotak pencarian di atas.
 
 if (Object.keys(oldShipments).length > 0) {
     Object.values(oldShipments).forEach(ship => {

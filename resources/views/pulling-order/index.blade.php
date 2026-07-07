@@ -86,6 +86,10 @@
                     $payLabel = ['unpaid'=>'Belum Lunas','partial'=>'DP','paid'=>'Lunas'][$row['payment_status']] ?? '-';
                     $statusColor = ['draft'=>'badge-gray','confirmed'=>'badge-blue','delivering'=>'badge-yellow','completed'=>'badge-green','submitted'=>'badge-blue'][$row['status']] ?? 'badge-gray';
                     $sch = $row['kitchen_scheduled_at'];
+                    $isDelivery   = $row['type'] === 'delivery';
+                    $kConfirmed   = $row['kitchen_confirmed_at'] ?? null;
+                    $kStatus      = $row['kitchen_status'] ?? null;
+                    $canConfirmKitchen = $isDelivery && !$kConfirmed && in_array($row['status'], ['confirmed','delivering']) && $sch;
                 @endphp
                 <tr>
                     <td><span class="{{ $row['type']==='delivery' ? 'tag-do' : 'tag-fg' }}">{{ $row['type']==='delivery' ? 'DO' : 'FG' }}</span></td>
@@ -120,6 +124,22 @@
                         @endif
                     </td>
                     <td style="white-space:nowrap">
+                        @if($isDelivery)
+                            @if($kConfirmed)
+                                <span class="badge badge-green" title="Dikonfirmasi ke dapur {{ $kConfirmed->isoFormat('D MMM Y HH:mm') }}">
+                                    <i class="fas fa-check-circle"></i> {{ $kStatus ? 'Di Antrian' : 'Terjadwal' }}
+                                </span>
+                            @elseif($canConfirmKitchen)
+                                <button type="button" class="btn btn-primary btn-sm" title="Konfirmasi jadwal → masuk Kitchen Monitor"
+                                    onclick="confirmKitchen({{ $row['id'] }}, '{{ $row['doc_no'] }}')">
+                                    <i class="fas fa-utensils"></i> Konfirmasi
+                                </button>
+                            @elseif($row['status'] === 'draft')
+                                <span class="text-muted text-xs" title="Konfirmasi order dari menu Delivery Order dulu">Belum dikonfirmasi</span>
+                            @elseif(!$sch)
+                                <span class="text-muted text-xs" title="Set jadwal produksi dulu">Set jadwal dulu</span>
+                            @endif
+                        @endif
                         <button type="button" class="btn btn-ghost btn-sm" title="Jadwal Produksi"
                             onclick="openScheduleModal('{{ $row['type'] }}', {{ $row['id'] }}, '{{ $row['doc_no'] }}', {{ $sch ? "'".$sch->format('Y-m-d')."'" : 'null' }}, {{ $sch ? $sch->format('H') : 'null' }}, {{ $sch ? "'".$sch->format('i')."'" : 'null' }})">
                             <i class="fas fa-calendar-alt"></i>
@@ -275,6 +295,24 @@ document.getElementById('scheduleForm').addEventListener('submit', async functio
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-save"></i> Simpan';
 });
+
+// Konfirmasi jadwal DO → masuk Kitchen Monitor
+async function confirmKitchen(id, docNo) {
+    if (!confirm('Konfirmasi jadwal ' + docNo + ' ke Kitchen Monitor?\n\nSetelah dikonfirmasi, order akan masuk antrian dapur sesuai jadwal produksinya.')) return;
+    try {
+        const res = await api.post(`{{ url('pulling-order/delivery-orders') }}/${id}/confirm-kitchen`, {});
+        if (res.success) {
+            toast(res.in_queue
+                ? 'Dikonfirmasi — masuk antrian dapur sekarang.'
+                : 'Jadwal dikonfirmasi. Masuk antrian otomatis saat waktunya tiba (' + res.scheduled_at + ').', 'success');
+            setTimeout(() => location.reload(), 900);
+        } else {
+            toast(res.error || 'Gagal konfirmasi', 'error');
+        }
+    } catch (err) {
+        toast(err.message, 'error');
+    }
+}
 
 let paymentOrderId = null;
 

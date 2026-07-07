@@ -42,7 +42,7 @@ class DeliveryOrderController extends Controller
     public function create()
     {
         $customers = Customer::where('is_active', true)->orderBy('name')->get(['id', 'name', 'phone', 'address']);
-        $products  = Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'price', 'erp_item_code']);
+        $products  = Product::where('is_active', true)->inItemGroups('delivery_item_groups')->orderBy('name')->get(['id', 'name', 'sku', 'price', 'erp_item_code']);
         return view('delivery-orders.create', compact('customers', 'products'));
     }
 
@@ -111,15 +111,28 @@ class DeliveryOrderController extends Controller
                 ->sort()
                 ->first() ?? $request->order_date;
 
+            // Jadwal Produksi otomatis mengikuti waktu pengiriman paling awal (tanggal + jam)
+            $earliestDeliveryDatetime = collect($request->shipments)
+                ->map(function ($ship) {
+                    if (empty($ship['delivery_date'])) return null;
+                    $h = str_pad($ship['delivery_hour'] ?? 0, 2, '0', STR_PAD_LEFT);
+                    $m = $ship['delivery_minute'] ?? '00';
+                    return \Carbon\Carbon::parse($ship['delivery_date'] . ' ' . $h . ':' . $m);
+                })
+                ->filter()
+                ->sort()
+                ->first();
+
             $order = DeliveryOrder::create([
-                'order_no'        => DeliveryOrder::generateOrderNo(),
-                'customer_id'     => $request->customer_id,
-                'billing_address' => $request->billing_address,
-                'order_date'      => $request->order_date,
-                'delivery_date'   => $earliestDeliveryDate,
-                'notes'           => $request->notes,
-                'status'          => 'draft',
-                'created_by'      => auth()->id(),
+                'order_no'             => DeliveryOrder::generateOrderNo(),
+                'customer_id'          => $request->customer_id,
+                'billing_address'      => $request->billing_address,
+                'order_date'           => $request->order_date,
+                'delivery_date'        => $earliestDeliveryDate,
+                'kitchen_scheduled_at' => $earliestDeliveryDatetime,
+                'notes'                => $request->notes,
+                'status'               => 'draft',
+                'created_by'           => auth()->id(),
             ]);
 
             foreach ($request->items as $row) {
@@ -201,13 +214,11 @@ class DeliveryOrderController extends Controller
         if ($deliveryOrder->status !== 'draft') {
             return back()->with('error', 'Order sudah tidak dalam status draft.');
         }
-        // Jika sudah ada jadwal produksi di masa depan, tahan dari kitchen queue
-        $scheduledAt    = $deliveryOrder->kitchen_scheduled_at;
-        $kitchenStatus  = ($scheduledAt && $scheduledAt->isFuture()) ? null : 'pending';
-
+        // Order dikonfirmasi → masuk Pulling Order. Belum masuk antrian dapur:
+        // butuh konfirmasi jadwal terpisah di Pulling Order (kitchen_confirmed_at).
         $deliveryOrder->update([
             'status'         => 'confirmed',
-            'kitchen_status' => $kitchenStatus,
+            'kitchen_status' => null,
         ]);
 
         $syncMsg = '';
@@ -264,11 +275,6 @@ class DeliveryOrderController extends Controller
 
         $deliveryOrder->update(['kitchen_scheduled_at' => $scheduledAt]);
 
-        // Jika jadwal sudah lewat/hari ini dan order sudah confirmed, langsung aktifkan ke kitchen
-        if (!$scheduledAt->isFuture() && $deliveryOrder->status === 'confirmed' && !$deliveryOrder->kitchen_status) {
-            $deliveryOrder->update(['kitchen_status' => 'pending']);
-        }
-
         return back()->with('success', 'Jadwal produksi disimpan: ' . $scheduledAt->isoFormat('dddd, D MMMM Y HH:mm') . '.');
     }
 
@@ -278,6 +284,25 @@ class DeliveryOrderController extends Controller
         return view('delivery-orders.print-slip', [
             'order'   => $deliveryOrder,
             'printAt' => now(),
+        ]);
+    }
+
+    public function printInvoice(DeliveryOrder $deliveryOrder, string $type = 'invoice')
+    {
+        abort_unless(in_array($type, ['proforma', 'invoice']), 404);
+
+        $deliveryOrder->load('customer', 'creator', 'items.product', 'shipments', 'payments');
+
+        $totalPaid   = $deliveryOrder->payments->sum('amount');
+        $outstanding = max(0, $deliveryOrder->total - $totalPaid);
+
+        return view('delivery-orders.invoice', [
+            'order'       => $deliveryOrder,
+            'store'       => SettingsController::storeSettings(),
+            'type'        => $type,
+            'totalPaid'   => $totalPaid,
+            'outstanding' => $outstanding,
+            'printAt'     => now(),
         ]);
     }
 

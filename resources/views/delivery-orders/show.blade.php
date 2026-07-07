@@ -28,6 +28,12 @@
     <div style="display:flex;gap:8px;align-items:center">
         <span class="badge {{ $statusColor }}" style="font-size:13px;padding:6px 14px">{{ strtoupper($order->status) }}</span>
         <span class="badge {{ $payStatusColor }}" style="font-size:12px;padding:5px 12px"><i class="fas fa-money-bill-wave" style="margin-right:4px"></i>{{ $payStatusLabel }}</span>
+        <a href="{{ route('delivery-orders.proforma', $order) }}" target="_blank" class="btn btn-ghost" title="Cetak Proforma Invoice">
+            <i class="fas fa-file-invoice"></i> Proforma
+        </a>
+        <a href="{{ route('delivery-orders.invoice', $order) }}" target="_blank" class="btn btn-ghost" title="Cetak Invoice">
+            <i class="fas fa-file-invoice-dollar"></i> Invoice
+        </a>
         @if($canConfirm)
         <form method="POST" action="{{ route('delivery-orders.confirm', $order) }}" style="display:inline" onsubmit="return confirm('Konfirmasi order ini?')">
             @csrf

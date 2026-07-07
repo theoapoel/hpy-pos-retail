@@ -493,7 +493,7 @@
         <!-- Discount + Coupon -->
         <div class="sec">
             <div class="sec-label">Diskon & Kupon</div>
-            <div class="disc-row" style="margin-bottom:8px">
+            <div class="disc-row" style="margin-bottom:8px;display:none">
                 <div style="flex:1">
                     <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-weight:700">Diskon (Rp)</div>
                     <input type="number" id="discountAmt" class="disc-input" placeholder="0" min="0" oninput="syncTxDiscount('amt')">
@@ -733,6 +733,7 @@ function selectOrderType(btn) {
             selectedDeliveryPlatform = null;
             document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
             applyDeliveryPrices();
+            renderCart();
         }
     }
     recalculate();
@@ -1368,6 +1369,7 @@ async function addNewCustomer() {
 // ============================================================
 async function processCheckout() {
     if (cart.length === 0) return;
+    if (selectedOrderType === 'delivery' && !selectedDeliveryPlatform) { toast('Pilih platform delivery (GoFood/GrabFood/ShopeeFood) terlebih dahulu!', 'err'); return; }
     if (!selectedCustomer) { toast('Pilih customer terlebih dahulu!', 'err'); openCustomerModal(); return; }
     const totalText = document.getElementById('totalDisplay').textContent;
     const total = parseFloat(totalText.replace(/[^0-9]/g,''));

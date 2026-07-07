@@ -29,7 +29,7 @@ class PosController extends Controller
 
     public function quickIndex()
     {
-        $categories        = Category::where('is_active', true)->get();
+        $categories        = Category::filteredByGroups('pos_item_groups')->get();
         $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
@@ -53,7 +53,7 @@ class PosController extends Controller
 
     public function expressIndex()
     {
-        $categories        = Category::where('is_active', true)->get();
+        $categories        = Category::filteredByGroups('pos_item_groups')->get();
         $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
@@ -77,8 +77,8 @@ class PosController extends Controller
 
     public function index()
     {
-        $categories = Category::where('is_active', true)->get();
-        $products = Product::active()->with('category')->get();
+        $categories = Category::filteredByGroups('pos_item_groups')->get();
+        $products = Product::active()->inItemGroups('pos_item_groups')->with('category')->get();
         $customers = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
         $storeSettings      = SettingsController::storeSettings();
         $posClass           = $storeSettings['pos_class'] ?? '';
@@ -108,7 +108,7 @@ class PosController extends Controller
         $term = $request->get('q', '');
         $categoryId = $request->get('category_id');
 
-        $query = Product::active()->with('category');
+        $query = Product::active()->with('category')->inItemGroups('pos_item_groups');
 
         if ($term) {
             $query->search($term);

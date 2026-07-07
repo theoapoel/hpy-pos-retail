@@ -38,7 +38,7 @@ class StockRequestController extends Controller
 
     public function create()
     {
-        $products = Product::where('is_active', true)->orderBy('name')
+        $products = Product::where('is_active', true)->inItemGroups('stock_request_item_groups')->orderBy('name')
             ->get(['id', 'name', 'sku', 'erp_item_code', 'unit']);
         return view('stock-requests.create', compact('products'));
     }

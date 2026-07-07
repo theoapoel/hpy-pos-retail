@@ -54,6 +54,20 @@ class Product extends Model
     }
 
     public function scopeActive($query) { return $query->where('is_active', true); }
+
+    /**
+     * Filter products to the Item Groups (categories) configured for a given screen.
+     * The setting stores a JSON array of category IDs; empty/unset = show all.
+     */
+    public function scopeInItemGroups($query, string $settingKey)
+    {
+        $ids = json_decode(Setting::get($settingKey, '[]'), true);
+        if (is_array($ids) && count($ids)) {
+            $query->whereIn('category_id', $ids);
+        }
+        return $query;
+    }
+
     public function scopeSearch($query, $term) {
         return $query->where(function($q) use ($term) {
             $q->where('name', 'LIKE', "%{$term}%")

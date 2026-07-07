@@ -100,6 +100,12 @@
                     <a href="{{ route('delivery-orders.print-slip', $order) }}" target="_blank" class="btn btn-ghost btn-sm" title="Print Slip">
                         <i class="fas fa-print"></i>
                     </a>
+                    <a href="{{ route('delivery-orders.proforma', $order) }}" target="_blank" class="btn btn-ghost btn-sm" title="Cetak Proforma Invoice">
+                        <i class="fas fa-file-invoice"></i>
+                    </a>
+                    <a href="{{ route('delivery-orders.invoice', $order) }}" target="_blank" class="btn btn-ghost btn-sm" title="Cetak Invoice">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </a>
                 </td>
             </tr>
             @empty

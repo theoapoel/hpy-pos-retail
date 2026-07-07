@@ -2,6 +2,11 @@
 @section('title', 'Pengaturan Toko')
 
 @section('content')
+<style>
+    .ig-chip { display:inline-flex; align-items:center; padding:6px 12px; border:2px solid var(--border); border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; user-select:none; transition:all .15s; }
+    .ig-chip:hover { border-color:var(--blue); }
+    .ig-chip.on { background:var(--blue); border-color:var(--blue); color:#fff; }
+</style>
 <div class="page-header">
     <div>
         <h1 class="page-title">
@@ -161,6 +166,45 @@
                         </div>
                     </div>
                     <p style="font-size:12px;color:var(--text3);margin-top:6px">Menentukan tampilan yang dibuka saat kasir klik menu Kasir</p>
+                </div>
+
+                {{-- Filter Item Group per layar --}}
+                <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:16px">
+                    <div style="font-weight:700;font-size:13px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:6px">
+                        <i class="fas fa-filter" style="color:var(--blue)"></i>
+                        Filter Item Group
+                    </div>
+                    <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Pilih Item Group yang ditampilkan di tiap layar. Kosongkan = tampilkan semua.</p>
+
+                    @php
+                        $igScreens = [
+                            'pos_item_groups'           => ['Kasir', 'fa-cash-register'],
+                            'delivery_item_groups'      => ['Delivery Order', 'fa-truck'],
+                            'stock_request_item_groups' => ['Permintaan FG', 'fa-clipboard-check'],
+                        ];
+                    @endphp
+
+                    @foreach($igScreens as $igKey => $igMeta)
+                        @php $igSelected = $settings[$igKey] ?? []; @endphp
+                        <div style="margin-bottom:14px">
+                            <input type="hidden" name="{{ $igKey }}" id="ig_{{ $igKey }}" value="{{ implode(',', $igSelected) }}">
+                            <div style="font-weight:700;font-size:12px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                                <i class="fas {{ $igMeta[1] }}" style="color:var(--text3)"></i> {{ $igMeta[0] }}
+                                <span style="font-size:11px;font-weight:500;color:var(--text3)" id="igcount_{{ $igKey }}"></span>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                                @forelse($itemGroups as $g)
+                                    <label class="ig-chip{{ in_array($g->id, $igSelected) ? ' on' : '' }}" data-key="{{ $igKey }}" data-id="{{ $g->id }}">
+                                        <input type="checkbox" style="display:none" {{ in_array($g->id, $igSelected) ? 'checked' : '' }}
+                                            onchange="toggleItemGroup('{{ $igKey }}')">
+                                        {{ $g->name }}
+                                    </label>
+                                @empty
+                                    <span style="font-size:12px;color:var(--text3)">Belum ada Item Group. Sync produk dari ERPNext dulu.</span>
+                                @endforelse
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
 
                 {{-- Service Charge & PB1 --}}
@@ -493,6 +537,20 @@ async function saveSettings() {
     if (el) el.addEventListener('change', updatePreview);
     if (el) el.addEventListener('input', updatePreview);
 });
+
+// Item Group filter chips → sync hidden CSV input + visual state + count
+function toggleItemGroup(key) {
+    const chips = document.querySelectorAll('.ig-chip[data-key="' + key + '"]');
+    const ids = [];
+    chips.forEach(chip => {
+        const on = chip.querySelector('input').checked;
+        chip.classList.toggle('on', on);
+        if (on) ids.push(chip.dataset.id);
+    });
+    document.getElementById('ig_' + key).value = ids.join(',');
+    document.getElementById('igcount_' + key).textContent = ids.length ? '(' + ids.length + ' dipilih)' : '(semua tampil)';
+}
+['pos_item_groups', 'delivery_item_groups', 'stock_request_item_groups'].forEach(toggleItemGroup);
 
 // Init preview on load
 updatePreview();

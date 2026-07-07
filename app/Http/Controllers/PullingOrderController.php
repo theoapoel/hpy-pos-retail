@@ -51,6 +51,8 @@ class PullingOrderController extends Controller
                     'payment_status'  => $order->payment_status,
                     'status'          => $order->status,
                     'kitchen_scheduled_at' => $order->kitchen_scheduled_at,
+                    'kitchen_confirmed_at' => $order->kitchen_confirmed_at,
+                    'kitchen_status'  => $order->kitchen_status,
                     'route_show'      => route('delivery-orders.show', $order),
                 ]);
             }
@@ -80,6 +82,8 @@ class PullingOrderController extends Controller
                     'payment_status'  => null,
                     'status'          => $sr->status,
                     'kitchen_scheduled_at' => $sr->kitchen_scheduled_at,
+                    'kitchen_confirmed_at' => null,
+                    'kitchen_status'  => $sr->kitchen_status,
                     'route_show'      => route('stock-requests.show', $sr),
                 ]);
             }
@@ -123,13 +127,41 @@ class PullingOrderController extends Controller
 
         $deliveryOrder->update(['kitchen_scheduled_at' => $scheduledAt]);
 
-        if (!$scheduledAt->isFuture() && $deliveryOrder->status === 'confirmed' && !$deliveryOrder->kitchen_status) {
-            $deliveryOrder->update(['kitchen_status' => 'pending']);
-        }
-
         return response()->json([
             'success'      => true,
             'scheduled_at' => $scheduledAt->isoFormat('dddd, D MMMM Y HH:mm'),
+        ]);
+    }
+
+    /**
+     * Konfirmasi jadwal Delivery Order dari Pulling Order → gate masuk Kitchen Monitor.
+     * DO harus sudah dikonfirmasi (status confirmed/delivering) dan punya jadwal.
+     * Jika jadwal sudah tiba, langsung masuk antrian; jika belum, menunggu waktunya
+     * (activateScheduledOrders akan mengaktifkan otomatis karena kini sudah dikonfirmasi).
+     */
+    public function confirmKitchen(DeliveryOrder $deliveryOrder)
+    {
+        if (!in_array($deliveryOrder->status, ['confirmed', 'delivering'])) {
+            return response()->json(['success' => false, 'error' => 'Order harus dikonfirmasi lebih dulu dari menu Delivery Order.'], 422);
+        }
+        if (!$deliveryOrder->kitchen_scheduled_at) {
+            return response()->json(['success' => false, 'error' => 'Set jadwal produksi terlebih dahulu.'], 422);
+        }
+        if ($deliveryOrder->kitchen_confirmed_at) {
+            return response()->json(['success' => false, 'error' => 'Jadwal sudah dikonfirmasi ke dapur.'], 422);
+        }
+
+        $data = ['kitchen_confirmed_at' => now()];
+        // Jika waktu jadwal sudah tiba/lewat, langsung masukkan ke antrian dapur.
+        if (!$deliveryOrder->kitchen_scheduled_at->isFuture() && !$deliveryOrder->kitchen_status) {
+            $data['kitchen_status'] = 'pending';
+        }
+        $deliveryOrder->update($data);
+
+        return response()->json([
+            'success'        => true,
+            'in_queue'       => ($data['kitchen_status'] ?? null) === 'pending',
+            'scheduled_at'   => $deliveryOrder->kitchen_scheduled_at->isoFormat('dddd, D MMMM Y HH:mm'),
         ]);
     }
 
