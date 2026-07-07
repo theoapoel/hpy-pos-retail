@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Setting;
 use App\Models\Transaction;
+use Mike42\Escpos\EscposImage;
 use Mike42\Escpos\PrintConnectors\FilePrintConnector;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
 use Mike42\Escpos\Printer;
@@ -48,6 +49,18 @@ class ThermalPrintService
             }
 
             $device = Setting::get('thermal_printer_device', '/dev/usb/lp1');
+
+            // Cegah kegagalan diam-diam: kalau device tidak ada atau bukan
+            // character device (mis. proses root sempat membuat file biasa
+            // di path ini saat printer terputus), gagalkan dengan pesan jelas
+            // agar data struk tidak nyasar ke file di disk.
+            if (!file_exists($device)) {
+                throw new \Exception("Device printer '{$device}' tidak ditemukan. Pastikan printer menyala & kabel USB tersambung.");
+            }
+            if (filetype($device) !== 'char') {
+                throw new \Exception("Path '{$device}' bukan device printer (terdeteksi file biasa). Hapus dengan: sudo rm {$device} — lalu colok ulang printer.");
+            }
+
             return new FilePrintConnector($device);
         } catch (\Throwable $e) {
             throw new \Exception('Tidak dapat terhubung ke printer: ' . $e->getMessage(), 0, $e);
@@ -58,6 +71,8 @@ class ThermalPrintService
     {
         // ── Header toko ─────────────────────────────
         $printer->setJustification(Printer::JUSTIFY_CENTER);
+
+        $this->printLogo($printer, $store);
 
         if (!empty($store['store_name'])) {
             $printer->setEmphasis(true);
@@ -145,6 +160,60 @@ class ThermalPrintService
         $printer->feed();
         $printer->text("Powered by HPY Solution\n");
         $printer->feed();
+    }
+
+    /**
+     * Cetak logo toko sebagai gambar raster (kalau ada & GD tersedia).
+     * Gambar diratakan ke kanvas putih dan di-resize agar muat lebar 58mm,
+     * supaya area transparan tidak jadi hitam dan gambar tidak terpotong.
+     * Kegagalan logo tidak boleh menggagalkan seluruh struk.
+     */
+    private function printLogo(Printer $printer, array $store): void
+    {
+        $logo = $store['store_logo'] ?? '';
+        if ($logo === '') {
+            return;
+        }
+
+        $path = public_path($logo);
+        if (!is_file($path) || !extension_loaded('gd')) {
+            return;
+        }
+
+        $tmp = null;
+        try {
+            $maxWidth = 384; // lebar cetak efektif printer 58mm (dots)
+            $src = @imagecreatefromstring(file_get_contents($path));
+            if ($src === false) {
+                return;
+            }
+
+            $w  = imagesx($src);
+            $h  = imagesy($src);
+            $tw = min($w, $maxWidth);
+            $th = (int) max(1, round($h * $tw / $w));
+
+            $canvas = imagecreatetruecolor($tw, $th);
+            $white  = imagecolorallocate($canvas, 255, 255, 255);
+            imagefill($canvas, 0, 0, $white);
+            imagecopyresampled($canvas, $src, 0, 0, 0, 0, $tw, $th, $w, $h);
+
+            $tmp = tempnam(sys_get_temp_dir(), 'poslogo') . '.png';
+            imagepng($canvas, $tmp);
+            imagedestroy($src);
+            imagedestroy($canvas);
+
+            $img = EscposImage::load($tmp, false);
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $printer->bitImage($img);
+            $printer->feed();
+        } catch (\Throwable $e) {
+            // Logo gagal dicetak — lewati diam-diam, struk tetap jalan.
+        } finally {
+            if ($tmp && is_file($tmp)) {
+                @unlink($tmp);
+            }
+        }
     }
 
     /** Format angka jadi "Rp 1.000". */
