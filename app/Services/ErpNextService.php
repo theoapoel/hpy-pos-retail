@@ -41,6 +41,28 @@ class ErpNextService
     }
 
     // =========================================================
+    // TIMEZONE HELPERS
+    // App berjalan di UTC, tetapi ERPNext harus menerima waktu lokal (mis. WIB)
+    // supaya posting_date/posting_time transaksi sesuai jam sebenarnya.
+    // =========================================================
+    private function localTimezone(): string
+    {
+        return \App\Models\Setting::get('timezone', 'Asia/Jakarta') ?: 'Asia/Jakarta';
+    }
+
+    /** Konversi datetime (UTC di DB) ke timezone lokal untuk dikirim ke ERP. */
+    private function toLocal($dt): \Carbon\Carbon
+    {
+        return \Carbon\Carbon::parse($dt)->setTimezone($this->localTimezone());
+    }
+
+    /** Waktu "sekarang" dalam timezone lokal. */
+    private function localNow(): \Carbon\Carbon
+    {
+        return \Carbon\Carbon::now($this->localTimezone());
+    }
+
+    // =========================================================
     // CONFIGURATION CHECK
     // =========================================================
     public function isConfigured(): bool
@@ -267,8 +289,8 @@ class ErpNextService
             'company'                        => $company,
             'set_warehouse'                  => $defaultWarehouse,
             'pos_class'                      => $transaction->pos_class,
-            'posting_date'                   => $transaction->created_at->format('Y-m-d'),
-            'posting_time'                   => $transaction->created_at->format('H:i:s'),
+            'posting_date'                   => $this->toLocal($transaction->created_at)->format('Y-m-d'),
+            'posting_time'                   => $this->toLocal($transaction->created_at)->format('H:i:s'),
             'set_posting_time'               => 1,
             'items'                          => $items,
             'payments'                       => $payments,
@@ -802,8 +824,8 @@ class ErpNextService
             'stock_entry_type'  => 'Material Transfer',
             'purpose'           => 'Material Transfer',
             'company'           => \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY')),
-            'posting_date'      => now()->format('Y-m-d'),
-            'posting_time'      => now()->format('H:i:s'),
+            'posting_date'      => $this->localNow()->format('Y-m-d'),
+            'posting_time'      => $this->localNow()->format('H:i:s'),
             'set_posting_time'  => 1,
             'remarks'           => $transfer->notes,
             'items'             => $transfer->items->map(function ($item) use ($transfer) {
@@ -873,8 +895,8 @@ class ErpNextService
             'stock_entry_type'  => 'Material Transfer',
             'purpose'           => 'Material Transfer',
             'company'           => \App\Models\Setting::get('erpnext_company', env('ERPNEXT_COMPANY')),
-            'posting_date'      => now()->format('Y-m-d'),
-            'posting_time'      => now()->format('H:i:s'),
+            'posting_date'      => $this->localNow()->format('Y-m-d'),
+            'posting_time'      => $this->localNow()->format('H:i:s'),
             'set_posting_time'  => 1,
             'remarks'           => $transfer->notes,
             'items'             => $transfer->items->map(function ($item) use ($transfer) {
@@ -1235,7 +1257,7 @@ class ErpNextService
             'doctype'             => 'Sales Order',
             'naming_series'       => $namingSeries,
             'customer'            => $customer,
-            'transaction_date'    => now()->format('Y-m-d'),
+            'transaction_date'    => $this->localNow()->format('Y-m-d'),
             'delivery_date'       => $order->delivery_date->format('Y-m-d'),
             'order_type'          => 'Sales',
             'company'             => $company,
@@ -1359,7 +1381,7 @@ class ErpNextService
             'doctype'             => 'Delivery Note',
             'naming_series'       => $namingSeries,
             'customer'            => $customer,
-            'posting_date'        => now()->format('Y-m-d'),
+            'posting_date'        => $this->localNow()->format('Y-m-d'),
             'company'             => $company,
             'currency'            => $currency,
             'conversion_rate'     => 1,
@@ -1869,7 +1891,7 @@ class ErpNextService
         $defaultWh    = Warehouse::getDefault()?->name ?? '';
         $scheduleDate = $stockRequest->needed_date
             ? $stockRequest->needed_date->format('Y-m-d')
-            : now()->format('Y-m-d');
+            : $this->localNow()->format('Y-m-d');
 
         $items = $stockRequest->items->map(fn($item) => [
             'item_code'     => $item->item_code ?? $item->item_name,
@@ -1885,7 +1907,7 @@ class ErpNextService
             'doctype'                => 'Material Request',
             'naming_series'          => $namingSeries,
             'material_request_type'  => 'Manufacture',
-            'transaction_date'       => now()->format('Y-m-d'),
+            'transaction_date'       => $this->localNow()->format('Y-m-d'),
             'schedule_date'          => $scheduleDate,
             'company'                => $company,
             'status_permintaan'      => 'Diajukan',
