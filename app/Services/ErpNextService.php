@@ -437,7 +437,7 @@ class ErpNextService
     public function pullProducts(int $limit = 100, int $start = 0): array
     {
         try {
-            $fields  = '["name","item_name","item_code","description","item_group","kategori","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","image"]';
+            $fields  = '["name","item_name","item_code","description","item_group","kategori","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","has_variants","image"]';
             // Tarik semua item (termasuk yang disabled) supaya item yang dinonaktifkan di
             // ERP ikut dinonaktifkan lokal. Filtering disabled ditangani di ErpSyncController.
             $filters = '[]';

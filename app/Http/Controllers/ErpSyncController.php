@@ -189,17 +189,23 @@ class ErpSyncController extends Controller
                 }
 
                 $isDisabled = (bool) ($item['disabled'] ?? false);
+                $isTemplate = (bool) ($item['has_variants'] ?? false); // Item Template ERPNext — bukan barang jual
+                $excludeFromSale = $isDisabled || $isTemplate;
+
+                // Item template/disabled tidak boleh aktif sebagai produk jual
+                if ($excludeFromSale) {
+                    $data['is_active'] = false;
+                }
 
                 if ($exists) {
-                    // Item yang dinonaktifkan di ERP → ikut non-aktif di sini
-                    if ($isDisabled && $exists->is_active) {
+                    if ($excludeFromSale && $exists->is_active) {
                         $disabledDeactivated++;
                     }
                     $exists->update($data);
                     $updated++;
                 } else {
-                    // Item baru yang sudah disabled di ERP tidak perlu diimpor
-                    if ($isDisabled) {
+                    // Item template/disabled yang belum ada tidak perlu diimpor
+                    if ($excludeFromSale) {
                         continue;
                     }
                     Product::create(array_merge($data, ['track_stock' => true]));
