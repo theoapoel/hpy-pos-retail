@@ -119,6 +119,7 @@ class ErpSyncController extends Controller
 
         $imported = 0;
         $updated  = 0;
+        $disabledDeactivated = 0;
         $page     = 0;
         $pageSize = 100;
         $seenItemCodes = [];
@@ -187,10 +188,20 @@ class ErpSyncController extends Controller
                     $data['erp_image'] = null;
                 }
 
+                $isDisabled = (bool) ($item['disabled'] ?? false);
+
                 if ($exists) {
+                    // Item yang dinonaktifkan di ERP → ikut non-aktif di sini
+                    if ($isDisabled && $exists->is_active) {
+                        $disabledDeactivated++;
+                    }
                     $exists->update($data);
                     $updated++;
                 } else {
+                    // Item baru yang sudah disabled di ERP tidak perlu diimpor
+                    if ($isDisabled) {
+                        continue;
+                    }
                     Product::create(array_merge($data, ['track_stock' => true]));
                     $imported++;
                 }
@@ -222,6 +233,7 @@ class ErpSyncController extends Controller
             'updated'           => $updated,
             'total'             => $imported + $updated,
             'deactivated'       => $deactivated,
+            'disabled_deactivated' => $disabledDeactivated,
             'categories_pruned' => $categoriesPruned,
         ]);
     }

@@ -572,6 +572,7 @@ async function pullProducts() {
         if (data.success) {
             showSyncResult({...data, label: 'Produk'});
             let msg = `Produk: ${data.imported} baru, ${data.updated} diupdate — total ${data.total} record`;
+            if (data.disabled_deactivated) msg += `, ${data.disabled_deactivated} dinonaktifkan (disabled di ERP)`;
             if (reset) msg += `, ${data.deactivated} dinonaktifkan, ${data.categories_pruned} kategori dibersihkan`;
             toast(msg, 'success');
         } else {
@@ -667,6 +668,7 @@ function showSyncResult(data) {
             + `<span style="color:var(--green);font-weight:600;">${data.imported ?? 0} baru</span>, `
             + `<span style="color:var(--blue);font-weight:600;">${data.updated ?? 0} diupdate</span> `
             + `— total <strong>${data.total ?? 0}</strong> record diproses`
+            + (data.disabled_deactivated ? `, <span style="color:var(--red);font-weight:600;">${data.disabled_deactivated} dinonaktifkan (disabled ERP)</span>` : '')
             + (data.deactivated ? `, <span style="color:var(--red);font-weight:600;">${data.deactivated} dinonaktifkan</span>` : '')
             + (data.categories_pruned ? `, <span style="color:var(--text3);">${data.categories_pruned} kategori dibersihkan</span>` : '');
     } else {

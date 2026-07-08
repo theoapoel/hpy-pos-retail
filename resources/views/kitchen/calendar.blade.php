@@ -51,6 +51,20 @@
     margin-top: 2px;
 }
 .cal-badge-paid { background: var(--green); }
+.cal-chip {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cal-chip-do { background: #E8F0FE; color: #1967D2; }
+.cal-chip-fg { background: #E6F4EA; color: #137333; }
+.cal-more { font-size: 10px; color: var(--text3); margin-top: 2px; font-weight: 600; }
 .order-list-card {
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -140,6 +154,16 @@
                             {{ $dayOrders->count() }} order
                         </span>
                     </div>
+                    {{-- Daftar entri (DO/FG) langsung di kotak tanggal --}}
+                    @foreach($dayOrders->take(3) as $do)
+                    <span class="cal-chip {{ $do->entry_type === 'delivery' ? 'cal-chip-do' : 'cal-chip-fg' }}"
+                        title="{{ $do->doc_no }} — {{ $do->party }}">
+                        {{ $do->entry_type === 'delivery' ? 'DO' : 'FG' }} · {{ $do->kitchen_scheduled_at->format('H:i') }} {{ $do->party }}
+                    </span>
+                    @endforeach
+                    @if($dayOrders->count() > 3)
+                    <div class="cal-more">+{{ $dayOrders->count() - 3 }} lainnya</div>
+                    @endif
                     @if($paidCount < $dayOrders->count())
                     <div style="font-size:10px;color:var(--red);margin-top:2px">
                         {{ $dayOrders->count() - $paidCount }} belum lunas

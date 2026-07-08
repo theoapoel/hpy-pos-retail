@@ -438,7 +438,9 @@ class ErpNextService
     {
         try {
             $fields  = '["name","item_name","item_code","description","item_group","kategori","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","image"]';
-            $filters = '[["disabled","=",0]]';
+            // Tarik semua item (termasuk yang disabled) supaya item yang dinonaktifkan di
+            // ERP ikut dinonaktifkan lokal. Filtering disabled ditangani di ErpSyncController.
+            $filters = '[]';
 
             $response = $this->client->get('/api/resource/Item', [
                 'timeout' => 120,
