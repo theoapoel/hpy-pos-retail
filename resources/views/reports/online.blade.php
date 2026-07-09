@@ -127,6 +127,7 @@
                 <thead>
                     <tr>
                         <th>Invoice HPY</th>
+                        <th>Invoice Lokal</th>
                         <th>Tanggal</th>
                         <th>Waktu</th>
                         <th>Customer</th>
@@ -327,9 +328,13 @@ function renderTable(invoices) {
         const customerDisplay = inv.customer_name || inv.customer || '<span class="text-muted">Walk-in</span>';
 
         const tr = document.createElement('tr');
-        tr.setAttribute('data-search', (inv.name + ' ' + (inv.customer_name || '') + ' ' + (inv.customer || '')).toLowerCase());
+        tr.setAttribute('data-search', (inv.name + ' ' + (inv.local_invoice || '') + ' ' + (inv.customer_name || '') + ' ' + (inv.customer || '')).toLowerCase());
+        const localInv = inv.local_invoice
+            ? `<span class="font-medium">${inv.local_invoice}</span>`
+            : '<span class="text-muted">-</span>';
         tr.innerHTML = `
             <td><span class="font-medium text-blue" style="cursor:pointer" onclick="openDetail('${inv.name}')">${inv.name}</span></td>
+            <td class="text-sm">${localInv}</td>
             <td>${inv.posting_date}</td>
             <td class="text-muted text-sm">${(inv.posting_time || '').substring(0,5)}</td>
             <td>${customerDisplay}</td>

@@ -34,6 +34,15 @@ class OnlineReportController extends Controller
 
         $invoices = collect($result['data']);
 
+        // Cocokkan nomor invoice HPY dengan transaksi lokal (erp_pos_invoice → invoice_no)
+        $localMap = \App\Models\Transaction::whereIn('erp_pos_invoice', $invoices->pluck('name')->filter()->all())
+            ->pluck('invoice_no', 'erp_pos_invoice');
+
+        $invoices = $invoices->map(function ($inv) use ($localMap) {
+            $inv['local_invoice'] = $localMap[$inv['name']] ?? null;
+            return $inv;
+        });
+
         $totalSales = $invoices->sum('grand_total');
         $totalCount = $invoices->count();
         $avgPerTx   = $totalCount > 0 ? round($totalSales / $totalCount) : 0;
@@ -49,7 +58,7 @@ class OnlineReportController extends Controller
 
         return response()->json([
             'success'   => true,
-            'invoices'  => $result['data'],
+            'invoices'  => $invoices->values()->all(),
             'truncated' => $result['truncated'],
             'stats'     => [
                 'total_sales' => $totalSales,

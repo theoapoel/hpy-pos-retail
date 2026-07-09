@@ -37,6 +37,8 @@
         <form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;flex:1">
             <input type="text" name="search" class="form-control" placeholder="Cari invoice..."
                 value="{{ request('search') }}" style="max-width:200px">
+            <input type="text" name="erp_invoice" class="form-control" placeholder="Cari No. Sync ERP..."
+                value="{{ request('erp_invoice') }}" style="max-width:200px">
             <input type="date" name="date_from" class="form-control"
                 value="{{ request('date_from') }}" style="max-width:160px">
             <input type="date" name="date_to" class="form-control"
@@ -47,7 +49,7 @@
                 <option value="cancelled" {{ request('status')=='cancelled'?'selected':'' }}>Dibatalkan</option>
             </select>
             <button type="submit" class="btn btn-outline"><i class="fas fa-filter"></i> Filter</button>
-            @if(request()->hasAny(['search','date_from','date_to','status']))
+            @if(request()->hasAny(['search','erp_invoice','date_from','date_to','status']))
             <a href="{{ route('transactions.index') }}" class="btn btn-ghost"><i class="fas fa-times"></i> Reset</a>
             @endif
         </form>
@@ -102,6 +104,9 @@
                     <span class="badge {{ $syncBadge[$tx->erp_sync_status]??'badge-gray' }}">
                         {{ $syncLabel[$tx->erp_sync_status]??$tx->erp_sync_status }}
                     </span>
+                    @if($tx->erp_pos_invoice)
+                        <div class="text-sm text-muted" style="margin-top:4px;font-family:monospace">{{ $tx->erp_pos_invoice }}</div>
+                    @endif
                 </td>
                 <td class="text-sm text-muted">{{ $tx->created_at->format('d/m/Y H:i') }}</td>
                 <td style="white-space:nowrap">

@@ -9,6 +9,9 @@ class TransactionController extends Controller {
         if ($request->search) {
             $query->where('invoice_no','LIKE',"%{$request->search}%");
         }
+        if ($request->erp_invoice) {
+            $query->where('erp_pos_invoice','LIKE',"%{$request->erp_invoice}%");
+        }
         if ($request->date_from) $query->whereDate('created_at','>=',$request->date_from);
         if ($request->date_to) $query->whereDate('created_at','<=',$request->date_to);
         if ($request->status) $query->where('status',$request->status);
