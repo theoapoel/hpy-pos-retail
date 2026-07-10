@@ -58,7 +58,7 @@ class DeliveryOrderPaymentController extends Controller
             abort(404);
         }
         if ($payment->erp_sync_status === 'synced') {
-            return back()->with('error', 'Payment yang sudah tersync ke ERP tidak dapat dihapus. Batalkan di ERPNext terlebih dahulu.');
+            return back()->with('error', 'Payment yang sudah tersync ke ERP tidak dapat dihapus. Batalkan di ERP HPY terlebih dahulu.');
         }
 
         $payment->delete();

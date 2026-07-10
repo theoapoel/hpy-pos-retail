@@ -200,7 +200,7 @@
                                         {{ $g->name }}
                                     </label>
                                 @empty
-                                    <span style="font-size:12px;color:var(--text3)">Belum ada Item Group. Sync produk dari ERPNext dulu.</span>
+                                    <span style="font-size:12px;color:var(--text3)">Belum ada Item Group. Sync produk dari ERP HPY dulu.</span>
                                 @endforelse
                             </div>
                         </div>

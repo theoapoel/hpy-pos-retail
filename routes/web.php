@@ -9,7 +9,7 @@ use App\Http\Controllers\{
     BackupController, SetupController, OnlineReportController, UpdateController,
     DeliveryOrderController, DeliveryNoteController, DeliveryOrderPaymentController,
     KitchenController, StockRequestController, CouponController, RekapOrderController,
-    StockTransferReportController, PullingOrderController
+    StockTransferReportController, PullingOrderController, ModeOfPaymentReportController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -265,6 +265,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/fetch',       [OnlineReportController::class, 'fetch'])->name('fetch');
         Route::get('/detail/{name}', [OnlineReportController::class, 'detail'])->name('detail')
             ->where('name', '.+');
+    });
+
+    // Laporan Mode of Payment — matriks tanggal × metode pembayaran dari ERPNext
+    Route::prefix('mop-report')->name('mop-report.')->middleware('permission:sync')->group(function () {
+        Route::get('/',      [ModeOfPaymentReportController::class, 'index'])->name('index');
+        Route::post('/fetch', [ModeOfPaymentReportController::class, 'fetch'])->name('fetch');
     });
 
     // Sync HPY — jalankan (permission:sync), konfigurasi (admin only)

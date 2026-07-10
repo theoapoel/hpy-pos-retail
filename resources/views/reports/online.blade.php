@@ -111,6 +111,32 @@
         </div>
     </div>
 
+    {{-- Mode of Payment --}}
+    <div class="card" style="margin-bottom:20px">
+        <div class="card-header">
+            <div class="card-title"><i class="fas fa-wallet text-blue"></i> Metode Pembayaran</div>
+        </div>
+        <div class="card-body" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:24px;align-items:center">
+            <div style="max-width:260px;margin:0 auto;width:100%">
+                <canvas id="paymentChart"></canvas>
+            </div>
+            <div class="table-wrap">
+                <table id="paymentTable">
+                    <thead>
+                        <tr>
+                            <th>Metode</th>
+                            <th style="text-align:right">Transaksi</th>
+                            <th style="text-align:right">Total</th>
+                            <th style="text-align:right">%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentBody"></tbody>
+                    <tfoot id="paymentFoot"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
     {{-- Table --}}
     <div class="card">
         <div class="card-header">
@@ -166,8 +192,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script>
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-let allInvoices = [];
-let dailyChart  = null;
+let allInvoices  = [];
+let dailyChart   = null;
+let paymentChart = null;
+
+const PAY_COLORS = ['#4285F4','#34A853','#FBBC04','#EA4335','#A142F4','#00ACC1','#FF7043','#9E9E9E'];
 
 function fmt(n) {
     return 'Rp ' + Number(n).toLocaleString('id-ID', { minimumFractionDigits: 0 });
@@ -311,9 +340,79 @@ function renderResult(json) {
         }
     });
 
+    // Payment breakdown
+    renderPayment(stats.payment_data || []);
+
     // Table
     renderTable(allInvoices);
     document.getElementById('resultArea').style.display = 'block';
+}
+
+function renderPayment(rows) {
+    const body = document.getElementById('paymentBody');
+    const foot = document.getElementById('paymentFoot');
+    body.innerHTML = '';
+    foot.innerHTML = '';
+
+    const grandTotal = rows.reduce((s, r) => s + Number(r.total), 0);
+    const grandCount = rows.reduce((s, r) => s + Number(r.count), 0);
+
+    rows.forEach((r, i) => {
+        const pct = grandTotal > 0 ? (r.total / grandTotal * 100) : 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${PAY_COLORS[i % PAY_COLORS.length]};margin-right:8px"></span>
+                <span class="font-medium">${r.mode_of_payment}</span>
+            </td>
+            <td style="text-align:right">${Number(r.count).toLocaleString('id-ID')}</td>
+            <td style="text-align:right" class="money">${fmt(r.total)}</td>
+            <td style="text-align:right" class="text-muted">${pct.toFixed(1)}%</td>`;
+        body.appendChild(tr);
+    });
+
+    if (rows.length) {
+        foot.innerHTML = `
+            <tr style="border-top:2px solid #DADCE0;font-weight:600">
+                <td>Total</td>
+                <td style="text-align:right">${grandCount.toLocaleString('id-ID')}</td>
+                <td style="text-align:right" class="money">${fmt(grandTotal)}</td>
+                <td style="text-align:right">100%</td>
+            </tr>`;
+    } else {
+        body.innerHTML = '<tr><td colspan="4" class="text-muted" style="text-align:center;padding:24px">Tidak ada data pembayaran</td></tr>';
+    }
+
+    // Doughnut chart
+    if (paymentChart) paymentChart.destroy();
+    paymentChart = new Chart(document.getElementById('paymentChart'), {
+        type: 'doughnut',
+        data: {
+            labels: rows.map(r => r.mode_of_payment),
+            datasets: [{
+                data: rows.map(r => r.total),
+                backgroundColor: rows.map((_, i) => PAY_COLORS[i % PAY_COLORS.length]),
+                borderWidth: 2,
+                borderColor: '#fff',
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const total = ctx.dataset.data.reduce((s, v) => s + v, 0);
+                            const pct = total > 0 ? (ctx.raw / total * 100).toFixed(1) : 0;
+                            return `${ctx.label}: ${fmt(ctx.raw)} (${pct}%)`;
+                        }
+                    }
+                }
+            },
+            cutout: '60%',
+        }
+    });
 }
 
 function renderTable(invoices) {

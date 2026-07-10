@@ -376,6 +376,7 @@
             <span class="nav-tooltip">Sync HPY</span>
         </a>
         {!! $navItem(route('online-report.index'), 'fas fa-cloud-download-alt', 'Laporan Online', request()->routeIs('online-report.*')) !!}
+        {!! $navItem(route('mop-report.index'), 'fas fa-wallet', 'Laporan Pembayaran', request()->routeIs('mop-report.*')) !!}
         @endif
 
         @if($role === 'admin')

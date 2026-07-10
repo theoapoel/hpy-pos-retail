@@ -56,6 +56,10 @@ class OnlineReportController extends Controller
             ])
             ->sortKeys();
 
+        // Agregasi per metode pembayaran (child table Sales Invoice Payment)
+        $payment = $erp->fetchPosPaymentSummary($invoices->pluck('name')->all());
+        $paymentData = $payment['success'] ? $payment['data'] : [];
+
         return response()->json([
             'success'   => true,
             'invoices'  => $invoices->values()->all(),
@@ -65,6 +69,7 @@ class OnlineReportController extends Controller
                 'total_count' => $totalCount,
                 'avg_per_tx'  => $avgPerTx,
                 'daily_data'  => $dailyData,
+                'payment_data' => $paymentData,
             ],
         ]);
     }
