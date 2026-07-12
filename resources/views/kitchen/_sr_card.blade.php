@@ -13,7 +13,7 @@
             </div>
             <div class="order-date">
                 <i class="fas fa-calendar-alt"></i>
-                Butuh: {{ $sr->needed_date?->isoFormat('D MMM Y') ?? '—' }}
+                Butuh: {{ $sr->needed_date?->isoFormat('D MMM Y') ?? '—' }}{{ $sr->needed_time ? ', ' . substr($sr->needed_time, 0, 5) : '' }}
             </div>
             <div class="order-customer" style="font-size:11px;color:var(--text3)">
                 <i class="fas fa-user"></i> {{ $sr->requester->name ?? '—' }}

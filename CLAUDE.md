@@ -73,7 +73,7 @@ The Rekap Order report (`RekapOrderController`) aggregates items across confirme
 
 ### Stock Request Flow (Permintaan FG)
 
-`StockRequest` statuses: `draft` → `submitted` → (cancelled). Kitchen statuses: `requested` → `preparing` → `done`. Document numbers: `SR-YYYYMMDD-XXXX`. Syncs to ERPNext as a Material Request.
+`StockRequest` statuses: `draft` → `submitted` → (cancelled). Kitchen statuses: `requested` → `preparing` → `done`. Document numbers: `FG-YYYYMMDD-XXXX`. Syncs to ERPNext as a Material Request.
 
 ### Stock Transfer Flow
 

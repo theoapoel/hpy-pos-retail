@@ -79,7 +79,7 @@
                     <div style="font-size:13px">{{ $req->requester->name ?? '—' }}</div>
                     <div class="text-muted" style="font-size:11px">{{ $req->created_at->isoFormat('D MMM Y HH:mm') }}</div>
                 </td>
-                <td>{{ $req->needed_date ? $req->needed_date->isoFormat('D MMM Y') : '—' }}</td>
+                <td>{{ $req->needed_date ? $req->needed_date->isoFormat('D MMM Y') : '—' }}{{ $req->needed_time ? ', ' . substr($req->needed_time, 0, 5) : '' }}</td>
                 <td>
                     <span class="badge badge-blue">{{ $req->items_count ?? $req->items->count() }} item</span>
                 </td>

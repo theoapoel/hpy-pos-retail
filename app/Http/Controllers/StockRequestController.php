@@ -47,6 +47,7 @@ class StockRequestController extends Controller
     {
         $request->validate([
             'needed_date'        => 'nullable|date',
+            'needed_time'        => 'nullable|date_format:H:i',
             'notes'              => 'nullable|string|max:1000',
             'items'              => 'required|array|min:1',
             'items.*.item_name'  => 'required|string|max:200',
@@ -60,6 +61,7 @@ class StockRequestController extends Controller
                 'requested_by' => auth()->id(),
                 'status'       => 'draft',
                 'needed_date'  => $request->needed_date,
+                'needed_time'  => $request->needed_time,
                 'notes'        => $request->notes,
             ]);
 

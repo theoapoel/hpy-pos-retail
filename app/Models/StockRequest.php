@@ -13,7 +13,7 @@ class StockRequest extends Model
         'request_no', 'requested_by', 'status',
         'kitchen_status', 'kitchen_started_at', 'kitchen_done_at', 'kitchen_scheduled_at',
         'erp_material_request', 'erp_sync_status', 'erp_sync_error',
-        'needed_date', 'notes',
+        'needed_date', 'needed_time', 'notes',
     ];
 
     protected $casts = [
@@ -35,7 +35,7 @@ class StockRequest extends Model
 
     public static function generateRequestNo(): string
     {
-        $prefix = 'SR-' . date('Ymd') . '-';
+        $prefix = 'FG-' . date('Ymd') . '-';
         $last   = static::withTrashed()->where('request_no', 'like', $prefix . '%')->latest('id')->value('request_no');
         $seq    = $last ? ((int) substr($last, -4)) + 1 : 1;
         return $prefix . str_pad($seq, 4, '0', STR_PAD_LEFT);

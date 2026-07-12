@@ -110,15 +110,6 @@
         <span id="soundBtn" onclick="toggleSound()" class="btn btn-ghost btn-sm" title="Notifikasi suara">
             <i class="fas fa-bell" id="soundIcon"></i>
         </span>
-        <a href="{{ route('stock-requests.create') }}" class="btn btn-ghost btn-sm">
-            <i class="fas fa-plus"></i> Permintaan FG
-        </a>
-        <a href="{{ route('delivery-orders.index') }}" class="btn btn-ghost btn-sm">
-            <i class="fas fa-list"></i> Semua Order
-        </a>
-        <a href="{{ route('kitchen.calendar') }}" class="btn btn-ghost btn-sm">
-            <i class="fas fa-calendar-alt"></i> Kalender
-        </a>
         <button onclick="refreshBoard()" class="btn btn-ghost btn-sm">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>

@@ -48,6 +48,11 @@
                             min="{{ now()->format('Y-m-d') }}" value="{{ old('needed_date', now()->format('Y-m-d')) }}">
                     </div>
                     <div class="form-group">
+                        <label class="form-label">Jam Dibutuhkan</label>
+                        <input type="time" name="needed_time" class="form-control"
+                            value="{{ old('needed_time') }}">
+                    </div>
+                    <div class="form-group">
                         <label class="form-label">Catatan</label>
                         <input type="text" name="notes" class="form-control"
                             placeholder="Keterangan tambahan (opsional)" value="{{ old('notes') }}">

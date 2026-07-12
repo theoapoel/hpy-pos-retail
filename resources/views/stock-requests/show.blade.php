@@ -49,7 +49,7 @@
                 <div class="grid-2">
                     <div>
                         <div class="text-muted" style="font-size:12px;margin-bottom:2px">Tanggal Dibutuhkan</div>
-                        <div class="font-medium">{{ $req->needed_date ? $req->needed_date->isoFormat('D MMM Y') : '—' }}</div>
+                        <div class="font-medium">{{ $req->needed_date ? $req->needed_date->isoFormat('D MMM Y') : '—' }}{{ $req->needed_time ? ', ' . substr($req->needed_time, 0, 5) : '' }}</div>
                     </div>
                     <div>
                         <div class="text-muted" style="font-size:12px;margin-bottom:2px">Status Dapur</div>

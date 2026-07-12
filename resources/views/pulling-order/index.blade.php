@@ -24,11 +24,14 @@
 @endpush
 
 @section('content')
-<div class="page-header">
+<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
     <div>
         <h1 class="page-title"><i class="fas fa-list-check text-blue" style="margin-right:8px"></i>Pulling Order</h1>
         <p class="page-subtitle">Semua Delivery Order & Permintaan FG dalam satu tempat — edit pembayaran dan jadwal produksi tanpa buka halaman detail</p>
     </div>
+    <a href="{{ route('kitchen.calendar') }}" class="btn btn-ghost btn-sm">
+        <i class="fas fa-calendar-alt"></i> Kalender
+    </a>
 </div>
 
 <div class="card" style="margin-bottom:20px">
