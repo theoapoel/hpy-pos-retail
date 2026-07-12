@@ -46,7 +46,7 @@
                     Pembayaran Berhasil!
                 </div>
                 <div style="color:var(--text3);font-size:14px;margin-top:4px">
-                    {{ $transaction->created_at->format('d F Y, H:i') }}
+                    {{ local_dt($transaction->created_at, 'd F Y, H:i') }}
                 </div>
             </div>
 

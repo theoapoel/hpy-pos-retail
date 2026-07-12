@@ -15,7 +15,7 @@
         </h1>
         <p class="page-subtitle">
             {{ $transfer->type === 'outgoing' ? 'Pengiriman Barang' : 'Penerimaan Barang' }} ·
-            dibuat oleh {{ $transfer->user->name }} · {{ $transfer->created_at->format('d M Y H:i') }}
+            dibuat oleh {{ $transfer->user->name }} · {{ local_dt($transfer->created_at, 'd M Y H:i') }}
         </p>
     </div>
     <div style="display:flex;gap:8px;">

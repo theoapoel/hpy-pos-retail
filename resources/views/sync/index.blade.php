@@ -381,7 +381,7 @@
             <tbody>
             @foreach($recentLogs as $log)
             <tr>
-                <td class="text-sm text-muted">{{ $log->created_at->format('d/m/Y H:i:s') }}</td>
+                <td class="text-sm text-muted">{{ local_dt($log->created_at, 'd/m/Y H:i:s') }}</td>
                 <td><span class="badge badge-blue">{{ strtoupper($log->type) }}</span></td>
                 <td class="font-medium">{{ $log->reference_no ?? '#'.$log->reference_id }}</td>
                 <td>

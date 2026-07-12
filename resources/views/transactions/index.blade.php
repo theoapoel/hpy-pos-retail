@@ -108,7 +108,7 @@
                         <div class="text-sm text-muted" style="margin-top:4px;font-family:monospace">{{ $tx->erp_pos_invoice }}</div>
                     @endif
                 </td>
-                <td class="text-sm text-muted">{{ $tx->created_at->format('d/m/Y H:i') }}</td>
+                <td class="text-sm text-muted">{{ local_dt($tx->created_at) }}</td>
                 <td style="white-space:nowrap">
                     <a href="{{ route('transactions.show',$tx) }}" class="btn btn-ghost btn-sm" title="Detail">
                         <i class="fas fa-eye"></i>

@@ -241,7 +241,7 @@
                 <span>
                     {{ $transfer->items->count() }} item
                     &nbsp;·&nbsp;
-                    {{ $transfer->created_at->format('d/m/Y H:i') }}
+                    {{ local_dt($transfer->created_at) }}
                     @if($transfer->user)
                         &nbsp;·&nbsp; {{ $transfer->user->name }}
                     @endif

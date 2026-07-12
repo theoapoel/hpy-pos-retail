@@ -63,7 +63,7 @@
                 </span>
                 @if($transaction->erp_pos_invoice)
                 <div class="mt-2 text-sm"><strong>Doc:</strong> {{ $transaction->erp_pos_invoice }}</div>
-                <div class="text-sm text-muted">{{ $transaction->erp_synced_at?->format('d/m/Y H:i') }}</div>
+                <div class="text-sm text-muted">{{ local_dt($transaction->erp_synced_at) }}</div>
                 @endif
                 @if($transaction->erp_sync_error && $transaction->erp_sync_status === 'failed')
                 <div style="background:#FCE8E6;border-radius:6px;padding:10px;margin-top:8px;font-size:12px;color:var(--red)">{{ Str::limit($transaction->erp_sync_error, 200) }}</div>

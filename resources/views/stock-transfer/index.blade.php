@@ -129,7 +129,7 @@
                         @endif
                     </td>
                     <td style="white-space:nowrap;color:var(--text2);font-size:13px;">
-                        {{ $t->created_at->format('d/m/Y H:i') }}
+                        {{ local_dt($t->created_at) }}
                     </td>
                     <td>
                         <a href="{{ route('stock-transfer.show', $t) }}" class="btn btn-sm btn-outline">Detail</a>

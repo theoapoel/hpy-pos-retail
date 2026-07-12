@@ -44,7 +44,7 @@
 
     {{-- Info transaksi --}}
     <div class="row"><span>Invoice</span><span>{{ $transaction->invoice_no }}</span></div>
-    <div class="row"><span>Tanggal</span><span>{{ $transaction->created_at->format('d/m/Y H:i') }}</span></div>
+    <div class="row"><span>Tanggal</span><span>{{ local_dt($transaction->created_at) }}</span></div>
     <div class="row"><span>Kasir</span><span>{{ $transaction->user->name }}</span></div>
     @if($transaction->customer)
         <div class="row"><span>Customer</span><span>{{ $transaction->customer->name }}</span></div>
