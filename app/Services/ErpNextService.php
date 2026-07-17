@@ -11,6 +11,7 @@ use App\Models\ErpSyncLog;
 use App\Models\Product;
 use App\Models\ProductStock;
 use App\Models\Setting;
+use App\Models\Slice;
 use App\Models\StockRequest;
 use App\Models\StockTransfer;
 use App\Models\Transaction;
@@ -2208,6 +2209,176 @@ class ErpNextService
         }
 
         Log::info('MR submitted (docstatus=1)', ['docname' => $docname, 'request' => $stockRequest->request_no]);
+
+        return ['success' => true, 'docname' => $docname];
+    }
+
+    // =========================================================
+    // CREATE REPACK ENTRY → ERPNext (Stock Entry, purpose = Repack)
+    // Konversi 1 item (mis. Bolu) menjadi item lain (mis. Slice):
+    // baris sumber = s_warehouse (diissue), baris hasil = t_warehouse (diterima).
+    // Nilai/valuasi hasil dihitung otomatis oleh ERPNext dari sumber.
+    // =========================================================
+    public function createRepackEntry(Slice $slice): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $namingSeries = Setting::get('erp_repack_naming_series', 'MAT-STE-.YYYY.-');
+        $defaultWh = Warehouse::getDefault()?->name ?? '';
+
+        if (! $defaultWh) {
+            return ['success' => false, 'error' => 'Gudang default belum diset. Set salah satu warehouse sebagai default.'];
+        }
+
+        // Baris sumber (dikeluarkan) — hanya s_warehouse
+        $items = [];
+        foreach ($slice->items as $item) {
+            $items[] = [
+                'item_code' => $item->source_item_code ?: $item->source_item_name,
+                'item_name' => $item->source_item_name,
+                'qty' => (float) $item->source_qty,
+                'uom' => $item->source_uom ?: 'Nos',
+                's_warehouse' => $defaultWh,
+            ];
+        }
+        // Baris hasil (diterima) — hanya t_warehouse
+        foreach ($slice->items as $item) {
+            $items[] = [
+                'item_code' => $item->target_item_code ?: $item->target_item_name,
+                'item_name' => $item->target_item_name,
+                'qty' => (float) $item->target_qty,
+                'uom' => $item->target_uom ?: 'Nos',
+                't_warehouse' => $defaultWh,
+            ];
+        }
+
+        $payload = [
+            'doctype' => 'Stock Entry',
+            'naming_series' => $namingSeries,
+            'stock_entry_type' => 'Repack',
+            'purpose' => 'Repack',
+            'company' => $company,
+            'posting_date' => $this->localNow()->format('Y-m-d'),
+            'posting_time' => $this->localNow()->format('H:i:s'),
+            'set_posting_time' => 1,
+            'from_warehouse' => $defaultWh,
+            'to_warehouse' => $defaultWh,
+            'items' => $items,
+            'remarks' => implode("\n", array_filter([
+                'Slice: '.$slice->slice_no,
+                $slice->notes,
+            ])),
+        ];
+
+        Log::info('Slice Repack payload', ['slice' => $slice->slice_no, 'payload' => $payload]);
+
+        try {
+            $response = $this->client->post('/api/resource/Stock%20Entry', ['json' => $payload]);
+            $data = json_decode($response->getBody()->getContents(), true);
+            $docname = $data['data']['name'] ?? null;
+        } catch (ConnectException $e) {
+            Log::warning('Repack auto-sync: network unreachable', ['slice' => $slice->slice_no]);
+
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('Repack create failed', ['slice' => $slice->slice_no, 'raw' => $rawBody]);
+            $error = $this->extractError($e);
+            $slice->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+
+            return ['success' => false, 'error' => $error];
+        }
+
+        if ($docname) {
+            try {
+                $this->submitDoc('Stock Entry', $docname);
+            } catch (RequestException $e) {
+                $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+                Log::error('Repack submit failed', ['slice' => $slice->slice_no, 'docname' => $docname, 'raw' => $rawBody]);
+                $error = 'Stock Entry '.$docname.' dibuat tapi gagal submit: '.$this->extractError($e);
+                $slice->update([
+                    'erp_stock_entry' => $docname,
+                    'erp_sync_status' => 'failed',
+                    'erp_sync_error' => $error,
+                ]);
+
+                return ['success' => false, 'error' => $error, 'docname' => $docname];
+            }
+        }
+
+        $slice->update([
+            'erp_stock_entry' => $docname,
+            'erp_sync_status' => 'synced',
+            'erp_sync_error' => null,
+        ]);
+
+        return ['success' => true, 'docname' => $docname, 'stock_entry' => $docname];
+    }
+
+    // =========================================================
+    // CANCEL REPACK ENTRY → ERPNext (docstatus = 2)
+    // Membalik pergerakan stok: sumber kembali masuk, hasil keluar.
+    // =========================================================
+    public function cancelRepackEntry(Slice $slice): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $docname = $slice->erp_stock_entry;
+
+        if (! $docname) {
+            // Tidak ada dokumen ERP — tidak ada yang perlu dibatalkan di ERP.
+            return ['success' => true, 'docname' => null];
+        }
+
+        // Cek dulu status dokumen di ERP. Jika sudah dibatalkan manual di ERP
+        // (docstatus = 2), lanjutkan saja pembatalan lokal.
+        try {
+            $resp = $this->client->get('/api/resource/Stock%20Entry/'.rawurlencode($docname), [
+                'query' => ['fields' => '["docstatus"]'],
+            ]);
+            $docstatus = (int) (json_decode($resp->getBody()->getContents(), true)['data']['docstatus'] ?? 0);
+
+            if ($docstatus === 2) {
+                Log::info('Repack already cancelled in ERP', ['docname' => $docname, 'slice' => $slice->slice_no]);
+
+                return ['success' => true, 'docname' => $docname, 'already_cancelled' => true];
+            }
+        } catch (RequestException $e) {
+            // Dokumen tidak ditemukan di ERP (mis. sudah dihapus) — anggap tidak ada
+            // yang perlu dibatalkan, lanjutkan pembatalan lokal.
+            if ($e->hasResponse() && $e->getResponse()->getStatusCode() === 404) {
+                Log::info('Repack doc not found in ERP, proceeding local cancel', ['docname' => $docname, 'slice' => $slice->slice_no]);
+
+                return ['success' => true, 'docname' => $docname, 'not_found' => true];
+            }
+
+            // Error lain saat cek status: jangan lanjut, biar user tahu.
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        }
+
+        try {
+            $this->client->post('/api/method/frappe.client.cancel', [
+                'json' => ['doctype' => 'Stock Entry', 'name' => $docname],
+            ]);
+        } catch (ConnectException $e) {
+            Log::warning('Repack cancel: network unreachable', ['slice' => $slice->slice_no, 'docname' => $docname]);
+
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('Repack cancel failed', ['slice' => $slice->slice_no, 'docname' => $docname, 'raw' => $rawBody]);
+
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+
+        Log::info('Repack cancelled (docstatus=2)', ['docname' => $docname, 'slice' => $slice->slice_no]);
 
         return ['success' => true, 'docname' => $docname];
     }

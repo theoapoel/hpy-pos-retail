@@ -53,6 +53,7 @@ class ErpSyncController extends Controller
             'pb1_erp_type'                  => Setting::get('pb1_erp_type', 'On Net Total'),
             'pb1_erp_account'               => Setting::get('pb1_erp_account', ''),
             'erp_auto_sync'                 => Setting::get('erp_auto_sync', '1'),
+            'stock_auto_sync'               => Setting::get('stock_auto_sync', '0'),
         ];
 
         return view('sync.index', compact('stats', 'recentLogs', 'failedTransactions', 'settings'));
@@ -374,6 +375,7 @@ class ErpSyncController extends Controller
             'pb1_erp_type'                  => 'nullable|in:' . implode(',', $chargeTypes),
             'pb1_erp_account'               => 'nullable|string|max:200',
             'erp_auto_sync'                 => 'nullable|in:0,1',
+            'stock_auto_sync'               => 'nullable|in:0,1',
         ]);
 
         $keys = [
@@ -393,6 +395,7 @@ class ErpSyncController extends Controller
 
         // Checkbox — kirim '1' kalau centang, '0' kalau tidak
         Setting::set('erp_auto_sync', $request->input('erp_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
+        Setting::set('stock_auto_sync', $request->input('stock_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
 
         return response()->json(['success' => true]);
     }

@@ -305,9 +305,10 @@
             $canDelivery      = $u->hasPermission('delivery');
             $canKitchen       = $u->hasPermission('kitchen');
             $canStockRequest  = $u->hasPermission('stock_request');
+            $canSlice         = $u->hasPermission('slice');
             $canRekapOrder    = $u->hasPermission('rekap_order');
             $canPullingOrder  = $u->hasPermission('pulling_order');
-            $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock;
+            $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock || $canSlice;
         @endphp
 
         @php
@@ -341,6 +342,9 @@
         @if($canStock)
         {!! $navItem(route('stock.index'), 'fas fa-boxes', 'Stok Barang', request()->routeIs('stock.index') || request()->routeIs('stock.debug*') || request()->routeIs('stock.sync*')) !!}
         {!! $navItem(route('stock-opname.index'), 'fas fa-clipboard-list', 'Stock Opname', request()->routeIs('stock-opname.*')) !!}
+        @endif
+        @if($canSlice)
+        {!! $navItem(route('slices.index'), 'fas fa-scissors', 'Slice', request()->routeIs('slices.*')) !!}
         @endif
         @if($canStockTransfer)
         {!! $navItem(route('stock-transfer.index'), 'fas fa-truck-loading', 'Transfer Barang', request()->routeIs('stock-transfer.*')) !!}

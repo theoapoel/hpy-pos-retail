@@ -7,7 +7,17 @@
       "Bash(gh auth *)",
       "Bash(git --version)",
       "Bash(git config *)",
-      "Bash(git init *)"
+      "Bash(git init *)",
+      "Bash(php -l app/Http/Controllers/SliceController.php)",
+      "Bash(php -l app/Models/Slice.php)",
+      "Bash(php -l app/Services/ErpNextService.php)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/SliceController.php app/Models/Slice.php app/Models/SliceItem.php)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/SliceController.php app/Services/ErpNextService.php)",
+      "Bash(./vendor/bin/pint app/Services/ErpNextService.php)",
+      "Bash(php -l app/Http/Controllers/ErpSyncController.php)",
+      "Bash(where php *)",
+      "PowerShell(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\xampp\\\\htdocs\\\\resto-pos\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F 2>&1)",
+      "Bash(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\\\\\xampp\\\\\\\\htdocs\\\\\\\\resto-pos\\\\\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F)"
     ]
   }
 }

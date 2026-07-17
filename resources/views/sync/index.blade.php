@@ -177,6 +177,35 @@
                     </div>
                 </div>
 
+                {{-- Auto Sync Stok Toggle --}}
+                <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;border:2px solid {{ ($settings['stock_auto_sync'] ?? '0') === '1' ? 'var(--green)' : 'var(--border)' }}" id="stockAutoSyncBox">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <i class="fas fa-boxes" style="color:{{ ($settings['stock_auto_sync'] ?? '0') === '1' ? 'var(--green)' : 'var(--text3)' }}" id="stockAutoSyncIcon"></i>
+                                Auto Sync Stok dari ERP HPY
+                            </div>
+                            <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                                Tarik level stok (qty) dari ERP HPY otomatis tiap jam untuk semua warehouse aktif
+                            </div>
+                        </div>
+                        <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
+                            <input type="checkbox" id="stockAutoSyncToggle" name="stock_auto_sync" value="1"
+                                {{ ($settings['stock_auto_sync'] ?? '0') === '1' ? 'checked' : '' }}
+                                onchange="onStockAutoSyncChange(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="stockAutoSyncNote" style="margin-top:8px;font-size:12px;{{ ($settings['stock_auto_sync'] ?? '0') !== '1' ? '' : 'display:none' }};color:#E37400">
+                        <i class="fas fa-info-circle"></i>
+                        Auto Sync Stok nonaktif — stok hanya ter-update saat <strong>sync manual</strong> di menu Stok.
+                    </div>
+                    <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+                        <i class="fas fa-clock"></i>
+                        Butuh Laravel scheduler aktif (Task Scheduler menjalankan <code>php artisan schedule:run</code> tiap menit).
+                    </div>
+                </div>
+
                 <style>
                 .toggle-switch { position:relative;display:inline-block;width:44px;height:24px; }
                 .toggle-switch input { opacity:0;width:0;height:0; }
@@ -453,6 +482,7 @@ async function saveSettings() {
 
     // Checkbox tidak dikirim FormData kalau tidak tercentang — kirim eksplisit
     data['erp_auto_sync'] = document.getElementById('autoSyncToggle').checked ? '1' : '0';
+    data['stock_auto_sync'] = document.getElementById('stockAutoSyncToggle').checked ? '1' : '0';
 
     btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     btn.disabled = true;
@@ -472,6 +502,21 @@ function onAutoSyncChange(el) {
     const box  = document.getElementById('autoSyncBox');
     const icon = document.getElementById('autoSyncIcon');
     const note = document.getElementById('autoSyncNote');
+    if (el.checked) {
+        box.style.borderColor  = 'var(--green)';
+        icon.style.color       = 'var(--green)';
+        note.style.display     = 'none';
+    } else {
+        box.style.borderColor  = 'var(--border)';
+        icon.style.color       = 'var(--text3)';
+        note.style.display     = '';
+    }
+}
+
+function onStockAutoSyncChange(el) {
+    const box  = document.getElementById('stockAutoSyncBox');
+    const icon = document.getElementById('stockAutoSyncIcon');
+    const note = document.getElementById('stockAutoSyncNote');
     if (el.checked) {
         box.style.borderColor  = 'var(--green)';
         icon.style.color       = 'var(--green)';

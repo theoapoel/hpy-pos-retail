@@ -9,7 +9,8 @@ use App\Http\Controllers\{
     BackupController, SetupController, OnlineReportController, UpdateController,
     DeliveryOrderController, DeliveryNoteController, DeliveryOrderPaymentController,
     KitchenController, StockRequestController, CouponController, RekapOrderController,
-    StockTransferReportController, PullingOrderController, ModeOfPaymentReportController
+    StockTransferReportController, PullingOrderController, ModeOfPaymentReportController,
+    SliceController
 };
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
@@ -235,6 +236,17 @@ Route::middleware('auth')->group(function () {
         Route::post('/{stockRequest}/cancel',                    [StockRequestController::class, 'cancel'])->name('cancel');
         Route::post('/{stockRequest}/sync-erp',                  [StockRequestController::class, 'syncErp'])->name('sync-erp');
         Route::post('/{stockRequest}/kitchen-status',            [StockRequestController::class, 'updateKitchenStatus'])->name('kitchen-status');
+    });
+
+    // Slice — konversi qty item (Repack) ke ERP HPY
+    Route::prefix('slices')->name('slices.')->middleware('permission:slice')->group(function () {
+        Route::get('/',                    [SliceController::class, 'index'])->name('index');
+        Route::get('/create',              [SliceController::class, 'create'])->name('create');
+        Route::post('/',                   [SliceController::class, 'store'])->name('store');
+        Route::get('/{slice}',             [SliceController::class, 'show'])->name('show');
+        Route::post('/{slice}/submit',     [SliceController::class, 'submit'])->name('submit');
+        Route::post('/{slice}/cancel',     [SliceController::class, 'cancel'])->name('cancel');
+        Route::post('/{slice}/sync-erp',   [SliceController::class, 'syncErp'])->name('sync-erp');
     });
 
     // Rekap Order

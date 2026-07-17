@@ -21,6 +21,7 @@ class RolePermission extends Model
             'customers'      => ['label' => 'Customer',         'icon' => 'fa-users'],
             'stock_transfer' => ['label' => 'Transfer Barang',  'icon' => 'fa-truck-loading'],
             'stock'          => ['label' => 'Stok Barang',      'icon' => 'fa-boxes'],
+            'slice'          => ['label' => 'Slice (Konversi)', 'icon' => 'fa-scissors'],
             'delivery'       => ['label' => 'Delivery Order',   'icon' => 'fa-truck'],
             'kitchen'        => ['label' => 'Kitchen Monitor',  'icon' => 'fa-utensils'],
             'stock_request'  => ['label' => 'Permintaan FG',    'icon' => 'fa-clipboard-check'],
