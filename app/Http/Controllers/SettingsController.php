@@ -24,6 +24,7 @@ class SettingsController extends Controller
         'pos_item_groups',
         'delivery_item_groups',
         'stock_request_item_groups',
+        'slice_item_groups',
     ];
 
     public function index()

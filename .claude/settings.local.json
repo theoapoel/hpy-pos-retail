@@ -17,7 +17,8 @@
       "Bash(php -l app/Http/Controllers/ErpSyncController.php)",
       "Bash(where php *)",
       "PowerShell(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\xampp\\\\htdocs\\\\resto-pos\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F 2>&1)",
-      "Bash(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\\\\\xampp\\\\\\\\htdocs\\\\\\\\resto-pos\\\\\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F)"
+      "Bash(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\\\\\xampp\\\\\\\\htdocs\\\\\\\\resto-pos\\\\\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F)",
+      "Bash(php -l app/Http/Controllers/SettingsController.php)"
     ]
   }
 }

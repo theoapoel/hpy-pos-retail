@@ -181,6 +181,7 @@
                             'pos_item_groups'           => ['Kasir', 'fa-cash-register'],
                             'delivery_item_groups'      => ['Delivery Order', 'fa-truck'],
                             'stock_request_item_groups' => ['Permintaan FG', 'fa-clipboard-check'],
+                            'slice_item_groups'         => ['Slice (Konversi)', 'fa-scissors'],
                         ];
                     @endphp
 
@@ -550,7 +551,7 @@ function toggleItemGroup(key) {
     document.getElementById('ig_' + key).value = ids.join(',');
     document.getElementById('igcount_' + key).textContent = ids.length ? '(' + ids.length + ' dipilih)' : '(semua tampil)';
 }
-['pos_item_groups', 'delivery_item_groups', 'stock_request_item_groups'].forEach(toggleItemGroup);
+['pos_item_groups', 'delivery_item_groups', 'stock_request_item_groups', 'slice_item_groups'].forEach(toggleItemGroup);
 
 // Init preview on load
 updatePreview();

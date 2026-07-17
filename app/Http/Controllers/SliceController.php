@@ -35,7 +35,7 @@ class SliceController extends Controller
 
     public function create()
     {
-        $products = Product::where('is_active', true)->orderBy('name')
+        $products = Product::where('is_active', true)->inItemGroups('slice_item_groups')->orderBy('name')
             ->get(['id', 'name', 'sku', 'erp_item_code', 'unit']);
 
         return view('slices.create', compact('products'));
