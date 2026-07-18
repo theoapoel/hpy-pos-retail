@@ -998,7 +998,8 @@ function addToCart(el) {
         if (basePrice === 0) { toast('⚠ Harga produk ini Rp 0, harap periksa kembali.', 'warn'); }
         const erpCode    = el.dataset.erpCode || '';
         const dp         = getDeliveryPrice(erpCode);
-        cart.push({
+        // Item baru diletakkan paling atas keranjang (memudahkan lihat hasil scan terbaru)
+        cart.unshift({
             id, name: el.dataset.name,
             price: dp !== null ? dp : basePrice,
             basePrice,
@@ -1654,5 +1655,7 @@ setWalkin();
 renderCart();
 loadProducts();
 </script>
+
+@include('pos._hold-orders')
 </body>
 </html>

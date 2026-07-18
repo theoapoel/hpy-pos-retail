@@ -1504,5 +1504,7 @@ setWalkin();
 renderCart();
 loadProducts();
 </script>
+
+@include('pos._hold-orders')
 </body>
 </html>
