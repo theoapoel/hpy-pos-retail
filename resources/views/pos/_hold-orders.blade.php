@@ -89,7 +89,8 @@
             id: Date.now(),
             ts: new Date().toISOString(),
             cart: JSON.parse(JSON.stringify(cart)),
-            customer: (typeof selectedCustomer !== 'undefined') ? selectedCustomer : null,
+            customer: (typeof selectedCustomer !== 'undefined' && selectedCustomer)
+                ? JSON.parse(JSON.stringify(selectedCustomer)) : null,
             orderType: (typeof selectedOrderType !== 'undefined') ? selectedOrderType : 'dine_in',
             deliveryPlatform: (typeof selectedDeliveryPlatform !== 'undefined') ? selectedDeliveryPlatform : null,
             tableNumber: tableEl ? tableEl.value.trim() : '',
@@ -122,9 +123,18 @@
         // Cart
         cart = JSON.parse(JSON.stringify(h.cart || []));
 
-        // Customer
-        selectedCustomer = h.customer || { id: null, name: (typeof walkinCustomerName !== 'undefined' ? walkinCustomerName : 'Walk-in') };
-        if (typeof renderCustomerBtn === 'function') renderCustomerBtn();
+        // Customer — pakai fungsi layout supaya state ter-update di scope yang benar
+        if (h.customer && h.customer.id) {
+            if (typeof selectCustomer === 'function') {
+                selectCustomer(h.customer.id, h.customer.name, h.customer.code || '');
+            } else {
+                selectedCustomer = h.customer;
+                if (typeof renderCustomerBtn === 'function') renderCustomerBtn();
+            }
+        } else {
+            if (typeof setWalkin === 'function') setWalkin();
+            else selectedCustomer = { id: null, name: (typeof walkinCustomerName !== 'undefined' ? walkinCustomerName : 'Walk-in') };
+        }
 
         // Order type (re-trigger the layout handler so UI + related bars update)
         const otBtn = document.querySelector('.order-type-btn[data-type="' + (h.orderType || 'dine_in') + '"]');
