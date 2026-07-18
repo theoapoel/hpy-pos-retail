@@ -558,19 +558,33 @@ class ErpNextService
 
             $response = $this->client->get('/api/resource/Item Price', [
                 'query' => [
-                    'fields' => json_encode(['item_code', 'price_list_rate']),
+                    'fields' => json_encode(['item_code', 'price_list_rate', 'valid_from']),
                     'filters' => $filters,
-                    'limit' => count($itemCodes),
+                    // Satu item bisa punya beberapa baris Item Price (per valid_from),
+                    // jadi limit harus lebih besar dari jumlah item.
+                    'limit_page_length' => 0,
+                    // Urutkan terbaru dulu supaya baris valid_from paling baru diproses lebih awal.
+                    'order_by' => 'valid_from desc',
                 ],
             ]);
 
             $data = json_decode($response->getBody()->getContents(), true);
             $map = [];
+            $chosenValidFrom = [];
+            $today = date('Y-m-d');
             foreach ($data['data'] ?? [] as $row) {
-                // Simpan harga tertinggi jika ada duplikasi (misal valid_from berbeda)
                 $code = $row['item_code'];
-                if (! isset($map[$code]) || $row['price_list_rate'] > $map[$code]) {
+                $validFrom = $row['valid_from'] ?? '';
+
+                // Abaikan harga yang valid_from-nya masih di masa depan (belum berlaku).
+                if ($validFrom !== '' && $validFrom > $today) {
+                    continue;
+                }
+
+                // Ambil baris dengan valid_from paling baru per item.
+                if (! isset($map[$code]) || $validFrom > $chosenValidFrom[$code]) {
                     $map[$code] = (float) $row['price_list_rate'];
+                    $chosenValidFrom[$code] = $validFrom;
                 }
             }
 
@@ -1219,14 +1233,17 @@ class ErpNextService
 
         try {
             $all = [];
+            $chosenValidFrom = [];
+            $today = date('Y-m-d');
             $page = 0;
             $limit = 500;
 
             do {
                 $response = $this->client->get('/api/resource/Item Price', [
                     'query' => [
-                        'fields' => json_encode(['item_code', 'price_list_rate']),
+                        'fields' => json_encode(['item_code', 'price_list_rate', 'valid_from']),
                         'filters' => json_encode([['price_list', '=', $priceList]]),
+                        'order_by' => 'valid_from desc',
                         'limit_page_length' => $limit,
                         'limit_start' => $page * $limit,
                     ],
@@ -1236,8 +1253,21 @@ class ErpNextService
                 $batch = $data['data'] ?? [];
 
                 foreach ($batch as $row) {
-                    if (! empty($row['item_code'])) {
-                        $all[$row['item_code']] = (float) ($row['price_list_rate'] ?? 0);
+                    if (empty($row['item_code'])) {
+                        continue;
+                    }
+                    $code = $row['item_code'];
+                    $validFrom = $row['valid_from'] ?? '';
+
+                    // Lewati harga yang belum berlaku (valid_from di masa depan).
+                    if ($validFrom !== '' && $validFrom > $today) {
+                        continue;
+                    }
+
+                    // Ambil harga dengan valid_from paling baru per item.
+                    if (! isset($all[$code]) || $validFrom > $chosenValidFrom[$code]) {
+                        $all[$code] = (float) ($row['price_list_rate'] ?? 0);
+                        $chosenValidFrom[$code] = $validFrom;
                     }
                 }
 
