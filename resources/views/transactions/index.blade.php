@@ -113,8 +113,11 @@
                     <a href="{{ route('transactions.show',$tx) }}" class="btn btn-ghost btn-sm" title="Detail">
                         <i class="fas fa-eye"></i>
                     </a>
-                    <a href="{{ route('pos.print',$tx) }}" target="_blank" class="btn btn-ghost btn-sm" title="Cetak">
+                    <a href="{{ route('pos.print',$tx) }}" target="_blank" class="btn btn-ghost btn-sm" title="Cetak Struk">
                         <i class="fas fa-print"></i>
+                    </a>
+                    <a href="{{ route('pos.print-kitchen',$tx) }}" target="_blank" class="btn btn-ghost btn-sm" title="Cetak Kitchen">
+                        <i class="fas fa-utensils"></i>
                     </a>
                 </td>
             </tr>

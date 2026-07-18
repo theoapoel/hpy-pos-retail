@@ -18,7 +18,27 @@
       "Bash(where php *)",
       "PowerShell(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\xampp\\\\htdocs\\\\resto-pos\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F 2>&1)",
       "Bash(schtasks /Create /TN \"MitraPOS Scheduler\" /TR \"wscript.exe \\\\\"C:\\\\\\\\xampp\\\\\\\\htdocs\\\\\\\\resto-pos\\\\\\\\schedule-run.vbs\\\\\"\" /SC MINUTE /MO 1 /F)",
-      "Bash(php -l app/Http/Controllers/SettingsController.php)"
+      "Bash(php -l app/Http/Controllers/SettingsController.php)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(git push origin main)",
+      "PowerShell(git push hpy main)",
+      "Bash(ls -d /c/xampp/htdocs/hpy-pos 2>/dev/null && echo \"FOUND\" || echo \"NOT FOUND\")",
+      "Read(//c/xampp/htdocs/**)",
+      "Bash(ls -d /c/xampp/htdocs/*pos* /c/xampp/htdocs/hpy* 2>/dev/null)",
+      "Bash(git -C /c/xampp/htdocs/resto-pos remote -v)",
+      "Bash(grep -nA3 \"function selectDeliveryPlatform\" quick.blade.php)",
+      "Bash(git -C /c/xampp/htdocs/resto-pos status --short)",
+      "Bash(grep -nB1 -A10 \"function renderCustomerList\" quick.blade.php)",
+      "Bash(php -l app/Http/Controllers/ModeOfPaymentReportController.php)",
+      "Read(//c/Users/LENOVO/AppData/Local/Temp/claude/c--xampp-htdocs-resto-pos/cba4412d-9498-492d-86f9-a6378143da3c/scratchpad/**)",
+      "Bash(sed -i \"s|customer: \\(typeof selectedCustomer !== 'undefined'\\) ? selectedCustomer : null,|customer: \\(typeof selectedCustomer !== 'undefined' \\\\&\\\\& selectedCustomer\\) ? JSON.parse\\(JSON.stringify\\(selectedCustomer\\)\\) : null,|\" hold_test.js)",
+      "Bash(node hold_test.js)",
+      "PowerShell(php -l app/Models/RolePermission.php)",
+      "PowerShell(php -l routes/web.php)",
+      "PowerShell($r = php artisan route:list --columns=name 2>$null; \\($r | Select-String -Pattern \"permissions.index|factory-reset.index|warehouses.index|online-report.index|stock-opname.index|mop-report.index|users.index|coupons.index\"\\).Count)",
+      "PowerShell(php artisan route:list 2>&1 | Out-String -Stream | Where-Object { $_ -match \"permissions|factory-reset|online-report|stock-opname\" })",
+      "PowerShell(php artisan view:clear)",
+      "PowerShell(php artisan cache:clear)"
     ]
   }
 }

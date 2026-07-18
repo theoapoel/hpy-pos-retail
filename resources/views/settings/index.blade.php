@@ -181,7 +181,7 @@
                             'pos_item_groups'           => ['Kasir', 'fa-cash-register'],
                             'delivery_item_groups'      => ['Delivery Order', 'fa-truck'],
                             'stock_request_item_groups' => ['Permintaan FG', 'fa-clipboard-check'],
-                            'slice_item_groups'         => ['Slice (Konversi)', 'fa-scissors'],
+                            'slice_item_groups'         => ['Repack (Konversi)', 'fa-scissors'],
                         ];
                     @endphp
 

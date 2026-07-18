@@ -69,10 +69,21 @@ class Product extends Model
     }
 
     public function scopeSearch($query, $term) {
-        return $query->where(function($q) use ($term) {
-            $q->where('name', 'LIKE', "%{$term}%")
-              ->orWhere('sku', 'LIKE', "%{$term}%")
-              ->orWhere('barcode', 'LIKE', "%{$term}%");
+        // Pisah jadi kata: tiap kata harus cocok (urutan bebas).
+        // Jadi "baso yamin" tetap menemukan "YAMIN MANIS BASO URAT".
+        $words = preg_split('/\s+/', trim($term), -1, PREG_SPLIT_NO_EMPTY);
+
+        return $query->where(function($outer) use ($words, $term) {
+            // Cocok penuh pada sku/barcode (kode biasanya utuh, tanpa spasi).
+            $outer->where('sku', 'LIKE', "%{$term}%")
+                  ->orWhere('barcode', 'LIKE', "%{$term}%");
+
+            // Atau: semua kata muncul di nama (AND antar kata).
+            $outer->orWhere(function($q) use ($words) {
+                foreach ($words as $word) {
+                    $q->where('name', 'LIKE', "%{$word}%");
+                }
+            });
         });
     }
 }

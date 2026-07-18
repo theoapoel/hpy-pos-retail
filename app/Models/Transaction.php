@@ -16,7 +16,7 @@ class Transaction extends Model
         'subtotal', 'discount_amount', 'discount_percent', 'coupon_code', 'coupon_discount', 'tax_amount',
         'total', 'paid_amount', 'change_amount', 'payment_method',
         'payment_details', 'notes', 'pos_class',
-        'order_type', 'delivery_platform',
+        'order_type', 'delivery_platform', 'table_number',
         'service_charge_pct', 'service_charge_amount',
         'pb1_pct', 'pb1_amount',
         'erp_pos_invoice', 'erp_synced_at',

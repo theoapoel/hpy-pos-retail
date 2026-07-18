@@ -5,7 +5,8 @@
 <div class="page-header">
     <div><div class="page-title">Detail Transaksi</div><div class="page-subtitle">{{ $transaction->invoice_no }}</div></div>
     <div style="display:flex;gap:8px">
-        <a href="{{ route('pos.print',$transaction) }}" target="_blank" class="btn btn-outline"><i class="fas fa-print"></i> Cetak</a>
+        <a href="{{ route('pos.print-kitchen',$transaction) }}" target="_blank" class="btn btn-warning"><i class="fas fa-utensils"></i> Cetak Kitchen</a>
+        <a href="{{ route('pos.print',$transaction) }}" target="_blank" class="btn btn-outline"><i class="fas fa-print"></i> Cetak Struk</a>
         <a href="{{ route('transactions.index') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Kembali</a>
     </div>
 </div>

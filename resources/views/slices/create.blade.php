@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Buat Slice')
+@section('title', 'Buat Repack')
 
 @push('styles')
 <style>
@@ -26,7 +26,7 @@
 @section('content')
 <div class="page-header">
     <div>
-        <div class="page-title"><i class="fas fa-scissors text-blue"></i> Buat Slice</div>
+        <div class="page-title"><i class="fas fa-scissors text-blue"></i> Buat Repack</div>
         <div class="page-subtitle">Konversi qty item — item sumber diissue, item hasil diterima di ERP HPY (Repack)</div>
     </div>
     <a href="{{ route('slices.index') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Kembali</a>

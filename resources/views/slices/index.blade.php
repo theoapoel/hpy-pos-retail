@@ -1,14 +1,14 @@
 @extends('layouts.app')
-@section('title', 'Slice — Konversi Item')
+@section('title', 'Repack — Konversi Item')
 
 @section('content')
 <div class="page-header">
     <div>
-        <div class="page-title"><i class="fas fa-scissors text-blue"></i> Slice</div>
-        <div class="page-subtitle">Konversi qty item — mis. 1 Bolu dipotong menjadi 8 Slice</div>
+        <div class="page-title"><i class="fas fa-scissors text-blue"></i> Repack</div>
+        <div class="page-subtitle">Konversi qty item — mis. 1 Bolu dipotong menjadi 8 potong</div>
     </div>
     <a href="{{ route('slices.create') }}" class="btn btn-primary">
-        <i class="fas fa-plus"></i> Buat Slice
+        <i class="fas fa-plus"></i> Buat Repack
     </a>
 </div>
 
@@ -52,7 +52,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>No. Slice</th>
+                    <th>No. Repack</th>
                     <th>Dibuat</th>
                     <th>Konversi</th>
                     <th>Status</th>

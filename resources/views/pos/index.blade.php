@@ -386,6 +386,8 @@
         .btn-primary { background: var(--primary); color: #fff; }
         .btn-primary:hover { background: var(--primary-dark); }
         .btn-success { background: var(--green); color: #fff; }
+        .btn-warning { background: #F9AB00; color: #fff; }
+        .btn-warning:hover { background: #E69500; }
         .btn-ghost { background: transparent; color: var(--text2); border: 2px solid var(--border); }
         .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
         .form-control {
@@ -746,6 +748,7 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeReceiptAndReset()"><i class="fas fa-times"></i> Tutup</button>
+            <button class="btn btn-warning" onclick="printKitchen()"><i class="fas fa-utensils"></i> Cetak Kitchen</button>
             <button class="btn btn-primary" onclick="printReceipt()"><i class="fas fa-print"></i> Cetak Struk</button>
             <button class="btn btn-success" onclick="closeReceiptAndReset()"><i class="fas fa-plus"></i> Pesanan Baru</button>
         </div>
@@ -1608,6 +1611,13 @@ function showReceipt(tx) {
 function printReceipt() {
     if (!lastReceipt) return;
     window.open(`{{ url('pos/print') }}/${lastReceipt.id}`, '_blank', 'width=400,height=600');
+}
+
+function printKitchen() {
+    if (!lastReceipt) return;
+    const table = document.getElementById('tableNumber').value.trim();
+    const q = table ? `?table=${encodeURIComponent(table)}` : '';
+    window.open(`{{ url('pos/print-kitchen') }}/${lastReceipt.id}${q}`, '_blank', 'width=400,height=600');
 }
 
 function closeReceiptAndReset() {

@@ -301,6 +301,7 @@ class PosController extends Controller
                 'pos_class'             => $request->pos_class,
                 'order_type'            => $orderType,
                 'delivery_platform'     => $deliveryPlatform,
+                'table_number'          => $request->table_number ?: null,
                 'service_charge_pct'    => $serviceChargePct,
                 'service_charge_amount' => $serviceChargeAmount,
                 'pb1_pct'               => $pb1Pct,
@@ -353,6 +354,23 @@ class PosController extends Controller
         $transaction->load('items.product', 'customer', 'user');
         $store = SettingsController::storeSettings();
         return view('pos.print-receipt', compact('transaction', 'store'));
+    }
+
+    public function printKitchen(Request $request, Transaction $transaction)
+    {
+        $transaction->load('items.product.itemCategory', 'customer', 'user');
+        $store = SettingsController::storeSettings();
+
+        // Nomor meja: dari query (saat checkout) atau tersimpan di transaksi (cetak ulang)
+        $table = trim((string) $request->query('table', $transaction->table_number ?? ''));
+
+        // Kelompokkan item per kategori: MAKANAN / MINUMAN / dll.
+        // Item tanpa kategori masuk ke "LAINNYA".
+        $groups = $transaction->items
+            ->groupBy(fn($item) => $item->product?->itemCategory?->name ?: 'LAINNYA')
+            ->sortKeys();
+
+        return view('pos.print-kitchen', compact('transaction', 'store', 'groups', 'table'));
     }
 
     public function directPrint(Transaction $transaction)

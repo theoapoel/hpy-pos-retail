@@ -1,5 +1,5 @@
 @extends('layouts.app')
-@section('title', 'Detail Slice')
+@section('title', 'Detail Repack')
 
 @section('content')
 <div class="page-header">
@@ -17,7 +17,7 @@
                 <i class="fas fa-paper-plane"></i> Submit ke ERP
             </button>
         </form>
-        <form method="POST" action="{{ route('slices.cancel', $slice) }}" onsubmit="return confirm('Batalkan slice ini?')">
+        <form method="POST" action="{{ route('slices.cancel', $slice) }}" onsubmit="return confirm('Batalkan repack ini?')">
             @csrf
             <button type="submit" class="btn btn-ghost" style="color:var(--red)">
                 <i class="fas fa-times"></i> Batalkan

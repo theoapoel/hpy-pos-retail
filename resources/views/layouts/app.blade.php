@@ -166,6 +166,8 @@
         .btn-success:hover { background: #2D9247; }
         .btn-danger { background: var(--red); color: #fff; }
         .btn-danger:hover { background: #C5221F; }
+        .btn-warning { background: #F9AB00; color: #fff; }
+        .btn-warning:hover { background: #E69500; }
         .btn-outline { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
         .btn-outline:hover { background: var(--blue-light); }
         .btn-ghost { background: transparent; color: var(--text2); }
@@ -308,7 +310,21 @@
             $canSlice         = $u->hasPermission('slice');
             $canRekapOrder    = $u->hasPermission('rekap_order');
             $canPullingOrder  = $u->hasPermission('pulling_order');
-            $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock || $canSlice;
+            $canStockOpname   = $u->hasPermission('stock_opname');
+            $canDeliveryNotes = $u->hasPermission('delivery_notes');
+            $canOnlineReport  = $u->hasPermission('online_report');
+            $canMopReport     = $u->hasPermission('mop_report');
+            $canCoupons       = $u->hasPermission('coupons');
+            $canUsers         = $u->hasPermission('users');
+            $canRoles         = $u->hasPermission('roles');
+            $canPermissions   = $u->hasPermission('permissions');
+            $canWarehouses    = $u->hasPermission('warehouses');
+            $canSettings      = $u->hasPermission('settings');
+            $canBackup        = $u->hasPermission('backup');
+            $canUpdate        = $u->hasPermission('update');
+            $canFactoryReset  = $u->hasPermission('factory_reset');
+            $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock || $canStockOpname || $canSlice;
+            $showSistem       = $canCoupons || $canUsers || $canRoles || $canPermissions || $canWarehouses || $canSettings || $canBackup || $canUpdate || $canFactoryReset;
         @endphp
 
         @php
@@ -341,20 +357,24 @@
         @endif
         @if($canStock)
         {!! $navItem(route('stock.index'), 'fas fa-boxes', 'Stok Barang', request()->routeIs('stock.index') || request()->routeIs('stock.debug*') || request()->routeIs('stock.sync*')) !!}
+        @endif
+        @if($canStockOpname)
         {!! $navItem(route('stock-opname.index'), 'fas fa-clipboard-list', 'Stock Opname', request()->routeIs('stock-opname.*')) !!}
         @endif
         @if($canSlice)
-        {!! $navItem(route('slices.index'), 'fas fa-scissors', 'Slice', request()->routeIs('slices.*')) !!}
+        {!! $navItem(route('slices.index'), 'fas fa-scissors', 'Repack', request()->routeIs('slices.*')) !!}
         @endif
         @if($canStockTransfer)
         {!! $navItem(route('stock-transfer.index'), 'fas fa-truck-loading', 'Transfer Barang', request()->routeIs('stock-transfer.*')) !!}
         @endif
         @endif
 
-        @if($canDelivery || $canKitchen || $canStockRequest || $canRekapOrder || $canPullingOrder)
+        @if($canDelivery || $canDeliveryNotes || $canKitchen || $canStockRequest || $canRekapOrder || $canPullingOrder)
         <div class="nav-section">Delivery & Dapur</div>
         @if($canDelivery)
         {!! $navItem(route('delivery-orders.index'), 'fas fa-truck', 'Delivery Order', request()->routeIs('delivery-orders.*')) !!}
+        @endif
+        @if($canDeliveryNotes)
         {!! $navItem(route('delivery-notes.index'), 'fas fa-map-marker-alt', 'Delivery Notes', request()->routeIs('delivery-notes.*')) !!}
         @endif
         @if($canStockRequest)
@@ -371,28 +391,51 @@
         @endif
         @endif
 
-        @if($canSync)
+        @if($canSync || $canOnlineReport || $canMopReport)
         <div class="nav-section">Integrasi</div>
+        @if($canSync)
         <a href="{{ route('sync.index') }}" class="nav-item {{ request()->routeIs('sync.*') ? 'active' : '' }}">
             <i class="fas fa-sync-alt nav-icon"></i>
             <span class="nav-label">Sync HPY</span>
             @if($pendingSync > 0)<span class="nav-badge">{{ $pendingSync }}</span>@endif
             <span class="nav-tooltip">Sync HPY</span>
         </a>
+        @endif
+        @if($canOnlineReport)
         {!! $navItem(route('online-report.index'), 'fas fa-cloud-download-alt', 'Laporan Online', request()->routeIs('online-report.*')) !!}
+        @endif
+        @if($canMopReport)
         {!! $navItem(route('mop-report.index'), 'fas fa-wallet', 'Laporan Pembayaran', request()->routeIs('mop-report.*')) !!}
         @endif
+        @endif
 
-        @if($role === 'admin')
+        @if($showSistem)
         <div class="nav-section">Sistem</div>
+        @if($canCoupons)
         {!! $navItem(route('coupons.index'),     'fas fa-ticket-alt',      'Kupon',            request()->routeIs('coupons.*')) !!}
+        @endif
+        @if($canUsers)
         {!! $navItem(route('users.index'),       'fas fa-users-cog',       'Manajemen User',   request()->routeIs('users.*')) !!}
-        {!! $navItem(route('roles.index'),       'fas fa-layer-group',     'Manajemen Role',   request()->routeIs('roles.*')) !!}
+        @endif
+        @if($canRoles)
+        {!! $navItem(route('roles.index'),       'fas fa-user-shield',     'Manajemen Role',   request()->routeIs('roles.*')) !!}
+        @endif
+        @if($canPermissions)
         {!! $navItem(route('permissions.index'), 'fas fa-shield-alt',      'Hak Akses',        request()->routeIs('permissions.*')) !!}
+        @endif
+        @if($canWarehouses)
         {!! $navItem(route('warehouses.index'),  'fas fa-warehouse',       'Warehouse',        request()->routeIs('warehouses.*')) !!}
+        @endif
+        @if($canSettings)
         {!! $navItem(route('settings.index'),    'fas fa-store',           'Pengaturan Toko',  request()->routeIs('settings.*')) !!}
+        @endif
+        @if($canBackup)
         {!! $navItem(route('backup.restore'),    'fas fa-upload',          'Restore Backup',   request()->routeIs('backup.*')) !!}
+        @endif
+        @if($canUpdate)
         {!! $navItem(route('update.index'),      'fas fa-download',        'Update Sistem',    request()->routeIs('update.*')) !!}
+        @endif
+        @if($canFactoryReset)
         <a href="{{ route('factory-reset.index') }}"
             class="nav-item {{ request()->routeIs('factory-reset.*') ? 'active' : '' }}"
             style="color:#EA4335">
@@ -400,6 +443,7 @@
             <span class="nav-label">Factory Reset</span>
             <span class="nav-tooltip">Factory Reset</span>
         </a>
+        @endif
         @endif
 
     </nav>

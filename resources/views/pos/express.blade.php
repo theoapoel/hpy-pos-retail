@@ -826,24 +826,27 @@ function addFromDropdown(el) {
 }
 
 let searchTimeout;
+// Cari ke server (bukan filter dari daftar terbatas), agar semua produk
+// ikut tercari — bukan hanya 50 pertama — dan urutan kata bebas.
+async function remoteSearch(term) {
+    try {
+        const resp = await fetch('{{ route("pos.search-products") }}?q=' + encodeURIComponent(term),
+            { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
+        const results = await resp.json();
+        openDropdown(Array.isArray(results) ? results : []);
+    } catch(e) { openDropdown([]); }
+}
+
 searchInput.addEventListener('input', function () {
     const term = this.value.trim();
     if (!term) { closeDropdown(); return; }
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-        const filtered = allProducts.filter(p =>
-            p.name.toLowerCase().includes(term.toLowerCase()) ||
-            (p.sku && p.sku.toLowerCase().includes(term.toLowerCase())) ||
-            (p.barcode && p.barcode.includes(term))
-        );
-        openDropdown(filtered);
-    }, 200);
+    searchTimeout = setTimeout(() => remoteSearch(term), 200);
 });
 
 searchInput.addEventListener('focus', function () {
-    if (this.value.trim()) openDropdown(
-        allProducts.filter(p => p.name.toLowerCase().includes(this.value.trim().toLowerCase()))
-    );
+    const term = this.value.trim();
+    if (term) remoteSearch(term);
 });
 
 document.addEventListener('click', e => {

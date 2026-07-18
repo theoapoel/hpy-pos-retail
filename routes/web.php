@@ -136,6 +136,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/checkout',             [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}',   [PosController::class, 'printReceipt'])->name('print');
+        Route::get('/print-kitchen/{transaction}', [PosController::class, 'printKitchen'])->name('print-kitchen');
         Route::get('/direct-print/{transaction}', [PosController::class, 'directPrint'])->name('direct-print');
     });
 
@@ -169,7 +170,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/stock/debug-sync', [StockController::class, 'debugSync'])->name('stock.debug-sync');
 
     // Stock Opname
-    Route::prefix('stock-opname')->name('stock-opname.')->middleware('permission:stock')->group(function () {
+    Route::prefix('stock-opname')->name('stock-opname.')->middleware('permission:stock_opname')->group(function () {
         Route::get('/',                         [StockOpnameController::class, 'index'])->name('index');
         Route::get('/create',                   [StockOpnameController::class, 'create'])->name('create');
         Route::post('/',                        [StockOpnameController::class, 'store'])->name('store');
@@ -220,7 +221,7 @@ Route::middleware('auth')->group(function () {
     });
 
     // Delivery Notes (Shipments)
-    Route::prefix('delivery-notes')->name('delivery-notes.')->middleware('permission:delivery')->group(function () {
+    Route::prefix('delivery-notes')->name('delivery-notes.')->middleware('permission:delivery_notes')->group(function () {
         Route::get('/',                                     [DeliveryNoteController::class, 'index'])->name('index');
         Route::post('/{shipment}/mark-delivered',           [DeliveryNoteController::class, 'markDelivered'])->name('mark-delivered');
         Route::post('/{shipment}/sync-dn',                  [DeliveryNoteController::class, 'syncDeliveryNote'])->name('sync-dn');
@@ -272,7 +273,7 @@ Route::middleware('auth')->group(function () {
     });
 
     // Laporan Online — data historis langsung dari ERPNext
-    Route::prefix('online-report')->name('online-report.')->middleware('permission:sync')->group(function () {
+    Route::prefix('online-report')->name('online-report.')->middleware('permission:online_report')->group(function () {
         Route::get('/',             [OnlineReportController::class, 'index'])->name('index');
         Route::post('/fetch',       [OnlineReportController::class, 'fetch'])->name('fetch');
         Route::get('/detail/{name}', [OnlineReportController::class, 'detail'])->name('detail')
@@ -280,7 +281,7 @@ Route::middleware('auth')->group(function () {
     });
 
     // Laporan Mode of Payment — matriks tanggal × metode pembayaran dari ERPNext
-    Route::prefix('mop-report')->name('mop-report.')->middleware('permission:sync')->group(function () {
+    Route::prefix('mop-report')->name('mop-report.')->middleware('permission:mop_report')->group(function () {
         Route::get('/',      [ModeOfPaymentReportController::class, 'index'])->name('index');
         Route::post('/fetch', [ModeOfPaymentReportController::class, 'fetch'])->name('fetch');
     });
@@ -307,60 +308,68 @@ Route::middleware('auth')->group(function () {
         });
     });
 
-    // ─── Admin only ──────────────────────────────────────────────────────────
-    Route::middleware('role:admin')->group(function () {
+    // ─── Sistem (dulu admin-only; kini per-modul di Hak Akses, admin selalu lolos) ─
 
-        // Kupon
+    // Kupon
+    Route::middleware('permission:coupons')->group(function () {
         Route::resource('coupons', CouponController::class)->only(['index', 'destroy']);
+    });
 
-        // Pengaturan Toko
+    // Pengaturan Toko
+    Route::middleware('permission:settings')->group(function () {
         Route::get('/settings',          [SettingsController::class, 'index'])->name('settings.index');
         Route::post('/settings',         [SettingsController::class, 'save'])->name('settings.save');
         Route::post('/settings/logo',    [SettingsController::class, 'uploadLogo'])->name('settings.logo.upload');
         Route::delete('/settings/logo',  [SettingsController::class, 'removeLogo'])->name('settings.logo.remove');
+    });
 
-        // Hak Akses
+    // Hak Akses
+    Route::middleware('permission:permissions')->group(function () {
         Route::get('/permissions',  [PermissionController::class, 'index'])->name('permissions.index');
         Route::post('/permissions', [PermissionController::class, 'save'])->name('permissions.save');
+    });
 
-        // Backup & Restore
-        Route::prefix('backup')->name('backup.')->group(function () {
-            Route::get('/download', [BackupController::class, 'download'])->name('download');
-            Route::get('/restore',  [BackupController::class, 'restorePage'])->name('restore');
-            Route::post('/restore', [BackupController::class, 'restore'])->name('restore.post');
-        });
+    // Backup & Restore
+    Route::prefix('backup')->name('backup.')->middleware('permission:backup')->group(function () {
+        Route::get('/download', [BackupController::class, 'download'])->name('download');
+        Route::get('/restore',  [BackupController::class, 'restorePage'])->name('restore');
+        Route::post('/restore', [BackupController::class, 'restore'])->name('restore.post');
+    });
 
-        // Update Sistem
-        Route::prefix('update')->name('update.')->group(function () {
-            Route::get('/',      [UpdateController::class, 'index'])->name('index');
-            Route::post('/check', [UpdateController::class, 'checkLatest'])->name('check');
-            Route::post('/run',  [UpdateController::class, 'run'])->name('run');
-        });
+    // Update Sistem
+    Route::prefix('update')->name('update.')->middleware('permission:update')->group(function () {
+        Route::get('/',      [UpdateController::class, 'index'])->name('index');
+        Route::post('/check', [UpdateController::class, 'checkLatest'])->name('check');
+        Route::post('/run',  [UpdateController::class, 'run'])->name('run');
+    });
 
-        // Factory Reset
-        Route::prefix('factory-reset')->name('factory-reset.')->group(function () {
-            Route::get('/',         [FactoryResetController::class, 'index'])->name('index');
-            Route::get('/counts',   [FactoryResetController::class, 'counts'])->name('counts');
-            Route::post('/verify',  [FactoryResetController::class, 'verify'])->name('verify');
-            Route::post('/execute', [FactoryResetController::class, 'execute'])->name('execute');
-        });
+    // Factory Reset
+    Route::prefix('factory-reset')->name('factory-reset.')->middleware('permission:factory_reset')->group(function () {
+        Route::get('/',         [FactoryResetController::class, 'index'])->name('index');
+        Route::get('/counts',   [FactoryResetController::class, 'counts'])->name('counts');
+        Route::post('/verify',  [FactoryResetController::class, 'verify'])->name('verify');
+        Route::post('/execute', [FactoryResetController::class, 'execute'])->name('execute');
+    });
 
-        // Manajemen User
+    // Manajemen User
+    Route::middleware('permission:users')->group(function () {
         Route::post('/users/{user}/toggle-active', [UserController::class, 'toggleActive'])->name('users.toggle-active');
         Route::resource('users', UserController::class)->except(['show']);
+    });
 
-        // Manajemen Role
+    // Manajemen Role
+    Route::middleware('permission:roles')->group(function () {
         Route::post('/roles/slug', [RoleController::class, 'generateSlug'])->name('roles.slug');
         Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
+    });
 
-        // Warehouse Assignment
-        Route::prefix('warehouses')->name('warehouses.')->group(function () {
-            Route::get('/',                          [WarehouseController::class, 'index'])->name('index');
-            Route::post('/pull',                     [WarehouseController::class, 'pull'])->name('pull');
-            Route::post('/{warehouse}/toggle',       [WarehouseController::class, 'toggle'])->name('toggle');
-            Route::post('/{warehouse}/set-default',  [WarehouseController::class, 'setDefault'])->name('set-default');
-            Route::post('/{warehouse}/set-transit',  [WarehouseController::class, 'setTransit'])->name('set-transit');
-            Route::post('/{warehouse}/clear-flag',   [WarehouseController::class, 'clearFlag'])->name('clear-flag');
-        });
+    // Warehouse Assignment
+    Route::prefix('warehouses')->name('warehouses.')->middleware('permission:warehouses')->group(function () {
+        Route::get('/',                          [WarehouseController::class, 'index'])->name('index');
+        Route::post('/pull',                     [WarehouseController::class, 'pull'])->name('pull');
+        Route::post('/{warehouse}/toggle',       [WarehouseController::class, 'toggle'])->name('toggle');
+        Route::post('/{warehouse}/set-default',  [WarehouseController::class, 'setDefault'])->name('set-default');
+        Route::post('/{warehouse}/set-transit',  [WarehouseController::class, 'setTransit'])->name('set-transit');
+        Route::post('/{warehouse}/clear-flag',   [WarehouseController::class, 'clearFlag'])->name('clear-flag');
     });
 });
