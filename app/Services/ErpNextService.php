@@ -324,6 +324,15 @@ class ErpNextService
         $walkin = Setting::get('erpnext_walkin_customer', '');
         $payload['customer'] = $erpCustomer ?: $walkin;
 
+        // Set `owner` dokumen ke kasir yang login (bukan user API key). Tanpa ini, ERP
+        // mencatat semua invoice atas nama user API integrasi. email user lokal = email
+        // ERP User (hasil sync dari POS Profile), dan Frappe mempertahankan owner yang
+        // dikirim saat insert (`if not self.owner: self.owner = session.user`).
+        $cashierEmail = $transaction->user?->email;
+        if ($cashierEmail) {
+            $payload['owner'] = $cashierEmail;
+        }
+
         if ($priceList) {
             $payload['selling_price_list'] = $priceList;
         }
