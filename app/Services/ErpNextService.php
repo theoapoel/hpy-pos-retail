@@ -259,6 +259,10 @@ class ErpNextService
             ];
         })->toArray();
 
+        $total        = (float) $transaction->total;
+        $paidAmount   = (float) ($transaction->paid_amount ?? 0);
+        $changeAmount = max(0, (float) ($transaction->change_amount ?? 0));
+
         $payments = [];
         if ($transaction->payment_method === 'mixed' && $transaction->payment_details) {
             foreach ($transaction->payment_details as $method => $amount) {
@@ -267,11 +271,19 @@ class ErpNextService
                     'amount' => (float) $amount,
                 ];
             }
+            // paid_amount = jumlah semua metode; mixed diasumsikan pas (tanpa kembalian)
+            $docPaidAmount   = array_sum(array_column($payments, 'amount'));
+            $docChangeAmount = 0.0;
         } else {
+            // Kirim jumlah yang benar-benar diterima (tunai bisa termasuk kembalian),
+            // fallback ke total jika paid_amount tidak wajar (< total).
+            $tendered = $paidAmount >= $total ? $paidAmount : $total;
             $payments[] = [
                 'mode_of_payment' => $this->mapPaymentMethod($transaction->payment_method),
-                'amount' => (float) $transaction->total,
+                'amount' => $tendered,
             ];
+            $docPaidAmount   = $tendered;
+            $docChangeAmount = $changeAmount;
         }
 
         $defaultWarehouse = Warehouse::getDefault()?->name;
@@ -313,6 +325,8 @@ class ErpNextService
             'set_posting_time' => 1,
             'items' => $items,
             'payments' => $payments,
+            'paid_amount' => $docPaidAmount,
+            'change_amount' => $docChangeAmount,
             'apply_discount_on' => 'Net Total',
             'additional_discount_percentage' => $erpDiscPct,
             'discount_amount' => $erpDiscAmt,
@@ -1631,7 +1645,8 @@ class ErpNextService
         string $dateFrom,
         string $dateTo,
         string $posProfile = '',
-        int $maxRecords = 1000
+        int $maxRecords = 1000,
+        string $owner = ''
     ): array {
         if (empty($this->baseUrl)) {
             return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
@@ -1653,6 +1668,11 @@ class ErpNextService
 
             if ($posProfile) {
                 $filters[] = ['pos_profile', '=', $posProfile];
+            }
+
+            // Filter per kasir (owner dokumen = email ERP User kasir yang membuat invoice).
+            if ($owner) {
+                $filters[] = ['owner', '=', $owner];
             }
 
             $filtersJson = json_encode($filters);
@@ -1803,10 +1823,12 @@ class ErpNextService
 
         $fields = json_encode([
             'posting_date',
+            'owner',
             '`tabSales Invoice Payment`.mode_of_payment',
             '`tabSales Invoice Payment`.amount',
         ]);
         $matrix = []; // date => mode => ['count'=>int, 'total'=>float]
+        $byCashier = []; // owner => mode => ['count'=>int, 'total'=>float]
         $modeTotals = []; // mode => total (untuk sorting kolom)
 
         try {
@@ -1849,6 +1871,13 @@ class ErpNextService
                         $matrix[$date][$mode]['count']++;
                         $matrix[$date][$mode]['total'] += $amount;
 
+                        $owner = $row['owner'] ?? 'Lainnya';
+                        if (! isset($byCashier[$owner][$mode])) {
+                            $byCashier[$owner][$mode] = ['count' => 0, 'total' => 0.0];
+                        }
+                        $byCashier[$owner][$mode]['count']++;
+                        $byCashier[$owner][$mode]['total'] += $amount;
+
                         $modeTotals[$mode] = ($modeTotals[$mode] ?? 0) + $amount;
                     }
 
@@ -1859,8 +1888,9 @@ class ErpNextService
             arsort($modeTotals);
             $modes = array_keys($modeTotals);
             ksort($matrix);
+            ksort($byCashier);
 
-            return ['success' => true, 'data' => ['modes' => $modes, 'matrix' => $matrix]];
+            return ['success' => true, 'data' => ['modes' => $modes, 'matrix' => $matrix, 'by_cashier' => $byCashier]];
 
         } catch (RequestException $e) {
             return ['success' => false, 'error' => $this->extractError($e)];

@@ -7,6 +7,11 @@
         <div class="page-title"><i class="fas fa-wallet text-blue"></i> Laporan Mode of Payment</div>
         <div class="page-subtitle">Rekap pembayaran per hari &times; metode, langsung dari ERP HPY</div>
     </div>
+    @if(!empty($scopedToUser) && $scopedToUser)
+        <div class="badge" style="align-self:center;background:var(--primary-light,#e0e7ff);color:var(--primary,#4f46e5);padding:6px 12px;border-radius:20px;font-weight:700;font-size:12px">
+            <i class="fas fa-user"></i> Hanya transaksi Anda ({{ $scopedUserName }})
+        </div>
+    @endif
 </div>
 
 {{-- Filter --}}
@@ -94,6 +99,20 @@
                     <thead id="matrixHead"></thead>
                     <tbody id="matrixBody"></tbody>
                     <tfoot id="matrixFoot"></tfoot>
+                </table>
+            </div>
+        </div>
+
+        {{-- Rekap per Kasir --}}
+        <div class="card" style="margin-top:20px">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-user-tie text-blue"></i> Rekap per Kasir</div>
+            </div>
+            <div class="table-wrap">
+                <table id="cashierTable">
+                    <thead id="cashierHead"></thead>
+                    <tbody id="cashierBody"></tbody>
+                    <tfoot id="cashierFoot"></tfoot>
                 </table>
             </div>
         </div>
@@ -200,6 +219,7 @@ function renderResult(json) {
 
     renderSummary(json);
     renderMatrix(json);
+    renderCashier(json);
 }
 
 function renderSummary(json) {
@@ -261,6 +281,45 @@ function renderMatrix(json) {
     document.getElementById('matrixFoot').innerHTML = foot;
 }
 
+function renderCashier(json) {
+    const modes = json.modes;
+    const rows  = json.cashier_rows || [];
+    const per   = json.totals.per_mode;
+
+    // Header
+    let head = '<tr><th style="position:sticky;left:0;background:inherit">Kasir</th><th style="text-align:right">Trx</th>';
+    modes.forEach((m, i) => {
+        head += `<th style="text-align:right">
+            <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${PAY_COLORS[i % PAY_COLORS.length]};margin-right:5px"></span>${m}</th>`;
+    });
+    head += '<th style="text-align:right">Total</th></tr>';
+    document.getElementById('cashierHead').innerHTML = head;
+
+    // Body
+    let body = '';
+    rows.forEach(r => {
+        body += `<tr><td style="position:sticky;left:0;background:#fff"><span class="font-medium">${r.cashier}</span></td>`;
+        body += `<td style="text-align:right" class="text-muted">${Number(r.count).toLocaleString('id-ID')}</td>`;
+        modes.forEach(m => {
+            const c = r.cells[m] || { total: 0, count: 0 };
+            body += `<td style="text-align:right" class="money">${c.total ? fmt(c.total) : '<span class="text-muted">-</span>'}</td>`;
+        });
+        body += `<td style="text-align:right" class="money font-medium">${fmt(r.total)}</td></tr>`;
+    });
+    document.getElementById('cashierBody').innerHTML = body ||
+        `<tr><td colspan="${modes.length + 3}" style="text-align:center;padding:16px" class="text-muted">Tidak ada data kasir</td></tr>`;
+
+    // Footer
+    let foot = '<tr style="border-top:2px solid #DADCE0;font-weight:600">';
+    foot += '<td style="position:sticky;left:0;background:#F8F9FA">Total</td>';
+    foot += `<td style="text-align:right">${Number(json.totals.grand_count).toLocaleString('id-ID')}</td>`;
+    modes.forEach(m => {
+        foot += `<td style="text-align:right" class="money">${fmt((per[m] || {}).total)}</td>`;
+    });
+    foot += `<td style="text-align:right" class="money text-blue">${fmt(json.totals.grand_total)}</td></tr>`;
+    document.getElementById('cashierFoot').innerHTML = foot;
+}
+
 function exportCsv() {
     if (!lastData) return;
     const modes = lastData.modes;
@@ -277,6 +336,17 @@ function exportCsv() {
     const totalRow = ['Total', lastData.totals.grand_count,
         ...modes.map(m => (per[m] || {}).total || 0), lastData.totals.grand_total];
     lines.push(totalRow.map(esc).join(sep));
+
+    // Rekap per Kasir
+    const cashierRows = lastData.cashier_rows || [];
+    if (cashierRows.length) {
+        lines.push('');
+        lines.push(['Kasir', 'Transaksi', ...modes, 'Total'].map(esc).join(sep));
+        cashierRows.forEach(r => {
+            const cells = modes.map(m => (r.cells[m] || {}).total || 0);
+            lines.push([r.cashier, r.count, ...cells, r.total].map(esc).join(sep));
+        });
+    }
 
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
