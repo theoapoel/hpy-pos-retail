@@ -60,42 +60,73 @@
             @endif
         </div>
 
-        {{-- Konversi --}}
-        <div class="card">
+        {{-- TABEL 1 — Issue --}}
+        <div class="card" style="margin-bottom:16px">
             <div class="card-header">
-                <div class="card-title"><i class="fas fa-scissors text-blue"></i> Konversi Item</div>
+                <div class="card-title"><i class="fas fa-arrow-up-from-bracket text-red"></i> Item Dibuang (Issue)</div>
+                <span class="badge badge-red">{{ $slice->issues->count() }} item</span>
             </div>
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
                             <th>#</th>
-                            <th>Item Sumber</th>
+                            <th>Item</th>
                             <th style="text-align:right">Qty</th>
-                            <th></th>
-                            <th>Jadi Item</th>
+                            <th>Gudang Asal</th>
+                            <th>Catatan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @forelse($slice->issues as $i => $line)
+                    <tr>
+                        <td class="text-muted">{{ $i + 1 }}</td>
+                        <td>
+                            <div class="font-medium">{{ $line->item_name }}</div>
+                            <div class="text-muted" style="font-size:11px;font-family:monospace">{{ $line->item_code ?: '—' }}</div>
+                        </td>
+                        <td style="text-align:right;font-weight:700">{{ number_format($line->qty, 2) }} <span class="text-muted" style="font-weight:400;font-size:11px">{{ $line->uom }}</span></td>
+                        <td style="font-size:12px">{{ $line->warehouse ?: 'Gudang default' }}</td>
+                        <td class="text-muted" style="font-size:12px">{{ $line->notes ?: '—' }}</td>
+                    </tr>
+                    @empty
+                    <tr><td colspan="5" class="text-muted" style="text-align:center;padding:16px">Tidak ada item.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {{-- TABEL 2 — Receipt --}}
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-arrow-down-to-bracket text-green"></i> Jadi Item (Receipt)</div>
+                <span class="badge badge-green">{{ $slice->receipts->count() }} item</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Item</th>
                             <th style="text-align:right">Qty</th>
                             <th>Catatan</th>
                         </tr>
                     </thead>
                     <tbody>
-                    @foreach($slice->items as $i => $item)
+                    @forelse($slice->receipts as $i => $line)
                     <tr>
                         <td class="text-muted">{{ $i + 1 }}</td>
                         <td>
-                            <div class="font-medium">{{ $item->source_item_name }}</div>
-                            <div class="text-muted" style="font-size:11px;font-family:monospace">{{ $item->source_item_code ?: '—' }}</div>
+                            <div class="font-medium">{{ $line->item_name }}</div>
+                            <div class="text-muted" style="font-size:11px;font-family:monospace">{{ $line->item_code ?: '—' }}</div>
                         </td>
-                        <td style="text-align:right;font-weight:700">{{ number_format($item->source_qty, 2) }} <span class="text-muted" style="font-weight:400;font-size:11px">{{ $item->source_uom }}</span></td>
-                        <td style="text-align:center;color:var(--text3)"><i class="fas fa-arrow-right"></i></td>
-                        <td>
-                            <div class="font-medium">{{ $item->target_item_name }}</div>
-                            <div class="text-muted" style="font-size:11px;font-family:monospace">{{ $item->target_item_code ?: '—' }}</div>
-                        </td>
-                        <td style="text-align:right;font-weight:700">{{ number_format($item->target_qty, 2) }} <span class="text-muted" style="font-weight:400;font-size:11px">{{ $item->target_uom }}</span></td>
-                        <td class="text-muted" style="font-size:12px">{{ $item->notes ?: '—' }}</td>
+                        <td style="text-align:right;font-weight:700">{{ number_format($line->qty, 2) }} <span class="text-muted" style="font-weight:400;font-size:11px">{{ $line->uom }}</span></td>
+                        <td class="text-muted" style="font-size:12px">{{ $line->notes ?: '—' }}</td>
                     </tr>
-                    @endforeach
+                    @empty
+                    <tr><td colspan="4" class="text-muted" style="text-align:center;padding:16px">Tidak ada item.</td></tr>
+                    @endforelse
                     </tbody>
                 </table>
             </div>

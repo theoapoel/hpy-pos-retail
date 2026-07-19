@@ -69,7 +69,9 @@
                     <div class="text-muted" style="font-size:11px">{{ $slice->created_at->isoFormat('D MMM Y HH:mm') }}</div>
                 </td>
                 <td>
-                    <span class="badge badge-blue">{{ $slice->items_count }} konversi</span>
+                    <span class="badge badge-red">{{ $slice->issues_count }} keluar</span>
+                    <i class="fas fa-arrow-right text-muted" style="font-size:10px;margin:0 2px"></i>
+                    <span class="badge badge-green">{{ $slice->receipts_count }} masuk</span>
                 </td>
                 <td>
                     @php $sc = ['draft'=>'badge-gray','submitted'=>'badge-blue','cancelled'=>'badge-red'][$slice->status] ?? 'badge-gray'; @endphp

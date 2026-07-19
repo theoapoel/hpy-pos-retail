@@ -24,9 +24,19 @@ class Slice extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function items()
+    public function lines()
     {
-        return $this->hasMany(SliceItem::class);
+        return $this->hasMany(SliceLine::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function issues()
+    {
+        return $this->lines()->where('line_type', 'issue');
+    }
+
+    public function receipts()
+    {
+        return $this->lines()->where('line_type', 'receipt');
     }
 
     public static function generateSliceNo(): string

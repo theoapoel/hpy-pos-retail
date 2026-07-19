@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Product;
 use App\Models\Slice;
-use App\Models\SliceItem;
+use App\Models\SliceLine;
+use App\Models\Warehouse;
 use App\Services\ErpNextService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +14,7 @@ class SliceController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Slice::with('creator')->withCount('items')->orderByDesc('id');
+        $query = Slice::with('creator')->withCount(['issues', 'receipts'])->orderByDesc('id');
 
         if ($request->status) {
             $query->where('status', $request->status);
@@ -38,19 +39,27 @@ class SliceController extends Controller
         $products = Product::where('is_active', true)->inItemGroups('slice_item_groups')->orderBy('name')
             ->get(['id', 'name', 'sku', 'erp_item_code', 'unit']);
 
-        return view('slices.create', compact('products'));
+        $warehouses = Warehouse::activeList();
+        $defaultWarehouse = Warehouse::getDefault()?->name;
+
+        return view('slices.create', compact('products', 'warehouses', 'defaultWarehouse'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
             'notes' => 'nullable|string|max:1000',
-            'items' => 'required|array|min:1',
-            'items.*.source_product_id' => 'required|integer|exists:products,id',
-            'items.*.source_qty' => 'required|numeric|min:0.01',
-            'items.*.target_product_id' => 'required|integer|exists:products,id',
-            'items.*.target_qty' => 'required|numeric|min:0.01',
-            'items.*.notes' => 'nullable|string|max:255',
+            'issues' => 'required|array|min:1',
+            'issues.*.product_id' => 'required|integer|exists:products,id',
+            'issues.*.qty' => 'required|numeric|min:0.01',
+            'issues.*.warehouse' => 'required|string|max:140',
+            'issues.*.notes' => 'nullable|string|max:255',
+            'receipts' => 'required|array|min:1',
+            'receipts.*.product_id' => 'required|integer|exists:products,id',
+            'receipts.*.qty' => 'required|numeric|min:0.01',
+            'receipts.*.notes' => 'nullable|string|max:255',
+        ], [
+            'issues.*.warehouse.required' => 'Gudang asal wajib dipilih untuk setiap baris item yang dibuang.',
         ]);
 
         $slice = DB::transaction(function () use ($request) {
@@ -61,36 +70,37 @@ class SliceController extends Controller
                 'notes' => $request->notes,
             ]);
 
-            foreach ($request->items as $row) {
-                $source = Product::find($row['source_product_id']);
-                $target = Product::find($row['target_product_id']);
+            $build = function (array $rows, string $type, bool $withWarehouse) use ($slice) {
+                foreach (array_values($rows) as $i => $row) {
+                    $product = Product::find($row['product_id']);
+                    SliceLine::create([
+                        'slice_id' => $slice->id,
+                        'line_type' => $type,
+                        'sort_order' => $i,
+                        'product_id' => $product->id,
+                        'item_name' => $product->name,
+                        'item_code' => $product->erp_item_code ?: $product->sku,
+                        'qty' => $row['qty'],
+                        'uom' => $product->unit ?: 'Nos',
+                        'warehouse' => $withWarehouse ? ($row['warehouse'] ?? null ?: null) : null,
+                        'notes' => $row['notes'] ?? null,
+                    ]);
+                }
+            };
 
-                SliceItem::create([
-                    'slice_id' => $slice->id,
-                    'source_product_id' => $source->id,
-                    'source_item_name' => $source->name,
-                    'source_item_code' => $source->erp_item_code ?: $source->sku,
-                    'source_qty' => $row['source_qty'],
-                    'source_uom' => $source->unit ?: 'Nos',
-                    'target_product_id' => $target->id,
-                    'target_item_name' => $target->name,
-                    'target_item_code' => $target->erp_item_code ?: $target->sku,
-                    'target_qty' => $row['target_qty'],
-                    'target_uom' => $target->unit ?: 'Nos',
-                    'notes' => $row['notes'] ?? null,
-                ]);
-            }
+            $build($request->issues, 'issue', true);
+            $build($request->receipts, 'receipt', false);
 
             return $slice;
         });
 
         return redirect()->route('slices.show', $slice)
-            ->with('success', 'Slice '.$slice->slice_no.' berhasil dibuat.');
+            ->with('success', 'Repack '.$slice->slice_no.' berhasil dibuat.');
     }
 
     public function show(Slice $slice)
     {
-        $slice->load('creator', 'items');
+        $slice->load('creator', 'issues', 'receipts');
 
         return view('slices.show', ['slice' => $slice]);
     }
@@ -101,7 +111,7 @@ class SliceController extends Controller
             return back()->with('error', 'Hanya draft yang bisa disubmit.');
         }
 
-        $slice->load('items');
+        $slice->load('issues', 'receipts');
 
         $erp = new ErpNextService;
         if (! $erp->isConfigured()) {
@@ -163,7 +173,7 @@ class SliceController extends Controller
             return response()->json(['success' => false, 'error' => 'Sudah pernah disync.']);
         }
 
-        $slice->load('items');
+        $slice->load('issues', 'receipts');
         $erp = new ErpNextService;
         $result = $erp->createRepackEntry($slice);
 

@@ -5,8 +5,10 @@
 <style>
 .item-row { animation: fadeIn .2s ease; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
-.slice-grid { display:grid; grid-template-columns:1.8fr 80px 26px 1.8fr 80px 1fr 28px; gap:8px; align-items:center; margin-bottom:8px; }
-.slice-arrow { text-align:center; color:var(--text3); font-size:14px; }
+
+.issue-grid   { display:grid; grid-template-columns:1.8fr 90px 1.3fr 1fr 28px; gap:8px; align-items:center; margin-bottom:8px; }
+.receipt-grid { display:grid; grid-template-columns:1.8fr 90px 1fr 28px; gap:8px; align-items:center; margin-bottom:8px; }
+.grid-head { font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; margin-bottom:0; }
 
 .product-search-wrap { position:relative; }
 .product-dropdown {
@@ -19,7 +21,7 @@
 .product-dropdown-item:hover, .product-dropdown-item.active { background:var(--surface2); }
 .product-dropdown-item .pname { font-weight:500; color:var(--text); }
 .product-dropdown-item .pmeta { font-size:11px; color:var(--text3); margin-top:1px; }
-.product-search.invalid { border-color:var(--red); }
+.product-search.invalid, select.invalid { border-color:var(--red); }
 </style>
 @endpush
 
@@ -27,7 +29,7 @@
 <div class="page-header">
     <div>
         <div class="page-title"><i class="fas fa-scissors text-blue"></i> Buat Repack</div>
-        <div class="page-subtitle">Konversi qty item — item sumber diissue, item hasil diterima di ERP HPY (Repack)</div>
+        <div class="page-subtitle">Tabel 1: item yang dibuang (issue) · Tabel 2: item hasil (receipt) — diproses sebagai Repack di ERP HPY</div>
     </div>
     <a href="{{ route('slices.index') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Kembali</a>
 </div>
@@ -37,19 +39,35 @@
 <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start">
 
     <div>
-        {{-- Konversi --}}
-        <div class="card">
+        {{-- TABEL 1 — ISSUE --}}
+        <div class="card" style="margin-bottom:16px">
             <div class="card-header">
-                <div class="card-title"><i class="fas fa-scissors text-blue"></i> Konversi Item</div>
-                <button type="button" onclick="addItem()" class="btn btn-outline btn-sm">
+                <div class="card-title"><i class="fas fa-arrow-up-from-bracket text-red"></i> Item Dibuang (Issue)</div>
+                <button type="button" onclick="addIssue()" class="btn btn-outline btn-sm">
                     <i class="fas fa-plus"></i> Tambah Baris
                 </button>
             </div>
             <div class="card-body" style="padding:0">
-                <div class="slice-grid" style="padding:10px 16px;background:var(--surface2);font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">
-                    <span>Item Sumber (dipotong)</span><span>Qty</span><span></span><span>Jadi Item</span><span>Qty</span><span>Catatan</span><span></span>
+                <div class="issue-grid grid-head" style="padding:10px 16px;background:var(--surface2)">
+                    <span>Item</span><span>Qty</span><span>Gudang Asal</span><span>Catatan</span><span></span>
                 </div>
-                <div id="itemsContainer" style="padding:12px 16px"></div>
+                <div id="issuesContainer" style="padding:12px 16px"></div>
+            </div>
+        </div>
+
+        {{-- TABEL 2 — RECEIPT --}}
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-arrow-down-to-bracket text-green"></i> Jadi Item (Receipt)</div>
+                <button type="button" onclick="addReceipt()" class="btn btn-outline btn-sm">
+                    <i class="fas fa-plus"></i> Tambah Baris
+                </button>
+            </div>
+            <div class="card-body" style="padding:0">
+                <div class="receipt-grid grid-head" style="padding:10px 16px;background:var(--surface2)">
+                    <span>Item</span><span>Qty</span><span>Catatan</span><span></span>
+                </div>
+                <div id="receiptsContainer" style="padding:12px 16px"></div>
             </div>
         </div>
     </div>
@@ -65,13 +83,13 @@
                         placeholder="Keterangan (opsional)" value="{{ old('notes') }}">
                 </div>
                 <div id="summaryContent" style="font-size:13px;color:var(--text3)">
-                    Tambahkan konversi terlebih dahulu.
+                    Lengkapi item issue &amp; receipt.
                 </div>
             </div>
         </div>
         <div class="alert alert-info" style="margin-bottom:12px;font-size:13px">
             <i class="fas fa-info-circle"></i>
-            Setelah disimpan, klik <strong>Submit ke ERP</strong> untuk membentuk Stock Entry (Repack): item sumber keluar, item hasil masuk.
+            Semua item di tabel <strong>Issue</strong> keluar stok; semua item di tabel <strong>Receipt</strong> masuk stok. Setelah disimpan, klik <strong>Submit ke ERP</strong>.
         </div>
         <button type="submit" class="btn btn-primary w-full btn-lg" style="border-radius:10px">
             <i class="fas fa-save"></i> Simpan sebagai Draft
@@ -81,55 +99,76 @@
 </form>
 
 <script id="productData" type="application/json">@json($products)</script>
+<script id="warehouseData" type="application/json">@json($warehouses->map(fn($w) => ['name' => $w->name, 'label' => $w->display_name]))</script>
 @endsection
 
 @push('scripts')
 <script>
-const products = JSON.parse(document.getElementById('productData').textContent);
-let itemCount  = 0;
+const products   = JSON.parse(document.getElementById('productData').textContent);
+const warehouses = JSON.parse(document.getElementById('warehouseData').textContent);
+const defaultWh  = @json($defaultWarehouse);
+let rowCount = 0;
 
-function productField(idx, role) {
-    // role = 'source' | 'target'
+function warehouseOptions() {
+    const placeholder = `<option value="" disabled selected>— Pilih gudang —</option>`;
+    return placeholder + warehouses.map(w => `<option value="${w.name}">${w.label || w.name}</option>`).join('');
+}
+
+// section = 'issue' | 'receipt'
+function productField(id, section, nameAttr) {
     return `
         <div class="product-search-wrap">
-            <input type="text" class="form-control product-search ${role}-search" style="font-size:13px"
+            <input type="text" class="form-control ${section}-search product-search" style="font-size:13px"
                 placeholder="Ketik nama / SKU..." autocomplete="off"
-                oninput="onSearch(this,${idx},'${role}')"
-                onfocus="onSearch(this,${idx},'${role}')"
-                onblur="setTimeout(() => closeDropdown(${idx},'${role}'), 150)">
-            <input type="hidden" name="items[${idx}][${role}_product_id]" class="${role}-id" value="">
-            <div class="product-dropdown" id="dropdown_${role}_${idx}"></div>
+                oninput="onSearch(this,'${id}','${section}')"
+                onfocus="onSearch(this,'${id}','${section}')"
+                onblur="setTimeout(() => closeDropdown('${id}','${section}'), 150)">
+            <input type="hidden" name="${nameAttr}" class="${section}-id" value="">
+            <div class="product-dropdown" id="dropdown_${section}_${id}"></div>
         </div>`;
 }
 
-function addItem() {
-    const idx = itemCount++;
+function addIssue() {
+    const i = rowCount++;
     const row = document.createElement('div');
-    row.className = 'item-row slice-grid';
+    row.className = 'item-row issue-grid';
     row.innerHTML = `
-        ${productField(idx, 'source')}
-        <input type="number" name="items[${idx}][source_qty]" class="form-control source-qty" value="1"
+        ${productField('i'+i, 'issue', `issues[${i}][product_id]`)}
+        <input type="number" name="issues[${i}][qty]" class="form-control issue-qty" value="1"
             min="0.01" step="0.01" style="text-align:right;font-size:13px" required oninput="updateSummary()">
-        <div class="slice-arrow"><i class="fas fa-arrow-right"></i></div>
-        ${productField(idx, 'target')}
-        <input type="number" name="items[${idx}][target_qty]" class="form-control target-qty" value="1"
-            min="0.01" step="0.01" style="text-align:right;font-size:13px" required oninput="updateSummary()">
-        <input type="text" name="items[${idx}][notes]" class="form-control" placeholder="Catatan..." style="font-size:13px">
+        <select name="issues[${i}][warehouse]" class="form-control issue-warehouse" style="font-size:12px" required
+            onchange="this.classList.remove('invalid'); updateSummary()">
+            ${warehouseOptions()}
+        </select>
+        <input type="text" name="issues[${i}][notes]" class="form-control" placeholder="Catatan..." style="font-size:13px">
         <button type="button" onclick="this.closest('.item-row').remove(); updateSummary()"
             style="border:none;background:none;cursor:pointer;color:var(--red);font-size:16px">
             <i class="fas fa-times"></i>
-        </button>
-    `;
-    document.getElementById('itemsContainer').appendChild(row);
+        </button>`;
+    document.getElementById('issuesContainer').appendChild(row);
 }
 
-function onSearch(input, idx, role) {
-    const row = input.closest('.item-row');
-    const dropdown = document.getElementById(`dropdown_${role}_${idx}`);
+function addReceipt() {
+    const i = rowCount++;
+    const row = document.createElement('div');
+    row.className = 'item-row receipt-grid';
+    row.innerHTML = `
+        ${productField('r'+i, 'receipt', `receipts[${i}][product_id]`)}
+        <input type="number" name="receipts[${i}][qty]" class="form-control receipt-qty" value="1"
+            min="0.01" step="0.01" style="text-align:right;font-size:13px" required oninput="updateSummary()">
+        <input type="text" name="receipts[${i}][notes]" class="form-control" placeholder="Catatan..." style="font-size:13px">
+        <button type="button" onclick="this.closest('.item-row').remove(); updateSummary()"
+            style="border:none;background:none;cursor:pointer;color:var(--red);font-size:16px">
+            <i class="fas fa-times"></i>
+        </button>`;
+    document.getElementById('receiptsContainer').appendChild(row);
+}
+
+function onSearch(input, id, section) {
+    const dropdown = document.getElementById(`dropdown_${section}_${id}`);
     const q = input.value.trim().toLowerCase();
 
-    // Mengetik ulang membatalkan pilihan sampai user memilih lagi
-    row.querySelector(`.${role}-id`).value = '';
+    input.parentElement.querySelector(`.${section}-id`).value = '';
     input.classList.remove('invalid');
 
     const filtered = (q
@@ -139,7 +178,7 @@ function onSearch(input, idx, role) {
 
     dropdown.innerHTML = filtered.length
         ? filtered.map(p => `
-            <div class="product-dropdown-item" onmousedown="selectProduct(event,${idx},'${role}',${p.id})">
+            <div class="product-dropdown-item" onmousedown="selectProduct(event,'${id}','${section}',${p.id})">
                 <div class="pname">${p.name}</div>
                 <div class="pmeta">${p.sku ? 'SKU: ' + p.sku + ' · ' : ''}${p.unit || 'Nos'}</div>
             </div>`).join('')
@@ -148,74 +187,92 @@ function onSearch(input, idx, role) {
     dropdown.classList.add('open');
 }
 
-function selectProduct(e, idx, role, pid) {
+function selectProduct(e, id, section, pid) {
     e.preventDefault();
     const product = products.find(p => p.id == pid);
     if (!product) return;
 
-    const row = document.getElementById(`dropdown_${role}_${idx}`).closest('.item-row');
-    const search = row.querySelector(`.${role}-search`);
+    const wrap   = document.getElementById(`dropdown_${section}_${id}`).parentElement;
+    const search = wrap.querySelector(`.${section}-search`);
     search.value = product.name;
     search.classList.remove('invalid');
-    row.querySelector(`.${role}-id`).value = product.id;
+    wrap.querySelector(`.${section}-id`).value = product.id;
 
-    closeDropdown(idx, role);
+    closeDropdown(id, section);
     updateSummary();
 }
 
-function closeDropdown(idx, role) {
-    document.getElementById(`dropdown_${role}_${idx}`)?.classList.remove('open');
+function closeDropdown(id, section) {
+    document.getElementById(`dropdown_${section}_${id}`)?.classList.remove('open');
+}
+
+function collect(section) {
+    const rows = document.querySelectorAll(`.${section}-grid.item-row`);
+    const out = [];
+    rows.forEach(row => {
+        const id = row.querySelector(`.${section}-id`)?.value;
+        if (!id) return;
+        out.push({
+            name: row.querySelector(`.${section}-search`)?.value || '—',
+            qty: parseFloat(row.querySelector(`.${section}-qty`)?.value || '0').toLocaleString('id-ID'),
+        });
+    });
+    return out;
 }
 
 function updateSummary() {
-    const rows = document.querySelectorAll('.item-row');
-    let html = '';
-    let count = 0;
-    rows.forEach(row => {
-        const sid = row.querySelector('.source-id')?.value;
-        const tid = row.querySelector('.target-id')?.value;
-        if (!sid || !tid) return;
-        count++;
-        const sName = row.querySelector('.source-search')?.value || '—';
-        const tName = row.querySelector('.target-search')?.value || '—';
-        const sQty  = parseFloat(row.querySelector('.source-qty')?.value || '0').toLocaleString('id-ID');
-        const tQty  = parseFloat(row.querySelector('.target-qty')?.value || '0').toLocaleString('id-ID');
-        html += `<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)">
-            <span style="color:var(--text2)">${sQty} ${sName}</span>
-            <i class="fas fa-arrow-right" style="margin:0 6px;color:var(--text3);font-size:11px"></i>
-            <span class="font-medium">${tQty} ${tName}</span>
-        </div>`;
-    });
-    document.getElementById('summaryContent').innerHTML = count
-        ? `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${count} Konversi</div>` + html
-        : '<span style="color:var(--text3)">Lengkapi item sumber & hasil.</span>';
+    const issues = collect('issue');
+    const receipts = collect('receipt');
+    if (!issues.length && !receipts.length) {
+        document.getElementById('summaryContent').innerHTML =
+            '<span style="color:var(--text3)">Lengkapi item issue &amp; receipt.</span>';
+        return;
+    }
+    const list = (title, color, arr) => `
+        <div style="font-size:11px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.5px;margin:6px 0 4px">${title}</div>` +
+        (arr.length ? arr.map(r => `<div style="font-size:13px;padding:3px 0">${r.qty} ${r.name}</div>`).join('')
+                    : '<div style="font-size:12px;color:var(--text3)">—</div>');
+    document.getElementById('summaryContent').innerHTML =
+        list('Dibuang (Issue)', 'var(--red)', issues) +
+        `<div style="text-align:center;color:var(--text3);margin:6px 0"><i class="fas fa-arrow-down"></i></div>` +
+        list('Jadi (Receipt)', 'var(--green)', receipts);
 }
 
 document.getElementById('sliceForm').addEventListener('submit', function (e) {
     let firstInvalid = null;
-    const rows = document.querySelectorAll('.item-row');
-    if (rows.length === 0) {
-        e.preventDefault();
-        toast('Tambahkan minimal satu baris konversi.', 'error');
-        return;
-    }
-    rows.forEach(row => {
-        ['source', 'target'].forEach(role => {
-            const search = row.querySelector(`.${role}-search`);
-            const id     = row.querySelector(`.${role}-id`);
-            if (!id.value) {
-                search.classList.add('invalid');
-                if (!firstInvalid) firstInvalid = search;
+
+    ['issue', 'receipt'].forEach(section => {
+        const rows = document.querySelectorAll(`.${section}-grid.item-row`);
+        rows.forEach(row => {
+            const search = row.querySelector(`.${section}-search`);
+            const id     = row.querySelector(`.${section}-id`);
+            if (!id.value) { search.classList.add('invalid'); if (!firstInvalid) firstInvalid = search; }
+
+            // Gudang wajib dipilih untuk setiap baris issue (yang itemnya sudah diisi).
+            if (section === 'issue' && id.value) {
+                const wh = row.querySelector('.issue-warehouse');
+                if (!wh.value) { wh.classList.add('invalid'); if (!firstInvalid) firstInvalid = wh; }
             }
         });
     });
+
+    const issueValid   = [...document.querySelectorAll('.issue-grid.item-row .issue-id')].some(el => el.value);
+    const receiptValid = [...document.querySelectorAll('.receipt-grid.item-row .receipt-id')].some(el => el.value);
+
+    if (!issueValid || !receiptValid) {
+        e.preventDefault();
+        toast('Minimal 1 item issue dan 1 item receipt harus valid.', 'error');
+        if (firstInvalid) firstInvalid.focus();
+        return;
+    }
     if (firstInvalid) {
         e.preventDefault();
-        toast('Pilih item sumber & hasil yang valid dari daftar untuk semua baris.', 'error');
+        toast('Lengkapi item yang valid dan pilih gudang untuk setiap baris issue.', 'error');
         firstInvalid.focus();
     }
 });
 
-addItem();
+addIssue();
+addReceipt();
 </script>
 @endpush

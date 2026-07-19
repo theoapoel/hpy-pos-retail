@@ -259,8 +259,8 @@ class ErpNextService
             ];
         })->toArray();
 
-        $total        = (float) $transaction->total;
-        $paidAmount   = (float) ($transaction->paid_amount ?? 0);
+        $total = (float) $transaction->total;
+        $paidAmount = (float) ($transaction->paid_amount ?? 0);
         $changeAmount = max(0, (float) ($transaction->change_amount ?? 0));
 
         $payments = [];
@@ -272,7 +272,7 @@ class ErpNextService
                 ];
             }
             // paid_amount = jumlah semua metode; mixed diasumsikan pas (tanpa kembalian)
-            $docPaidAmount   = array_sum(array_column($payments, 'amount'));
+            $docPaidAmount = array_sum(array_column($payments, 'amount'));
             $docChangeAmount = 0.0;
         } else {
             // Kirim jumlah yang benar-benar diterima (tunai bisa termasuk kembalian),
@@ -282,7 +282,7 @@ class ErpNextService
                 'mode_of_payment' => $this->mapPaymentMethod($transaction->payment_method),
                 'amount' => $tendered,
             ];
-            $docPaidAmount   = $tendered;
+            $docPaidAmount = $tendered;
             $docChangeAmount = $changeAmount;
         }
 
@@ -2302,24 +2302,53 @@ class ErpNextService
             return ['success' => false, 'error' => 'Gudang default belum diset. Set salah satu warehouse sebagai default.'];
         }
 
-        // Baris sumber (dikeluarkan) — hanya s_warehouse
+        // Model dua-tabel: baris issue (keluar) & receipt (masuk). Digabung per
+        // item_code + gudang supaya tidak ada baris duplikat di ERP.
+        $issue = [];   // item yang dibuang (tabel 1)
+        $receive = []; // item hasil (tabel 2)
+
+        $addLine = function (array &$bucket, string $key, string $code, string $name, float $qty, string $uom) {
+            if (isset($bucket[$key])) {
+                $bucket[$key]['qty'] += $qty;
+            } else {
+                $bucket[$key] = ['item_code' => $code, 'item_name' => $name, 'qty' => $qty, 'uom' => $uom];
+            }
+        };
+
+        // Tabel 1 — issue: keluar dari gudangnya masing-masing (kosong = default).
+        foreach ($slice->issues as $line) {
+            $wh = $line->warehouse ?: $defaultWh;
+            $code = $line->item_code ?: $line->item_name;
+            $addLine($issue, $code.'|'.$wh, $code, $line->item_name, (float) $line->qty, $line->uom ?: 'Nos');
+            $issue[$code.'|'.$wh]['s_warehouse'] = $wh;
+        }
+
+        // Tabel 2 — receipt: diterima di gudang default.
+        foreach ($slice->receipts as $line) {
+            $code = $line->item_code ?: $line->item_name;
+            $addLine($receive, $code.'|'.$defaultWh, $code, $line->item_name, (float) $line->qty, $line->uom ?: 'Nos');
+        }
+
+        if (empty($issue) || empty($receive)) {
+            return ['success' => false, 'error' => 'Repack harus punya minimal 1 item issue dan 1 item receipt.'];
+        }
+
         $items = [];
-        foreach ($slice->items as $item) {
+        foreach ($issue as $line) {
             $items[] = [
-                'item_code' => $item->source_item_code ?: $item->source_item_name,
-                'item_name' => $item->source_item_name,
-                'qty' => (float) $item->source_qty,
-                'uom' => $item->source_uom ?: 'Nos',
-                's_warehouse' => $defaultWh,
+                'item_code' => $line['item_code'],
+                'item_name' => $line['item_name'],
+                'qty' => $line['qty'],
+                'uom' => $line['uom'],
+                's_warehouse' => $line['s_warehouse'] ?? $defaultWh,
             ];
         }
-        // Baris hasil (diterima) — hanya t_warehouse
-        foreach ($slice->items as $item) {
+        foreach ($receive as $line) {
             $items[] = [
-                'item_code' => $item->target_item_code ?: $item->target_item_name,
-                'item_name' => $item->target_item_name,
-                'qty' => (float) $item->target_qty,
-                'uom' => $item->target_uom ?: 'Nos',
+                'item_code' => $line['item_code'],
+                'item_name' => $line['item_name'],
+                'qty' => $line['qty'],
+                'uom' => $line['uom'],
                 't_warehouse' => $defaultWh,
             ];
         }
