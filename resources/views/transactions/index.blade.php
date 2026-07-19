@@ -4,21 +4,7 @@
 
 @push('styles')
 <style>
-    .pagination-wrap { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
-    .pagination-info { font-size: 13px; color: var(--text3); }
-    .pagination { display: flex; align-items: center; gap: 4px; list-style: none; }
-    .pagination li a,
-    .pagination li span {
-        display: flex; align-items: center; justify-content: center;
-        min-width: 36px; height: 36px; border-radius: 8px; padding: 0 10px;
-        font-size: 13px; font-weight: 600; text-decoration: none;
-        color: var(--text2); border: 1px solid var(--border);
-        background: var(--surface); transition: all .2s; gap: 5px;
-    }
-    .pagination li a:hover { background: var(--blue-light); color: var(--blue); border-color: var(--blue); }
-    .pagination li.active span { background: var(--blue); color: #fff; border-color: var(--blue); }
-    .pagination li.disabled span { opacity: .4; cursor: not-allowed; }
-</style>
+    </style>
 @endpush
 
 @section('content')

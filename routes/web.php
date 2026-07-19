@@ -169,6 +169,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}', [PosController::class, 'printReceipt'])->name('print');
         Route::get('/print-kitchen/{transaction}', [PosController::class, 'printKitchen'])->name('print-kitchen');
+        Route::post('/print-kitchen-draft', [PosController::class, 'printKitchenDraft'])->name('print-kitchen-draft');
         Route::get('/direct-print/{transaction}', [PosController::class, 'directPrint'])->name('direct-print');
     });
 

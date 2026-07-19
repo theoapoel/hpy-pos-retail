@@ -48,7 +48,7 @@
     <div class="pagination-wrap">
         <div class="pagination-info">
             Menampilkan {{ $customers->firstItem() }}–{{ $customers->lastItem() }}
-            dari <strong>{{ $customers->total() }}</strong> produk
+            dari <strong>{{ $customers->total() }}</strong> customer
         </div>
         <ul class="pagination">
             <li class="{{ $customers->onFirstPage() ? 'disabled' : '' }}">

@@ -25,3 +25,26 @@ if (! function_exists('local_dt')) {
         return Carbon::parse($dt)->setTimezone(local_tz())->format($format);
     }
 }
+
+if (! function_exists('pos_payment_methods')) {
+    /**
+     * Metode pembayaran POS beserta penanda `is_cash`.
+     *
+     * Field `type` dari POS Profile ERP sering tidak terisi sehingga semua
+     * metode jatuh ke default 'General' — termasuk CASH. Karena itu nama
+     * metode ikut diperiksa agar tunai tetap dikenali dan kolom "Nominal
+     * Bayar" muncul sebagaimana mestinya.
+     */
+    function pos_payment_methods(): array
+    {
+        $methods = json_decode(Setting::get('pos_payment_methods', '[]'), true) ?: [];
+
+        foreach ($methods as $i => $m) {
+            $name = $m['mode_of_payment'] ?? '';
+            $methods[$i]['is_cash'] = ($m['type'] ?? '') === 'Cash'
+                || (bool) preg_match('/(^|[^a-z])(cash|tunai)([^a-z]|$)/i', $name);
+        }
+
+        return array_values($methods);
+    }
+}

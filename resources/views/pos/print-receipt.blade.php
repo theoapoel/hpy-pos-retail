@@ -75,6 +75,7 @@
     @if($transaction->order_type)
         <div class="row"><span>Tipe</span><span>{{ ['dine_in'=>'Dine In','take_away'=>'Take Away','delivery'=>'Delivery'][$transaction->order_type] ?? $transaction->order_type }}</span></div>
     @endif
+    <div class="row"><span>Total Qty</span><span>{{ $transaction->items->sum('quantity') }}</span></div>
     <div class="row"><span>Subtotal</span><span>Rp {{ number_format($transaction->subtotal,0,',','.') }}</span></div>
     @if($transaction->discount_amount > 0)
         <div class="row"><span>Diskon</span><span>- Rp {{ number_format($transaction->discount_amount,0,',','.') }}</span></div>

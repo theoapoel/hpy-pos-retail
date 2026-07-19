@@ -637,9 +637,9 @@
                     @foreach($posPaymentMethods as $i => $pm)
                     <button class="pay-btn {{ $i === 0 ? 'active' : '' }}"
                         data-method="{{ $pm['mode_of_payment'] }}"
-                        data-cash-type="{{ $pm['type'] === 'Cash' ? '1' : '0' }}"
+                        data-cash-type="{{ $pm['is_cash'] ? '1' : '0' }}"
                         onclick="selectPayment(this)">
-                        <span class="pay-icon">{{ $pm['type'] === 'Cash' ? '💵' : ($pm['type'] === 'Bank' ? '🏦' : '💳') }}</span>
+                        <span class="pay-icon">{{ $pm['is_cash'] ? '💵' : (($pm['type'] ?? '') === 'Bank' ? '🏦' : '💳') }}</span>
                         {{ $pm['mode_of_payment'] }}
                     </button>
                     @endforeach
@@ -659,7 +659,8 @@
                 @endif
             </div>
 
-            <div id="cashSection">
+@php $defaultIsCash = empty($posPaymentMethods) ? true : (bool)($posPaymentMethods[0]['is_cash'] ?? false); @endphp
+            <div id="cashSection" @if(!$defaultIsCash)style="display:none"@endif>
                 <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:800;letter-spacing:.5px">NOMINAL BAYAR</div>
                 <div class="paid-row">
                     <input type="number" id="paidAmount" class="paid-input" placeholder="0" oninput="calcChange()">

@@ -65,7 +65,20 @@
       "Bash(./vendor/bin/pint app/Http/Controllers/PosShiftController.php app/Models/PosShift.php app/Services/ErpNextService.php routes/web.php)",
       "Bash(nohup php artisan serve --port=8123)",
       "Bash(node docs/verify_qty.mjs)",
-      "Bash(awk 'NR>=432 && NR<=452' resources/views/pos/index.blade.php)"
+      "Bash(awk 'NR>=432 && NR<=452' resources/views/pos/index.blade.php)",
+      "Bash(php -r '$j=json_decode\\(file_get_contents\\(\"composer.json\"\\),true\\); foreach\\($j[\"require\"] as $k=>$v\\) echo \"  $k  $v\\\\n\";')",
+      "Bash(php -r '$j=json_decode\\(file_get_contents\\(\"composer.json\"\\),true\\); foreach\\(\\($j[\"require-dev\"]??[]\\) as $k=>$v\\) echo \"  $k  $v\\\\n\";')",
+      "Bash(php -r '$j=json_decode\\(file_get_contents\\(\"composer.json\"\\),true\\); echo isset\\($j[\"require\"][\"ext-zip\"]\\)?\"ya\":\"TIDAK dideklarasikan\"; echo \"\\\\n\";')",
+      "Bash(php -m)",
+      "Bash(grep -i \"^zip$\")",
+      "Bash(git checkout *)",
+      "Bash(curl -s -o /dev/null -w \"server %{http_code}\\\\n\" http://127.0.0.1:8123/login)",
+      "Bash(node docs/_pg.mjs)",
+      "Bash(node docs/_bug.mjs)",
+      "Bash(grep -nE '\\\\$store|\\\\$transaction->|\\\\$groups|\\\\$table|\\\\$item->' resources/views/pos/print-kitchen.blade.php)",
+      "Bash(node docs/_cat.mjs)",
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/PosController.php app/helpers.php)",
+      "Bash(rm -rf /tmp/pintchk)"
     ]
   }
 }

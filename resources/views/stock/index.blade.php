@@ -4,8 +4,6 @@
 
 @push('styles')
 <style>
-    .pagination-wrap { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
-    .pagination { display: flex; align-items: center; gap: 4px; list-style: none; }
     .page-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; font-size: 13px; font-weight: 500; color: var(--text2); text-decoration: none; transition: all .2s; }
     .page-btn:hover:not(.disabled) { background: var(--surface2); color: var(--text); }
     .page-btn.active { background: var(--blue); color: #fff; }

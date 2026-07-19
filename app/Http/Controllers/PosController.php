@@ -34,7 +34,7 @@ class PosController extends Controller
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
         $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods  = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
+        $posPaymentMethods  = pos_payment_methods();
         $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
         $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
         $dineInCharges     = [
@@ -58,7 +58,7 @@ class PosController extends Controller
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
         $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods  = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
+        $posPaymentMethods  = pos_payment_methods();
         $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
         $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
         $dineInCharges     = [
@@ -84,7 +84,7 @@ class PosController extends Controller
         $posClass           = $storeSettings['pos_class'] ?? '';
         $posProductDisplay  = $storeSettings['pos_product_display'] ?? 'image';
         $walkinCustomerName  = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods   = json_decode(\App\Models\Setting::get('pos_payment_methods', '[]'), true) ?? [];
+        $posPaymentMethods   = pos_payment_methods();
         $erpBaseUrl         = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
 
         $deliveryPrices = \App\Models\DeliveryPrice::allGrouped();
@@ -369,6 +369,56 @@ class PosController extends Controller
         $groups = $transaction->items
             ->groupBy(fn($item) => $item->product?->itemCategory?->name ?: 'LAINNYA')
             ->sortKeys();
+
+        return view('pos.print-kitchen', compact('transaction', 'store', 'groups', 'table'));
+    }
+
+    /**
+     * Struk dapur untuk pesanan yang belum disubmit (ditahan / keranjang berjalan).
+     * Tidak menyimpan apa pun — hanya merender view yang sama dari data draft,
+     * supaya dapur bisa mulai memasak sebelum pembayaran.
+     */
+    public function printKitchenDraft(Request $request)
+    {
+        $data = $request->validate([
+            'items'          => 'required|array|min:1',
+            'items.*.id'     => 'nullable|integer',
+            'items.*.name'   => 'required|string|max:200',
+            'items.*.qty'    => 'required|numeric|min:0.01',
+            'table'          => 'nullable|string|max:20',
+            'order_type'     => 'nullable|string|max:20',
+            'customer_name'  => 'nullable|string|max:150',
+            'notes'          => 'nullable|string|max:500',
+        ]);
+
+        $store = SettingsController::storeSettings();
+        $table = trim((string) ($data['table'] ?? ''));
+
+        // Ambil kategori produk sekali jalan untuk pengelompokan.
+        $ids       = collect($data['items'])->pluck('id')->filter()->all();
+        $products  = Product::with('itemCategory')->whereIn('id', $ids)->get()->keyBy('id');
+
+        $items = collect($data['items'])->map(fn ($row) => (object) [
+            'product_name' => $row['name'],
+            'quantity'     => 0 + $row['qty'],
+            // get() — bukan akses array — supaya produk yang sudah dihapus
+            // tidak membuat cetak gagal, cukup masuk kategori LAINNYA.
+            'category'     => $products->get($row['id'] ?? null)?->itemCategory?->name ?: 'LAINNYA',
+        ]);
+
+        $groups = $items->groupBy('category')->sortKeys();
+
+        $customerName = trim((string) ($data['customer_name'] ?? ''));
+
+        $transaction = (object) [
+            'invoice_no' => 'BELUM DISUBMIT',
+            'created_at' => now(),
+            'user'       => (object) ['name' => auth()->user()->name],
+            'customer'   => $customerName !== '' ? (object) ['name' => $customerName] : null,
+            'order_type' => $data['order_type'] ?? null,
+            'notes'      => $data['notes'] ?? null,
+            'items'      => $items,
+        ];
 
         return view('pos.print-kitchen', compact('transaction', 'store', 'groups', 'table'));
     }
