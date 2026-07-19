@@ -439,6 +439,9 @@
     <div class="topbar-info"><i class="fas fa-user-circle"></i> {{ auth()->user()->name }}</div>
     <span id="clock"></span>
     <div class="topbar-actions">
+        <button type="button" id="btnShift" class="topbar-btn" onclick="onShiftButton()">
+            <i class="fas fa-cash-register"></i> <span id="shiftBtnLabel">Kasir</span>
+        </button>
         <a href="{{ route('transactions.index') }}" class="topbar-btn"><i class="fas fa-history"></i> Riwayat</a>
         <a href="{{ route('dashboard') }}" class="topbar-btn"><i class="fas fa-th-large"></i> Dashboard</a>
     </div>
@@ -1667,5 +1670,6 @@ loadProducts();
 </script>
 
 @include('pos._hold-orders')
+@include('pos._shift')
 </body>
 </html>

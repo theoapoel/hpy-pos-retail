@@ -1800,6 +1800,262 @@ class ErpNextService
         }
     }
 
+    // =========================================================
+    // POS SHIFT — Buka/Tutup Kasir (POS Opening/Closing Entry)
+    // =========================================================
+
+    /** Nama-nama Mode of Payment bertipe Cash (untuk perlakuan kembalian). */
+    public function getCashModeNames(): array
+    {
+        try {
+            $resp = $this->client->get('/api/resource/Mode of Payment', [
+                'query' => [
+                    'fields' => json_encode(['name']),
+                    'filters' => json_encode([['type', '=', 'Cash']]),
+                    'limit_page_length' => 0,
+                ],
+            ]);
+            $data = json_decode($resp->getBody()->getContents(), true)['data'] ?? [];
+            $names = array_column($data, 'name');
+
+            return $names ?: ['Cash'];
+        } catch (\Throwable $e) {
+            Log::warning('getCashModeNames gagal: '.$e->getMessage());
+
+            return ['Cash'];
+        }
+    }
+
+    /** Cari POS Opening Entry berstatus Open milik kasir (email). Null bila tidak ada. */
+    public function findOpenPosOpeningEntry(string $userEmail): ?string
+    {
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+        try {
+            $resp = $this->client->get('/api/resource/POS Opening Entry', [
+                'query' => [
+                    'fields' => json_encode(['name']),
+                    'filters' => json_encode([
+                        ['status', '=', 'Open'],
+                        ['docstatus', '=', 1],   // exclude opening entry yang sudah dibatalkan (status bisa tetap "Open")
+                        ['user', '=', $userEmail],
+                        ['pos_profile', '=', $posProfile],
+                    ]),
+                    'order_by' => 'creation desc',
+                    'limit_page_length' => 1,
+                ],
+            ]);
+            $data = json_decode($resp->getBody()->getContents(), true)['data'] ?? [];
+
+            return $data[0]['name'] ?? null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /** Buat + submit POS Opening Entry untuk kasir. */
+    public function createPosOpeningEntry(string $userEmail, float $openingCash): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+        if (! $posProfile) {
+            return ['success' => false, 'error' => 'POS Profile belum diset.'];
+        }
+
+        $cashMode = $this->getCashModeNames()[0] ?? 'Cash';
+        $now = $this->localNow();
+
+        $payload = [
+            'doctype' => 'POS Opening Entry',
+            'period_start_date' => $now->format('Y-m-d H:i:s'),
+            'posting_date' => $now->format('Y-m-d'),
+            'set_posting_date' => 1,
+            'company' => $company,
+            'pos_profile' => $posProfile,
+            'user' => $userEmail,
+            'balance_details' => [
+                ['mode_of_payment' => $cashMode, 'opening_amount' => $openingCash],
+            ],
+        ];
+
+        try {
+            $resp = $this->client->post('/api/resource/POS Opening Entry', ['json' => $payload]);
+            $name = json_decode($resp->getBody()->getContents(), true)['data']['name'] ?? null;
+            if ($name) {
+                $this->submitDoc('POS Opening Entry', $name);
+            }
+
+            return ['success' => true, 'docname' => $name];
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+    }
+
+    /**
+     * Rekonsiliasi shift: kumpulkan POS Invoice kasir yang BELUM terkonsolidasi
+     * pada rentang tanggal, lalu hitung expected per metode.
+     * Kas: expected = opening + Σamount_tunai − Σkembalian (amount tunai = uang diterima).
+     *
+     * @return array{success:bool,invoices?:array,modes?:array,totals?:array,error?:string}
+     */
+    public function getShiftReconciliation(string $userEmail, string $dateFrom, string $dateTo, float $openingCash): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+
+        try {
+            $resp = $this->client->get('/api/resource/POS Invoice', [
+                'query' => [
+                    'fields' => json_encode([
+                        'name', 'posting_date', 'customer', 'grand_total', 'net_total', 'total_qty', 'change_amount',
+                    ]),
+                    'filters' => json_encode([
+                        ['posting_date', '>=', $dateFrom],
+                        ['posting_date', '<=', $dateTo],
+                        ['docstatus', '=', 1],
+                        ['pos_profile', '=', $posProfile],
+                        ['owner', '=', $userEmail],
+                        ['consolidated_invoice', 'is', 'not set'],
+                    ]),
+                    'order_by' => 'posting_date asc, posting_time asc',
+                    'limit_page_length' => 0,
+                ],
+            ]);
+            $invoices = json_decode($resp->getBody()->getContents(), true)['data'] ?? [];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+
+        $names = array_column($invoices, 'name');
+        $totalChange = array_sum(array_map(fn ($i) => (float) ($i['change_amount'] ?? 0), $invoices));
+        $grandTotal = array_sum(array_map(fn ($i) => (float) ($i['grand_total'] ?? 0), $invoices));
+        $netTotal = array_sum(array_map(fn ($i) => (float) ($i['net_total'] ?? 0), $invoices));
+        $totalQty = array_sum(array_map(fn ($i) => (float) ($i['total_qty'] ?? 0), $invoices));
+
+        // Total pembayaran (gross) per mode.
+        $paySummary = $names ? $this->fetchPosPaymentSummary($names) : ['success' => true, 'data' => []];
+        if (! $paySummary['success']) {
+            return ['success' => false, 'error' => $paySummary['error']];
+        }
+
+        $cashModes = $this->getCashModeNames();
+        $modes = [];
+        foreach ($paySummary['data'] as $row) {
+            $mode = $row['mode_of_payment'];
+            $isCash = in_array($mode, $cashModes, true);
+            $opening = $isCash ? $openingCash : 0.0;
+            // Kas: kurangi kembalian dari uang diterima; tambah modal awal.
+            $expected = (float) $row['total'] - ($isCash ? $totalChange : 0.0) + $opening;
+            $modes[] = [
+                'mode_of_payment' => $mode,
+                'is_cash' => $isCash,
+                'opening_amount' => $opening,
+                'expected_amount' => round($expected, 2),
+            ];
+        }
+
+        // Pastikan mode kas tetap muncul walau belum ada transaksi tunai (untuk setor modal awal).
+        $hasCash = collect($modes)->contains('is_cash', true);
+        if (! $hasCash && $openingCash > 0) {
+            $modes[] = [
+                'mode_of_payment' => $cashModes[0] ?? 'Cash',
+                'is_cash' => true,
+                'opening_amount' => $openingCash,
+                'expected_amount' => round($openingCash, 2),
+            ];
+        }
+
+        return [
+            'success' => true,
+            'invoices' => $invoices,
+            'modes' => $modes,
+            'totals' => [
+                'grand_total' => round($grandTotal, 2),
+                'net_total' => round($netTotal, 2),
+                'total_qty' => $totalQty,
+                'invoice_count' => count($invoices),
+                'total_change' => round($totalChange, 2),
+            ],
+        ];
+    }
+
+    /**
+     * Buat + submit POS Closing Entry dari hasil rekonsiliasi + jumlah hitung kasir.
+     *
+     * @param  array  $recon  hasil getShiftReconciliation()
+     * @param  array<string,float>  $countedByMode  nominal hitung fisik per mode (mode kas dari kasir)
+     */
+    public function createPosClosingEntry(string $openingName, string $userEmail, string $periodStart, array $recon, array $countedByMode): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+        $now = $this->localNow();
+
+        $posTransactions = array_map(fn ($inv) => [
+            'pos_invoice' => $inv['name'],
+            'posting_date' => $inv['posting_date'],
+            'customer' => $inv['customer'],
+            'grand_total' => (float) $inv['grand_total'],
+        ], $recon['invoices'] ?? []);
+
+        $reconciliation = [];
+        foreach ($recon['modes'] ?? [] as $m) {
+            $expected = (float) $m['expected_amount'];
+            // Non-kas default = expected; kas = jumlah hitung kasir.
+            $closing = $m['is_cash']
+                ? (float) ($countedByMode[$m['mode_of_payment']] ?? $expected)
+                : (float) ($countedByMode[$m['mode_of_payment']] ?? $expected);
+            $reconciliation[] = [
+                'mode_of_payment' => $m['mode_of_payment'],
+                'opening_amount' => (float) $m['opening_amount'],
+                'expected_amount' => $expected,
+                'closing_amount' => $closing,
+                'difference' => round($closing - $expected, 2),
+            ];
+        }
+
+        $payload = [
+            'doctype' => 'POS Closing Entry',
+            'pos_opening_entry' => $openingName,
+            'period_start_date' => $periodStart,
+            'period_end_date' => $now->format('Y-m-d H:i:s'),
+            'posting_date' => $now->format('Y-m-d'),
+            'company' => $company,
+            'pos_profile' => $posProfile,
+            'user' => $userEmail,
+            'pos_transactions' => $posTransactions,
+            'payment_reconciliation' => $reconciliation,
+            'grand_total' => (float) ($recon['totals']['grand_total'] ?? 0),
+            'net_total' => (float) ($recon['totals']['net_total'] ?? 0),
+            'total_quantity' => (float) ($recon['totals']['total_qty'] ?? 0),
+        ];
+
+        Log::info('POS Closing payload', ['opening' => $openingName, 'user' => $userEmail, 'invoices' => count($posTransactions)]);
+
+        try {
+            $resp = $this->client->post('/api/resource/POS Closing Entry', ['json' => $payload]);
+            $name = json_decode($resp->getBody()->getContents(), true)['data']['name'] ?? null;
+            if ($name) {
+                $this->submitDoc('POS Closing Entry', $name);
+            }
+
+            return ['success' => true, 'docname' => $name];
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+    }
+
     /**
      * Matriks pembayaran per tanggal × mode_of_payment.
      *

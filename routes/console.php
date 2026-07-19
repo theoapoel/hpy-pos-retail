@@ -13,3 +13,7 @@ Schedule::command('stock:sync-erp')
     ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Backup DB otomatis ke Google Drive tiap hari jam 02:00, lalu bersihkan yang lama.
+Schedule::command('backup:clean')->dailyAt('01:55')->withoutOverlapping();
+Schedule::command('backup:run --only-db')->dailyAt('02:00')->withoutOverlapping();

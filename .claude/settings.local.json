@@ -38,7 +38,31 @@
       "PowerShell($r = php artisan route:list --columns=name 2>$null; \\($r | Select-String -Pattern \"permissions.index|factory-reset.index|warehouses.index|online-report.index|stock-opname.index|mop-report.index|users.index|coupons.index\"\\).Count)",
       "PowerShell(php artisan route:list 2>&1 | Out-String -Stream | Where-Object { $_ -match \"permissions|factory-reset|online-report|stock-opname\" })",
       "PowerShell(php artisan view:clear)",
-      "PowerShell(php artisan cache:clear)"
+      "PowerShell(php artisan cache:clear)",
+      "Bash(python -c \"import docx; print\\('docx OK', docx.__version__\\)\")",
+      "Bash(pandoc --version)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(node docs/capture.mjs)",
+      "Bash(python docs/build_docx.py)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(python -)",
+      "Bash(tasklist //FI \"IMAGENAME eq php.exe\")",
+      "Bash(taskkill //F //IM php.exe)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/SliceController.php app/Models/SliceItem.php app/Services/ErpNextService.php)",
+      "Bash(php -l app/Models/SliceLine.php)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/SliceController.php app/Models/SliceLine.php app/Models/Slice.php app/Services/ErpNextService.php)",
+      "Bash(php artisan tinker '--execute= *)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/SliceController.php)",
+      "Bash(git -C /c/xampp/htdocs/resto-pos branch --show-current)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git commit *)",
+      "Bash(composer require *)",
+      "Bash(composer show *)",
+      "Bash(./vendor/bin/pint app/Providers/AppServiceProvider.php config/backup.php config/filesystems.php config/database.php)",
+      "Bash(BACKUP_DISK=local php artisan backup:run --only-db)",
+      "Bash(php -l app/Http/Controllers/PosShiftController.php)",
+      "Bash(php -l app/Models/PosShift.php)",
+      "Bash(./vendor/bin/pint app/Http/Controllers/PosShiftController.php app/Models/PosShift.php app/Services/ErpNextService.php routes/web.php)"
     ]
   }
 }
