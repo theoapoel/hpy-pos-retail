@@ -5,20 +5,28 @@
     <title>Kitchen {{ $transaction->invoice_no }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; font-size: 14px; width: 300px; margin: 0 auto; padding: 10px; background: #fff; color: #000; }
+        /* Kertas termal 58mm — area cetak efektif ~48mm */
+        @page { size: 58mm auto; margin: 0; }
+        body {
+            font-family: 'Courier New', monospace;
+            font-size: 11px; line-height: 1.15;
+            width: 48mm; margin: 0 auto; padding: 0;
+            background: #fff; color: #000;
+        }
         .center { text-align: center; }
         .bold { font-weight: bold; }
-        .big { font-size: 18px; }
-        .sm { font-size: 11px; }
-        .divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-        .row { display: flex; justify-content: space-between; margin: 2px 0; }
-        .cat { font-weight: bold; margin: 10px 0 4px; }
-        .item { display: flex; justify-content: space-between; align-items: flex-start; margin: 3px 0; }
-        .item .name { padding-right: 8px; }
-        .item .qty { font-weight: bold; min-width: 28px; text-align: right; }
-        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; margin-top: 8px; }
+        .big { font-size: 13px; }
+        .sm { font-size: 9px; }
+        .divider { border: none; border-top: 1px dashed #000; margin: 2px 0; }
+        .row { display: flex; justify-content: space-between; gap: 4px; margin: 0; }
+        .row > span:last-child { white-space: nowrap; }
+        .cat { font-weight: bold; margin: 5px 0 1px; }
+        .item { display: flex; justify-content: space-between; align-items: flex-start; margin: 1px 0; }
+        .item .name { padding-right: 4px; }
+        .item .qty { font-weight: bold; min-width: 16px; text-align: right; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-top: 3px; }
         @media print {
-            body { width: 100%; }
+            body { width: 48mm; margin: 0; }
             .no-print { display: none; }
         }
     </style>

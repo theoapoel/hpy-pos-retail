@@ -61,6 +61,21 @@
         .topbar-info { display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 13px; }
         .topbar-info i { color: var(--primary); }
         .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+        /* Total belanja di tengah topbar */
+        .topbar-total {
+            margin-left: auto; display: flex; align-items: baseline; gap: 10px;
+            background: #E6F4EA; border: 1px solid #A8D5B5;
+            padding: 5px 16px; border-radius: 999px; white-space: nowrap;
+        }
+        .topbar-total-label {
+            font-size: 11px; font-weight: 800; color: #1E8E3E;
+            text-transform: uppercase; letter-spacing: .6px;
+        }
+        .topbar-total-value {
+            font-size: 22px; font-weight: 900; color: #0D652D;
+            font-family: 'Roboto Mono', monospace; line-height: 1;
+        }
+        @media (max-width: 1200px) { .topbar-total-label { display: none; } }
         .topbar-btn {
             padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
             border: 1px solid var(--border); background: transparent;
@@ -438,6 +453,10 @@
     <div class="topbar-divider"></div>
     <div class="topbar-info"><i class="fas fa-user-circle"></i> {{ auth()->user()->name }}</div>
     <span id="clock"></span>
+    <div class="topbar-total">
+        <span class="topbar-total-label">Total Belanja</span>
+        <span class="topbar-total-value" id="topbarTotalDisplay">Rp 0</span>
+    </div>
     <div class="topbar-actions">
         <button type="button" id="btnShift" class="topbar-btn" onclick="onShiftButton()">
             <i class="fas fa-cash-register"></i> <span id="shiftBtnLabel">Kasir</span>
@@ -547,6 +566,10 @@
 
         <!-- Summary -->
         <div class="cart-summary">
+            <div class="summary-row">
+                <span>Total Qty</span>
+                <span id="totalQtyDisplay">0</span>
+            </div>
             <div class="summary-row">
                 <span>Subtotal</span>
                 <span id="subtotalDisplay">Rp 0</span>
@@ -1068,6 +1091,8 @@ function renderCart() {
 
     const totalItems = cart.reduce((s, i) => s + i.qty, 0);
     countEl.textContent = totalItems + ' item';
+    const qtyEl = document.getElementById('totalQtyDisplay');
+    if (qtyEl) qtyEl.textContent = totalItems;
 
     if (cart.length === 0) {
         container.innerHTML = '';
@@ -1337,6 +1362,7 @@ function recalculate() {
     document.getElementById('discountDisplay').textContent = '- Rp ' + fmt(discAmt);
     document.getElementById('taxDisplay').textContent      = 'Rp ' + fmt(tax);
     document.getElementById('totalDisplay').textContent    = 'Rp ' + fmt(total);
+    document.getElementById('topbarTotalDisplay').textContent = 'Rp ' + fmt(total);
 
     // Show/hide Service Charge row
     const scRow = document.getElementById('scRow');

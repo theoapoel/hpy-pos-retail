@@ -5,16 +5,24 @@
     <title>Struk {{ $transaction->invoice_no }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; font-size: 12px; width: 300px; margin: 0 auto; padding: 10px; background: #fff; }
+        /* Kertas termal 58mm — area cetak efektif ~48mm */
+        @page { size: 58mm auto; margin: 0; }
+        body {
+            font-family: 'Courier New', monospace;
+            font-size: 10px; line-height: 1.15;
+            width: 48mm; margin: 0 auto; padding: 0;
+            background: #fff; color: #000;
+        }
         .center { text-align: center; }
         .bold { font-weight: bold; }
-        .big { font-size: 16px; }
-        .sm { font-size: 10px; }
-        .divider { border: none; border-top: 1px dashed #000; margin: 6px 0; }
-        .row { display: flex; justify-content: space-between; margin: 3px 0; }
-        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin: 4px 0; }
+        .big { font-size: 12px; }
+        .sm { font-size: 9px; }
+        .divider { border: none; border-top: 1px dashed #000; margin: 2px 0; }
+        .row { display: flex; justify-content: space-between; gap: 4px; margin: 0; }
+        .row > span:last-child { white-space: nowrap; }
+        .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 11px; margin: 2px 0; }
         @media print {
-            body { width: 100%; }
+            body { width: 48mm; margin: 0; }
             .no-print { display: none; }
         }
     </style>
@@ -55,8 +63,8 @@
     {{-- Item --}}
     @foreach($transaction->items as $item)
     <div>{{ $item->product_name }}</div>
-    <div class="row" style="padding-left:8px">
-        <span>{{ $item->quantity }} x Rp {{ number_format($item->price,0,',','.') }}</span>
+    <div class="row sm" style="padding-left:3px">
+        <span>{{ $item->quantity }} x {{ number_format($item->price,0,',','.') }}</span>
         <span>Rp {{ number_format($item->subtotal,0,',','.') }}</span>
     </div>
     @endforeach

@@ -62,7 +62,10 @@
       "Bash(BACKUP_DISK=local php artisan backup:run --only-db)",
       "Bash(php -l app/Http/Controllers/PosShiftController.php)",
       "Bash(php -l app/Models/PosShift.php)",
-      "Bash(./vendor/bin/pint app/Http/Controllers/PosShiftController.php app/Models/PosShift.php app/Services/ErpNextService.php routes/web.php)"
+      "Bash(./vendor/bin/pint app/Http/Controllers/PosShiftController.php app/Models/PosShift.php app/Services/ErpNextService.php routes/web.php)",
+      "Bash(nohup php artisan serve --port=8123)",
+      "Bash(node docs/verify_qty.mjs)",
+      "Bash(awk 'NR>=432 && NR<=452' resources/views/pos/index.blade.php)"
     ]
   }
 }
