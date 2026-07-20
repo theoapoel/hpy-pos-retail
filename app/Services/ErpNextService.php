@@ -44,6 +44,7 @@ class ErpNextService
         $this->client = new Client([
             'base_uri' => $this->baseUrl,
             'timeout' => 30,
+            'connect_timeout' => 8,   // internet mati → gagal cepat, bukan menggantung
             'headers' => [
                 'Authorization' => 'token '.$this->apiKey.':'.$this->apiSecret,
                 'Content-Type' => 'application/json',
@@ -1852,8 +1853,12 @@ class ErpNextService
         }
     }
 
-    /** Buat + submit POS Opening Entry untuk kasir. */
-    public function createPosOpeningEntry(string $userEmail, float $openingCash): array
+    /**
+     * Buat + submit POS Opening Entry untuk kasir.
+     * $periodStart (Y-m-d H:i:s) dipakai saat menyusulkan shift yang dibuka offline,
+     * supaya waktu buka di ERP sama dengan waktu buka sebenarnya.
+     */
+    public function createPosOpeningEntry(string $userEmail, float $openingCash, ?string $periodStart = null): array
     {
         if (! $this->isConfigured()) {
             return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
@@ -1866,11 +1871,12 @@ class ErpNextService
 
         $cashMode = $this->getCashModeNames()[0] ?? 'Cash';
         $now = $this->localNow();
+        $start = $periodStart ?: $now->format('Y-m-d H:i:s');
 
         $payload = [
             'doctype' => 'POS Opening Entry',
-            'period_start_date' => $now->format('Y-m-d H:i:s'),
-            'posting_date' => $now->format('Y-m-d'),
+            'period_start_date' => $start,
+            'posting_date' => substr($start, 0, 10),
             'set_posting_date' => 1,
             'company' => $company,
             'pos_profile' => $posProfile,

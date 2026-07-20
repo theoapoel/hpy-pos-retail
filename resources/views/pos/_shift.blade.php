@@ -13,6 +13,9 @@
             <label style="font-size:12px;font-weight:700;color:var(--text3)">Modal Kas Awal (Rp)</label>
             <input type="number" id="openingCashInput" class="form-control" value="0" min="0" step="1000"
                 style="font-size:20px;text-align:right;margin-top:6px">
+            <p style="font-size:11px;color:var(--text3);margin-top:10px">
+                <i class="fas fa-wifi"></i> Tanpa internet kasir tetap bisa dibuka; pencatatan ke ERP HPY disusulkan otomatis saat online.
+            </p>
         </div>
         <div class="modal-footer">
             <button class="btn btn-primary" style="width:100%" id="btnDoOpenShift" onclick="doOpenShift()">
@@ -61,8 +64,13 @@ function updateShiftUI() {
     const label = document.getElementById('shiftBtnLabel');
     const btn = document.getElementById('btnShift');
     if (!label || !btn) return;
-    if (currentShift) { label.textContent = 'Tutup Kasir'; btn.style.color = 'var(--red)'; }
-    else { label.textContent = 'Buka Kasir'; btn.style.color = ''; }
+    if (currentShift) {
+        label.textContent = currentShift.offline ? 'Tutup Kasir (offline)' : 'Tutup Kasir';
+        btn.style.color = 'var(--red)';
+        btn.title = currentShift.offline
+            ? 'Shift ini dibuka saat internet mati; akan disusulkan ke ERP HPY otomatis saat online.'
+            : '';
+    } else { label.textContent = 'Buka Kasir'; btn.style.color = ''; btn.title = ''; }
 }
 
 function onShiftButton() { currentShift ? showCloseShift() : showOpenShift(); }
@@ -83,7 +91,11 @@ async function doOpenShift() {
             body: JSON.stringify({ opening_cash: cash })
         });
         const d = await r.json();
-        if (d.success) { toast('Kasir dibuka.'); closeModal('openShiftModal'); await checkShift(); }
+        if (d.success) {
+            toast(d.message || 'Kasir dibuka.', d.offline ? 'err' : 'ok');
+            closeModal('openShiftModal');
+            await checkShift();
+        }
         else { toast(d.error || 'Gagal buka kasir.', 'err'); }
     } catch(e) { toast('Gagal terhubung ke server.', 'err'); }
     btn.disabled = false; btn.innerHTML = '<i class="fas fa-unlock"></i> Buka Kasir';
