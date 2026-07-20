@@ -58,7 +58,7 @@
             <thead>
                 <tr>
                     <th>Invoice</th><th>Kasir</th><th>Customer</th><th>Total</th>
-                    <th>Bayar</th><th>Status</th><th>Sync ERP</th><th>Waktu</th><th></th>
+                    <th>Bayar</th><th>Status</th><th>Sync ERP</th><th>Status di HPY</th><th>Waktu</th><th></th>
                 </tr>
             </thead>
             <tbody>
@@ -106,6 +106,32 @@
                         <div class="text-sm text-muted" style="margin-top:4px;font-family:monospace">{{ $tx->erp_pos_invoice }}</div>
                     @endif
                 </td>
+                <td>
+                    @php
+                        // Dibandingkan dengan status lokal: yang berbahaya adalah transaksi
+                        // yang di sini masih 'completed' tapi di ERP sudah batal/hilang.
+                        $st = $tx->erp_pos_invoice ? ($erpStates[$tx->erp_pos_invoice] ?? null) : null;
+                        $lokalSelesai = $tx->status === 'completed';
+                    @endphp
+                    @if(!$tx->erp_pos_invoice)
+                        <span class="text-muted text-sm">Belum tersinkron</span>
+                    @elseif($erpCheckFailed)
+                        <span class="badge badge-gray" title="ERP HPY tidak dapat dihubungi saat memuat halaman">? Tidak terperiksa</span>
+                    @elseif($st === null)
+                        <span class="badge badge-red">✕ Tidak ada di HPY</span>
+                        <div class="text-sm text-muted" style="margin-top:4px">Dokumen sudah dihapus di HPY</div>
+                    @elseif($st['docstatus'] === 2)
+                        <span class="badge badge-red">✕ Dibatalkan di HPY</span>
+                        @if($lokalSelesai)
+                            <div class="text-sm text-red" style="margin-top:4px">Di sini masih selesai — nilainya ikut terhitung</div>
+                        @endif
+                    @elseif($st['docstatus'] === 0)
+                        <span class="badge badge-yellow">⏳ Draft di HPY</span>
+                        <div class="text-sm text-muted" style="margin-top:4px">Belum di-submit</div>
+                    @else
+                        <span class="badge badge-green">✓ {{ $st['status'] ?: 'Submitted' }}</span>
+                    @endif
+                </td>
                 <td class="text-sm text-muted">{{ local_dt($tx->created_at) }}</td>
                 <td style="white-space:nowrap">
                     <a href="{{ route('transactions.show',$tx) }}" class="btn btn-ghost btn-sm" title="Detail">
@@ -121,7 +147,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="9" style="text-align:center;padding:60px;color:var(--text3)">
+                <td colspan="10" style="text-align:center;padding:60px;color:var(--text3)">
                     <div style="font-size:40px;margin-bottom:12px">🧾</div>
                     <div style="font-size:15px;font-weight:600">Tidak ada transaksi ditemukan</div>
                     <div style="font-size:13px;margin-top:4px">Coba ubah filter pencarian</div>

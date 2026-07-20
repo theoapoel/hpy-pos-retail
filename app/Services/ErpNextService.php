@@ -1727,6 +1727,61 @@ class ErpNextService
     }
 
     /**
+     * Keadaan terkini sekumpulan POS Invoice di ERP HPY, dipakai untuk mendeteksi
+     * invoice yang dibatalkan/dihapus di ERP tetapi masih tercatat selesai di lokal.
+     *
+     * Nama yang tidak ada di hasil berarti dokumennya sudah dihapus di ERP.
+     *
+     * @param  array<int,string>  $names  nama POS Invoice
+     * @return array{success:bool,data:array<string,array{docstatus:int,status:string}>,error?:string}
+     */
+    public function fetchPosInvoiceStates(array $names): array
+    {
+        $names = array_values(array_filter(array_unique($names)));
+
+        if (empty($names)) {
+            return ['success' => true, 'data' => []];
+        }
+
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'data' => [], 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+
+        $states = [];
+
+        try {
+            foreach (array_chunk($names, 100) as $chunk) {
+                $response = $this->client->get('/api/resource/POS Invoice', [
+                    'query' => [
+                        'fields' => json_encode(['name', 'docstatus', 'status']),
+                        'filters' => json_encode([['name', 'in', $chunk]]),
+                        'limit_page_length' => 0,
+                    ],
+                    'timeout' => 15,
+                ]);
+
+                $rows = json_decode($response->getBody()->getContents(), true)['data'] ?? [];
+
+                foreach ($rows as $row) {
+                    $states[$row['name']] = [
+                        'docstatus' => (int) ($row['docstatus'] ?? 0),
+                        'status' => (string) ($row['status'] ?? ''),
+                    ];
+                }
+            }
+
+            return ['success' => true, 'data' => $states];
+
+        } catch (ConnectException $e) {
+            return ['success' => false, 'data' => [], 'error' => 'ERP HPY tidak dapat dihubungi.'];
+        } catch (RequestException $e) {
+            return ['success' => false, 'data' => [], 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'data' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Ambil report "POS Register" dari ERP HPY — satu baris per POS Invoice, lengkap
      * dengan metode bayarnya. Invoice split payment memakai mode gabungan, mis. "BCA QR, CASH".
      *

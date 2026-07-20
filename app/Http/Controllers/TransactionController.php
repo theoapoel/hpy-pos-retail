@@ -32,6 +32,18 @@ class TransactionController extends Controller {
 
         $transactions = $query->paginate(20)->withQueryString();
 
+        // Keadaan invoice di ERP HPY untuk baris yang tampil saja (1 request per
+        // halaman). Tujuannya menangkap invoice yang dibatalkan/dihapus di ERP
+        // tetapi di sini masih tercatat selesai — pembatalan di ERP tidak mengubah
+        // data lokal. Kalau ERP tidak bisa dihubungi, halaman tetap tampil dan
+        // kolomnya diberi tanda "tidak terperiksa", bukan disimpulkan aman.
+        $erpNames = collect($transactions->items())->pluck('erp_pos_invoice')->filter()->all();
+        $erpCheck = $erpNames
+            ? (new \App\Services\ErpNextService)->fetchPosInvoiceStates($erpNames)
+            : ['success' => true, 'data' => []];
+        $erpStates = $erpCheck['data'];
+        $erpCheckFailed = ! $erpCheck['success'];
+
         // Pilihan tipe bayar = metode dari POS Profile ERP + metode yang pernah
         // dipakai di transaksi lama (agar data lama tetap bisa difilter).
         $paymentMethods = collect(pos_payment_methods())
@@ -45,7 +57,7 @@ class TransactionController extends Controller {
             ->sort(fn ($a, $b) => strcasecmp($a, $b))
             ->values();
 
-        return view('transactions.index', compact('transactions','paymentMethods','summary'));
+        return view('transactions.index', compact('transactions','paymentMethods','summary','erpStates','erpCheckFailed'));
     }
 
     public function show(Transaction $transaction) {
