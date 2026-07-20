@@ -91,7 +91,8 @@
       "Bash(php -l resources/views/settings/index.blade.php)",
       "Bash(mkdir -p /tmp/pintchk)",
       "Bash(git show *)",
-      "Bash(./vendor/bin/pint --test /tmp/pintchk)"
+      "Bash(./vendor/bin/pint --test /tmp/pintchk)",
+      "Bash(php -l app/Http/Controllers/TransactionController.php)"
     ]
   }
 }

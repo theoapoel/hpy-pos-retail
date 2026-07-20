@@ -22,8 +22,17 @@ class TransactionController extends Controller {
         if ($request->date_from) $query->whereDate('created_at','>=',$request->date_from);
         if ($request->date_to) $query->whereDate('created_at','<=',$request->date_to);
         if ($request->status) $query->where('status',$request->status);
-        $transactions = $query->paginate(20);
-        return view('transactions.index', compact('transactions'));
+        if ($request->payment_method) $query->where('payment_method',$request->payment_method);
+        $transactions = $query->paginate(20)->withQueryString();
+
+        // Pilihan tipe bayar = metode dari POS Profile ERP + metode yang pernah
+        // dipakai di transaksi lama (agar data lama tetap bisa difilter).
+        $paymentMethods = collect(pos_payment_methods())
+            ->pluck('mode_of_payment')
+            ->merge(Transaction::select('payment_method')->distinct()->pluck('payment_method'))
+            ->filter()->unique()->sort()->values();
+
+        return view('transactions.index', compact('transactions','paymentMethods'));
     }
 
     public function show(Transaction $transaction) {

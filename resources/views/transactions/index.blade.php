@@ -34,8 +34,14 @@
                 <option value="completed" {{ request('status')=='completed'?'selected':'' }}>Selesai</option>
                 <option value="cancelled" {{ request('status')=='cancelled'?'selected':'' }}>Dibatalkan</option>
             </select>
+            <select name="payment_method" class="form-control form-select" style="max-width:170px">
+                <option value="">Semua Tipe Bayar</option>
+                @foreach($paymentMethods as $pm)
+                <option value="{{ $pm }}" {{ request('payment_method')===$pm?'selected':'' }}>{{ strtoupper($pm) }}</option>
+                @endforeach
+            </select>
             <button type="submit" class="btn btn-outline"><i class="fas fa-filter"></i> Filter</button>
-            @if(request()->hasAny(['search','erp_invoice','date_from','date_to','status']))
+            @if(request()->hasAny(['search','erp_invoice','date_from','date_to','status','payment_method']))
             <a href="{{ route('transactions.index') }}" class="btn btn-ghost"><i class="fas fa-times"></i> Reset</a>
             @endif
         </form>
