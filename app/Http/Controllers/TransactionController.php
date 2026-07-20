@@ -27,7 +27,7 @@ class TransactionController extends Controller {
         // Nilai uang dihitung dari transaksi selesai saja agar yang dibatalkan
         // tidak menggelembungkan total.
         $summary = (clone $query)->without(['user','customer'])->where('status','completed')
-            ->selectRaw('COUNT(*) as tx_count, COALESCE(SUM(total),0) as total_amount')
+            ->selectRaw('COALESCE(SUM(total),0) as total_amount')
             ->reorder()->first();
 
         $transactions = $query->paginate(20)->withQueryString();
@@ -45,7 +45,7 @@ class TransactionController extends Controller {
             ->sort(fn ($a, $b) => strcasecmp($a, $b))
             ->values();
 
-        return view('transactions.index', compact('transactions','paymentMethods'));
+        return view('transactions.index', compact('transactions','paymentMethods','summary'));
     }
 
     public function show(Transaction $transaction) {
