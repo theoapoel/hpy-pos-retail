@@ -30,7 +30,13 @@ class TransactionController extends Controller {
         $paymentMethods = collect(pos_payment_methods())
             ->pluck('mode_of_payment')
             ->merge(Transaction::select('payment_method')->distinct()->pluck('payment_method'))
-            ->filter()->unique()->sort()->values();
+            ->map(fn ($m) => trim((string) $m))
+            ->filter()
+            // ERP menyimpan "Cash" sedangkan transaksi lama "CASH" — samakan agar
+            // tidak muncul dua kali di dropdown (perbandingan DB sendiri case-insensitive).
+            ->unique(fn ($m) => mb_strtoupper($m))
+            ->sort(fn ($a, $b) => strcasecmp($a, $b))
+            ->values();
 
         return view('transactions.index', compact('transactions','paymentMethods'));
     }
