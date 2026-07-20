@@ -30,6 +30,15 @@ class PosShift extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Fitur Buka/Tutup Kasir aktif atau tidak.
+     * Dinonaktifkan secara default; hidupkan dengan Setting 'pos_shift_enabled' = '1'.
+     */
+    public static function featureEnabled(): bool
+    {
+        return (string) Setting::get('pos_shift_enabled', '0') === '1';
+    }
+
     /** Shift terbuka milik seorang kasir (bila ada). */
     public static function openFor(int $userId): ?self
     {

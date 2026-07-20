@@ -92,7 +92,8 @@ class ErpNextService
         try {
             $client = new Client([
                 'base_uri' => $this->baseUrl,
-                'timeout' => 4,
+                'timeout' => 3,
+                'connect_timeout' => 3,
                 'verify' => false,
                 'http_errors' => false,
             ]);

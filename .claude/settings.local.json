@@ -78,7 +78,20 @@
       "Bash(grep -nE '\\\\$store|\\\\$transaction->|\\\\$groups|\\\\$table|\\\\$item->' resources/views/pos/print-kitchen.blade.php)",
       "Bash(node docs/_cat.mjs)",
       "Bash(./vendor/bin/pint --test app/Http/Controllers/PosController.php app/helpers.php)",
-      "Bash(rm -rf /tmp/pintchk)"
+      "Bash(rm -rf /tmp/pintchk)",
+      "PowerShell(php -l app/Http/Controllers/PosShiftController.php)",
+      "PowerShell(php -l app/Services/ErpNextService.php)",
+      "PowerShell(./vendor/bin/pint --test app/Http/Controllers/PosShiftController.php app/Services/ErpNextService.php)",
+      "PowerShell(git add app/Http/Controllers/PosShiftController.php app/Services/ErpNextService.php resources/views/pos/_shift.blade.php)",
+      "PowerShell(git commit -F \"C:\\\\Users\\\\LENOVO\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--xampp-htdocs-resto-pos\\\\7dd297d7-a359-420f-b4c6-8802c3e88604\\\\scratchpad\\\\commitmsg.txt\")",
+      "PowerShell(git fetch hpy)",
+      "Bash(cat)",
+      "Bash(./vendor/bin/pint --test app/Models/PosShift.php app/Http/Controllers/PosShiftController.php)",
+      "Bash(./vendor/bin/pint --test app/Http/Controllers/TransactionController.php app/Http/Controllers/ModeOfPaymentReportController.php app/Http/Controllers/SettingsController.php app/Models/Setting.php)",
+      "Bash(php -l resources/views/settings/index.blade.php)",
+      "Bash(mkdir -p /tmp/pintchk)",
+      "Bash(git show *)",
+      "Bash(./vendor/bin/pint --test /tmp/pintchk)"
     ]
   }
 }

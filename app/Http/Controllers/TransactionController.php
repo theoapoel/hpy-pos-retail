@@ -1,11 +1,18 @@
 <?php
 namespace App\Http\Controllers;
+use App\Models\Setting;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 
 class TransactionController extends Controller {
     public function index(Request $request) {
         $query = Transaction::with(['user','customer'])->latest();
+        // Cakupan laporan (Pengaturan Toko): 'all' = semua transaksi toko,
+        // 'user' = kasir non-manager hanya melihat transaksinya sendiri.
+        $user = auth()->user();
+        if (Setting::reportScopedByUser() && $user && ! $user->isManager()) {
+            $query->where('user_id', $user->id);
+        }
         if ($request->search) {
             $query->where('invoice_no','LIKE',"%{$request->search}%");
         }

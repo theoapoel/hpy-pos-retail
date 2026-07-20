@@ -15,9 +15,25 @@ class PosShiftController extends Controller
         return Setting::get('timezone', 'Asia/Jakarta') ?: 'Asia/Jakarta';
     }
 
+    /** Respons standar saat fitur Buka/Tutup Kasir dimatikan. */
+    private function disabledResponse()
+    {
+        return response()->json([
+            'success' => false,
+            'feature_disabled' => true,
+            'has_open_shift' => false,
+            'shift' => null,
+            'error' => 'Fitur Buka/Tutup Kasir sedang dinonaktifkan.',
+        ], 200);
+    }
+
     /** Status shift kasir yang sedang login (untuk POS mengetahui perlu buka kasir atau tidak). */
     public function current()
     {
+        if (! PosShift::featureEnabled()) {
+            return $this->disabledResponse();
+        }
+
         $shift = PosShift::openFor(auth()->id());
 
         // Shift yang dibuka saat internet mati: coba susulkan ke ERP begitu online lagi.
@@ -44,6 +60,10 @@ class PosShiftController extends Controller
      */
     public function open(Request $request)
     {
+        if (! PosShift::featureEnabled()) {
+            return $this->disabledResponse();
+        }
+
         $request->validate([
             'opening_cash' => 'required|numeric|min:0',
         ]);
@@ -59,18 +79,25 @@ class PosShiftController extends Controller
 
         $erp = new ErpNextService;
         $openingCash = (float) $request->opening_cash;
+        $openingName = null;
         $offlineError = null;
 
-        // Bila kasir masih punya opening entry Open di ERP (mis. sisa dari sesi lain), pakai itu.
-        $openingName = $erp->findOpenPosOpeningEntry($user->email);
-        if (! $openingName) {
-            $result = $erp->createPosOpeningEntry($user->email, $openingCash);
-            if ($result['success']) {
-                $openingName = $result['docname'];
-            } elseif ($this->isOffline($result)) {
-                $offlineError = $result['error'] ?? 'ERP HPY tidak dapat dijangkau';
-            } else {
-                return response()->json(['success' => false, 'error' => 'Gagal buka kasir di ERP HPY: '.($result['error'] ?? 'Unknown')], 422);
+        // Cek koneksi sekali di depan (±3 detik) supaya saat internet mati kasir
+        // tidak menunggu tiap panggilan ERP timeout satu per satu.
+        if (! $erp->quickPing()) {
+            $offlineError = 'ERP HPY tidak dapat dijangkau (internet mati).';
+        } else {
+            // Bila kasir masih punya opening entry Open di ERP (mis. sisa dari sesi lain), pakai itu.
+            $openingName = $erp->findOpenPosOpeningEntry($user->email);
+            if (! $openingName) {
+                $result = $erp->createPosOpeningEntry($user->email, $openingCash);
+                if ($result['success']) {
+                    $openingName = $result['docname'];
+                } elseif ($this->isOffline($result)) {
+                    $offlineError = $result['error'] ?? 'ERP HPY tidak dapat dijangkau';
+                } else {
+                    return response()->json(['success' => false, 'error' => 'Gagal buka kasir di ERP HPY: '.($result['error'] ?? 'Unknown')], 422);
+                }
             }
         }
 
@@ -125,6 +152,10 @@ class PosShiftController extends Controller
         }
 
         $erp = new ErpNextService;
+        if (! $erp->quickPing()) {   // masih offline → jangan buang waktu menunggu timeout
+            return false;
+        }
+
         $name = $erp->findOpenPosOpeningEntry($email);
         if (! $name) {
             $result = $erp->createPosOpeningEntry(
@@ -152,6 +183,10 @@ class PosShiftController extends Controller
     /** Pratinjau rekonsiliasi sebelum tutup: expected per metode + ringkasan penjualan. */
     public function reconcile()
     {
+        if (! PosShift::featureEnabled()) {
+            return $this->disabledResponse();
+        }
+
         $shift = PosShift::openFor(auth()->id());
         if (! $shift) {
             return response()->json(['success' => false, 'error' => 'Tidak ada shift terbuka.'], 422);
@@ -177,8 +212,12 @@ class PosShiftController extends Controller
     /** Tutup Kasir → buat POS Closing Entry (dengan hitung kas fisik) + tutup shift lokal. */
     public function close(Request $request)
     {
+        if (! PosShift::featureEnabled()) {
+            return $this->disabledResponse();
+        }
+
         $request->validate([
-            'counted' => 'required|array',          // { "CASH": 500000, "BCA QR": 100000, ... }
+            'counted' => 'required|array',       // { "CASH": 500000, "BCA QR": 100000, ... }
             'counted.*' => 'numeric|min:0',
         ]);
 

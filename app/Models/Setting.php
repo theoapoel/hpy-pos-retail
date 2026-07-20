@@ -17,6 +17,15 @@ class Setting extends Model
         });
     }
 
+    /**
+     * Laporan transaksi dibatasi per kasir atau tidak.
+     * 'all' (default) = semua transaksi toko, tanpa membedakan kasir/shift.
+     */
+    public static function reportScopedByUser(): bool
+    {
+        return static::get('report_scope', 'all') === 'user';
+    }
+
     public static function set(string $key, $value, string $group = 'general'): void
     {
         static::updateOrCreate(['key' => $key], ['value' => $value, 'group' => $group]);

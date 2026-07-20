@@ -143,6 +143,35 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">Cakupan Laporan Transaksi</label>
+                    <div style="display:flex;gap:12px;margin-top:4px">
+                        <label style="flex:1;cursor:pointer">
+                            <input type="radio" name="report_scope" value="all"
+                                {{ ($settings['report_scope'] ?: 'all') === 'all' ? 'checked' : '' }}
+                                style="display:none" class="report-scope-radio">
+                            <div class="report-scope-option" style="border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s">
+                                <div style="font-size:28px;margin-bottom:6px">🏪</div>
+                                <div style="font-size:13px;font-weight:600">Semua Transaksi</div>
+                                <div style="font-size:11px;color:var(--text3);margin-top:2px">Satu laporan toko, tanpa membedakan kasir/shift</div>
+                            </div>
+                        </label>
+                        <label style="flex:1;cursor:pointer">
+                            <input type="radio" name="report_scope" value="user"
+                                {{ ($settings['report_scope'] ?: 'all') === 'user' ? 'checked' : '' }}
+                                style="display:none" class="report-scope-radio">
+                            <div class="report-scope-option" style="border:2px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s">
+                                <div style="font-size:28px;margin-bottom:6px">👤</div>
+                                <div style="font-size:13px;font-weight:600">Per Kasir</div>
+                                <div style="font-size:11px;color:var(--text3);margin-top:2px">Kasir hanya melihat transaksinya sendiri</div>
+                            </div>
+                        </label>
+                    </div>
+                    <p style="font-size:12px;color:var(--text3);margin-top:6px">
+                        Manager &amp; admin selalu melihat seluruh transaksi. Pilihan ini menentukan apa yang dilihat kasir.
+                    </p>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">Layout Kasir</label>
                     <input type="hidden" name="pos_layout" id="posLayoutInput" value="{{ $settings['pos_layout'] ?: 'index' }}">
                     <div style="display:flex;gap:12px;margin-top:4px">
@@ -345,6 +374,20 @@ function updateProdDisplayUI() {
 document.querySelectorAll('.prod-display-radio').forEach(r => {
     r.addEventListener('change', updateProdDisplayUI);
 });
+
+// Radio button visual untuk cakupan laporan transaksi
+function updateReportScopeUI() {
+    document.querySelectorAll('.report-scope-radio').forEach(radio => {
+        const box = radio.nextElementSibling;
+        box.style.borderColor = radio.checked ? 'var(--blue)' : 'var(--border)';
+        box.style.background  = radio.checked ? 'var(--blue-light, #E8F0FE)' : '';
+        box.style.color       = radio.checked ? 'var(--blue)' : '';
+    });
+}
+document.querySelectorAll('.report-scope-radio').forEach(r => {
+    r.addEventListener('change', updateReportScopeUI);
+});
+updateReportScopeUI();
 
 // Layout Kasir selector
 function selectPosLayout(el) {

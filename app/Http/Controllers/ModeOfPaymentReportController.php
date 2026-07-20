@@ -12,9 +12,10 @@ class ModeOfPaymentReportController extends Controller
     {
         $posProfile = Setting::get('erpnext_pos_profile', '');
 
-        // Kasir (non-manager) hanya melihat transaksinya sendiri.
+        // Kasir (non-manager) hanya melihat transaksinya sendiri — bila pengaturan
+        // toko "Cakupan Laporan Transaksi" diset per kasir.
         $user = auth()->user();
-        $scopedToUser = $user && ! $user->isManager();
+        $scopedToUser = Setting::reportScopedByUser() && $user && ! $user->isManager();
         $scopedUserName = $scopedToUser ? $user->name : null;
 
         return view('reports.mode-of-payment', compact('posProfile', 'scopedToUser', 'scopedUserName'));
@@ -31,9 +32,10 @@ class ModeOfPaymentReportController extends Controller
         $erp = new ErpNextService;
 
         // Kasir (non-manager) dibatasi ke invoice miliknya sendiri
-        // (owner POS Invoice = email ERP User kasir).
+        // (owner POS Invoice = email ERP User kasir), hanya bila cakupan laporan
+        // diset per kasir. Default 'all' → semua invoice toko.
         $user = auth()->user();
-        $owner = ($user && ! $user->isManager()) ? $user->email : '';
+        $owner = (Setting::reportScopedByUser() && $user && ! $user->isManager()) ? $user->email : '';
 
         // Ambil invoice untuk membangun peta nama → tanggal
         $result = $erp->fetchPosInvoices(
