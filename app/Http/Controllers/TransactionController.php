@@ -23,6 +23,13 @@ class TransactionController extends Controller {
         if ($request->date_to) $query->whereDate('created_at','<=',$request->date_to);
         if ($request->status) $query->where('status',$request->status);
         if ($request->payment_method) $query->where('payment_method',$request->payment_method);
+        // Ringkasan seluruh hasil filter (bukan hanya halaman yang tampil).
+        // Nilai uang dihitung dari transaksi selesai saja agar yang dibatalkan
+        // tidak menggelembungkan total.
+        $summary = (clone $query)->without(['user','customer'])->where('status','completed')
+            ->selectRaw('COUNT(*) as tx_count, COALESCE(SUM(total),0) as total_amount')
+            ->reorder()->first();
+
         $transactions = $query->paginate(20)->withQueryString();
 
         // Pilihan tipe bayar = metode dari POS Profile ERP + metode yang pernah

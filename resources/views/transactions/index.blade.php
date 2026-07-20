@@ -12,6 +12,16 @@
     <div>
         <div class="page-title"><i class="fas fa-receipt text-blue"></i> Riwayat Transaksi</div>
         <div class="page-subtitle">Total {{ $transactions->total() }} transaksi</div>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 14px">
+                <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Transaksi Selesai</div>
+                <div style="font-size:18px;font-weight:800">{{ number_format($summary->tx_count ?? 0,0,',','.') }}</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 14px">
+                <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Total Penjualan</div>
+                <div style="font-size:18px;font-weight:800;color:var(--blue)">Rp {{ number_format($summary->total_amount ?? 0,0,',','.') }}</div>
+            </div>
+        </div>
     </div>
     <a href="{{ route('pos.index') }}" class="btn btn-primary">
         <i class="fas fa-cash-register"></i> Buka Kasir
