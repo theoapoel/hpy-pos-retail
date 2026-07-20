@@ -38,27 +38,59 @@ class OnlineReportController extends Controller
         $localMap = \App\Models\Transaction::whereIn('erp_pos_invoice', $invoices->pluck('name')->filter()->all())
             ->pluck('invoice_no', 'erp_pos_invoice');
 
-        $invoices = $invoices->map(function ($inv) use ($localMap) {
-            $inv['local_invoice'] = $localMap[$inv['name']] ?? null;
+        // Metode bayar per transaksi diambil dari report POS Register (split payment
+        // muncul sebagai mode gabungan, mis. "BCA QR, CASH").
+        $register = $erp->fetchPosRegister(
+            $request->date_from,
+            $request->date_to,
+            $request->input('pos_profile', '')
+        );
+
+        if (!$register['success']) {
+            return response()->json(['success' => false, 'error' => $register['error']], 422);
+        }
+
+        $modeByInvoice = collect($register['data'])
+            ->pluck('mode_of_payment', 'pos_invoice')
+            ->all();
+
+        $invoices = $invoices->map(function ($inv) use ($localMap, $modeByInvoice) {
+            $inv['local_invoice']    = $localMap[$inv['name']] ?? null;
+            $inv['mode_of_payment']  = $modeByInvoice[$inv['name']] ?? null;
             return $inv;
         });
 
-        $totalSales = $invoices->sum('grand_total');
-        $totalCount = $invoices->count();
+        // Statistik & chart dihitung dari POS Register, bukan dari $invoices: daftar
+        // invoice dibatasi 1.000 baris, sedangkan POS Register mengembalikan seluruh
+        // rentang. Kalau dihitung dari $invoices, kartu total akan lebih kecil daripada
+        // rincian metode bayar di halaman yang sama.
+        $registerRows = collect($register['data']);
+
+        $totalSales = $registerRows->sum(fn($r) => (float) $r['grand_total']);
+        $totalCount = $registerRows->count();
         $avgPerTx   = $totalCount > 0 ? round($totalSales / $totalCount) : 0;
 
         // Agregasi per hari untuk chart
-        $dailyData = $invoices
+        $dailyData = $registerRows
             ->groupBy('posting_date')
             ->map(fn($group) => [
                 'count' => $group->count(),
-                'total' => $group->sum('grand_total'),
+                'total' => $group->sum(fn($r) => (float) $r['grand_total']),
             ])
             ->sortKeys();
 
-        // Agregasi per metode pembayaran (child table Sales Invoice Payment)
-        $payment = $erp->fetchPosPaymentSummary($invoices->pluck('name')->all());
-        $paymentData = $payment['success'] ? $payment['data'] : [];
+        // Agregasi per metode pembayaran, dari POS Register. Nilainya pakai grand_total
+        // (bukan paid_amount) — lihat catatan di ErpNextService::fetchPosRegister().
+        $paymentData = $registerRows
+            ->groupBy(fn($r) => $r['mode_of_payment'] ?: 'Tanpa Metode')
+            ->map(fn($g, $mode) => [
+                'mode_of_payment' => $mode,
+                'count'           => $g->count(),
+                'total'           => $g->sum(fn($r) => (float) $r['grand_total']),
+            ])
+            ->sortByDesc('total')
+            ->values()
+            ->all();
 
         return response()->json([
             'success'   => true,

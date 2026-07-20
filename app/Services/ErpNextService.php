@@ -265,12 +265,19 @@ class ErpNextService
         $paidAmount = (float) ($transaction->paid_amount ?? 0);
         $changeAmount = max(0, (float) ($transaction->change_amount ?? 0));
 
+        // Field `base_*` (nilai dalam mata uang company) harus dikirim eksplisit.
+        // ERPNext tidak menghitungnya sendiri untuk invoice yang dibuat lewat REST,
+        // sehingga tanpa ini `base_paid_amount` tersimpan 0 — dan report bawaan ERP
+        // yang membacanya (mis. kolom "Paid Amount" di POS Register) jadi jauh di
+        // bawah omzet sebenarnya. POS ini transaksi dalam mata uang company
+        // (conversion_rate = 1), jadi nilai base = nilai aslinya.
         $payments = [];
         if ($transaction->payment_method === 'mixed' && $transaction->payment_details) {
             foreach ($transaction->payment_details as $method => $amount) {
                 $payments[] = [
                     'mode_of_payment' => $this->mapPaymentMethod($method),
                     'amount' => (float) $amount,
+                    'base_amount' => (float) $amount,
                 ];
             }
             // paid_amount = jumlah semua metode; mixed diasumsikan pas (tanpa kembalian)
@@ -283,6 +290,7 @@ class ErpNextService
             $payments[] = [
                 'mode_of_payment' => $this->mapPaymentMethod($transaction->payment_method),
                 'amount' => $tendered,
+                'base_amount' => $tendered,
             ];
             $docPaidAmount = $tendered;
             $docChangeAmount = $changeAmount;
@@ -328,7 +336,9 @@ class ErpNextService
             'items' => $items,
             'payments' => $payments,
             'paid_amount' => $docPaidAmount,
+            'base_paid_amount' => $docPaidAmount,
             'change_amount' => $docChangeAmount,
+            'base_change_amount' => $docChangeAmount,
             'apply_discount_on' => 'Net Total',
             'additional_discount_percentage' => $erpDiscPct,
             'discount_amount' => $erpDiscAmt,
@@ -1709,6 +1719,83 @@ class ErpNextService
                 'truncated' => $truncated,
             ];
 
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Ambil report "POS Register" dari ERP HPY — satu baris per POS Invoice, lengkap
+     * dengan metode bayarnya. Invoice split payment memakai mode gabungan, mis. "BCA QR, CASH".
+     *
+     * Kolom yang dikembalikan report: posting_date, pos_invoice, customer, pos_profile,
+     * owner, grand_total, paid_amount, mode_of_payment, is_return.
+     *
+     * CATATAN: jangan pakai kolom `paid_amount` untuk penjumlahan. Kolom itu membaca
+     * field `base_paid_amount`, yang bernilai 0 pada invoice hasil sync app ini,
+     * sehingga totalnya jauh di bawah omzet sebenarnya. Pakai `grand_total`, yang
+     * selalu sama persis dengan nilai di doctype POS Invoice.
+     *
+     * @return array{success:bool,data?:array<int,array>,error?:string}
+     */
+    public function fetchPosRegister(
+        string $dateFrom,
+        string $dateTo,
+        string $posProfile = '',
+        string $owner = ''
+    ): array {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        if (! $company) {
+            return ['success' => false, 'error' => 'Company ERP HPY belum diset.'];
+        }
+
+        $filters = [
+            'company' => $company,
+            'from_date' => $dateFrom,
+            'to_date' => $dateTo,
+        ];
+
+        if ($posProfile) {
+            $filters['pos_profile'] = $posProfile;
+        }
+
+        // Filter per kasir (owner dokumen = email ERP User kasir yang membuat invoice).
+        if ($owner) {
+            $filters['owner'] = $owner;
+        }
+
+        try {
+            $response = $this->client->get('/api/method/frappe.desk.query_report.run', [
+                'query' => [
+                    'report_name' => 'POS Register',
+                    'filters' => json_encode($filters),
+                    'ignore_prepared_report' => 1,
+                ],
+                // Script Report tanpa paging: satu rentang = satu respons. Terukur
+                // 1 tahun ≈ 2,2 MB / 23 detik, jadi beri ruang lebih dari timeout default.
+                'timeout' => 180,
+            ]);
+
+            $body = json_decode($response->getBody()->getContents(), true);
+            $rows = $body['message']['result'] ?? null;
+
+            if (! is_array($rows)) {
+                return ['success' => false, 'error' => 'Report POS Register tidak mengembalikan data.'];
+            }
+
+            // Report bisa menyelipkan baris total/kosong — ambil yang punya nomor invoice.
+            $rows = array_values(array_filter($rows, fn ($r) => is_array($r) && ! empty($r['pos_invoice'])));
+
+            return ['success' => true, 'data' => $rows];
+
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
         } catch (RequestException $e) {
             return ['success' => false, 'error' => $this->extractError($e)];
         } catch (\Exception $e) {

@@ -37,12 +37,12 @@ class ModeOfPaymentReportController extends Controller
         $user = auth()->user();
         $owner = (Setting::reportScopedByUser() && $user && ! $user->isManager()) ? $user->email : '';
 
-        // Ambil invoice untuk membangun peta nama → tanggal
-        $result = $erp->fetchPosInvoices(
+        // Sumber tunggal: report POS Register — satu baris per transaksi, sudah
+        // membawa metode bayarnya (split payment jadi mode gabungan "BCA QR, CASH").
+        $result = $erp->fetchPosRegister(
             $request->date_from,
             $request->date_to,
             $request->input('pos_profile', ''),
-            1000,
             $owner
         );
 
@@ -50,25 +50,37 @@ class ModeOfPaymentReportController extends Controller
             return response()->json(['success' => false, 'error' => $result['error']], 422);
         }
 
-        $invoices = collect($result['data']);
+        // Nilai transaksi diambil dari grand_total, bukan paid_amount — lihat catatan
+        // di ErpNextService::fetchPosRegister().
+        $matrix = [];      // tanggal => mode => ['count'=>int,'total'=>float]
+        $byCashier = [];   // owner   => mode => ['count'=>int,'total'=>float]
+        $modeTotals = [];  // mode    => total (untuk urutan kolom)
+        $txPerDate = [];
 
-        // nama POS Invoice → posting_date
-        $nameToDate = $invoices->pluck('posting_date', 'name')->all();
+        foreach ($result['data'] as $row) {
+            $date = $row['posting_date'] ?? null;
+            if ($date === null) {
+                continue;
+            }
 
-        // Jumlah transaksi (dokumen) per tanggal
-        $txPerDate = $invoices
-            ->groupBy('posting_date')
-            ->map(fn ($g) => $g->count())
-            ->all();
+            $mode = $row['mode_of_payment'] ?: 'Tanpa Metode';
+            $amount = (float) ($row['grand_total'] ?? 0);
+            $cashier = $row['owner'] ?? 'Lainnya';
 
-        $payment = $erp->fetchPosPaymentMatrix($nameToDate);
-        if (! $payment['success']) {
-            return response()->json(['success' => false, 'error' => $payment['error']], 422);
+            $matrix[$date][$mode]['count'] = ($matrix[$date][$mode]['count'] ?? 0) + 1;
+            $matrix[$date][$mode]['total'] = ($matrix[$date][$mode]['total'] ?? 0) + $amount;
+
+            $byCashier[$cashier][$mode]['count'] = ($byCashier[$cashier][$mode]['count'] ?? 0) + 1;
+            $byCashier[$cashier][$mode]['total'] = ($byCashier[$cashier][$mode]['total'] ?? 0) + $amount;
+
+            $modeTotals[$mode] = ($modeTotals[$mode] ?? 0) + $amount;
+            $txPerDate[$date] = ($txPerDate[$date] ?? 0) + 1;
         }
 
-        $modes = $payment['data']['modes'];
-        $matrix = $payment['data']['matrix'];
-        $byCashier = $payment['data']['by_cashier'] ?? [];
+        arsort($modeTotals);
+        $modes = array_keys($modeTotals);
+        ksort($matrix);
+        ksort($byCashier);
 
         // Bangun baris tabel per tanggal + total kolom
         $rows = [];
@@ -127,7 +139,8 @@ class ModeOfPaymentReportController extends Controller
 
         return response()->json([
             'success' => true,
-            'truncated' => $result['truncated'],
+            // POS Register mengembalikan seluruh baris rentang tanggal (tanpa paging).
+            'truncated' => false,
             'modes' => $modes,
             'rows' => $rows,
             'cashier_rows' => $cashierRows,

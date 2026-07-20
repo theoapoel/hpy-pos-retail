@@ -64,8 +64,9 @@
     {{-- Truncated warning --}}
     <div id="truncatedWarn" class="alert alert-warning" style="display:none">
         <i class="fas fa-exclamation-triangle"></i>
-        Data terlalu banyak — hanya 1.000 transaksi pertama yang ditampilkan.
-        Perkecil rentang tanggal untuk melihat data lengkap.
+        Data terlalu banyak — <strong>tabel di bawah</strong> hanya menampilkan 1.000 transaksi pertama.
+        Angka ringkasan, grafik, dan rincian metode bayar tetap mencakup seluruh rentang tanggal.
+        Perkecil rentang tanggal bila ingin tabelnya lengkap.
     </div>
 
     {{-- Summary cards --}}
@@ -158,6 +159,7 @@
                         <th>Waktu</th>
                         <th>Customer</th>
                         <th>Grand Total</th>
+                        <th>Metode Bayar</th>
                         <th>POS Profile</th>
                         <th>Status</th>
                         <th></th>
@@ -427,7 +429,7 @@ function renderTable(invoices) {
         const customerDisplay = inv.customer_name || inv.customer || '<span class="text-muted">Walk-in</span>';
 
         const tr = document.createElement('tr');
-        tr.setAttribute('data-search', (inv.name + ' ' + (inv.local_invoice || '') + ' ' + (inv.customer_name || '') + ' ' + (inv.customer || '')).toLowerCase());
+        tr.setAttribute('data-search', (inv.name + ' ' + (inv.local_invoice || '') + ' ' + (inv.customer_name || '') + ' ' + (inv.customer || '') + ' ' + (inv.mode_of_payment || '')).toLowerCase());
         const localInv = inv.local_invoice
             ? `<span class="font-medium">${inv.local_invoice}</span>`
             : '<span class="text-muted">-</span>';
@@ -438,6 +440,7 @@ function renderTable(invoices) {
             <td class="text-muted text-sm">${(inv.posting_time || '').substring(0,5)}</td>
             <td>${customerDisplay}</td>
             <td class="money">${fmt(inv.grand_total)}</td>
+            <td class="text-sm">${inv.mode_of_payment || '<span class="text-muted">-</span>'}</td>
             <td class="text-sm text-muted">${inv.pos_profile || '-'}</td>
             <td>${statusBadge}</td>
             <td><button class="btn btn-ghost btn-sm" onclick="openDetail('${inv.name}')"><i class="fas fa-eye"></i></button></td>
