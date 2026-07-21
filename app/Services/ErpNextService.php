@@ -1418,6 +1418,252 @@ class ErpNextService
     }
 
     // =========================================================
+    // CREATE SALES INVOICE → ERPNext
+    // =========================================================
+
+    /**
+     * Terbitkan Sales Invoice dari Sales Order milik sebuah Delivery Order.
+     *
+     * Dipanggil begitu order punya pembayaran pertama (lihat DeliveryOrderController
+     * dan DeliveryOrderPaymentController) — order tanpa pembayaran sengaja tidak
+     * ditagihkan supaya tidak menumpuk piutang untuk order yang belum tentu jalan.
+     *
+     * update_stock sengaja 0: pengurangan stok ditangani Delivery Note saat barang
+     * benar-benar dikirim (createDeliveryNote), bukan oleh invoice ini. Kalau
+     * keduanya memotong stok, stok berkurang dua kali untuk satu pengiriman.
+     */
+    public function createSalesInvoice(DeliveryOrder $order): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        // Idempoten — satu DO hanya boleh punya satu invoice.
+        if (! empty($order->erp_sales_invoice)) {
+            return ['success' => true, 'sales_invoice' => $order->erp_sales_invoice, 'docname' => $order->erp_sales_invoice];
+        }
+
+        $soName = $order->erp_sales_order;
+        if (empty($soName)) {
+            return ['success' => false, 'error' => 'Sales Order ERP belum ada. Sync SO terlebih dahulu.'];
+        }
+
+        $customer = $order->customer->erp_customer_name ?: $order->customer->name;
+        if (empty($customer)) {
+            return ['success' => false, 'error' => 'Customer belum memiliki nama ERP. Push customer ke ERP HPY terlebih dahulu.'];
+        }
+
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        $currency = Setting::get('erpnext_currency', 'IDR');
+        $priceList = Setting::get('erpnext_price_list', 'Standard Selling');
+        $namingSeries = Setting::get('erp_si_naming_series', 'ACC-SINV-.YYYY.-');
+        $defaultWh = Warehouse::getDefault()?->name;
+
+        // Baris SO dibutuhkan untuk mengisi so_detail. Tanpa itu ERP tidak menaikkan
+        // per_billed di SO, sehingga order yang sama bisa ditagih dua kali.
+        $soRows = $this->fetchSalesOrderItemRows($soName);
+
+        $usedRows = [];
+        $items = $order->items->map(function ($item) use ($soName, $soRows, &$usedRows, $defaultWh) {
+            $itemCode = $item->product?->erp_item_code ?? $item->product_sku ?? $item->product_name;
+
+            $soDetail = null;
+            foreach ($soRows as $row) {
+                if (($row['item_code'] ?? null) === $itemCode && ! in_array($row['name'], $usedRows, true)) {
+                    $soDetail = $row['name'];
+                    $usedRows[] = $row['name'];
+                    break;
+                }
+            }
+
+            return array_filter([
+                'item_code' => $itemCode,
+                'item_name' => $item->product_name,
+                'description' => $item->product_name,
+                'qty' => (float) $item->qty,
+                'rate' => (float) $item->price,
+                'uom' => $item->product?->unit ?? 'Nos',
+                'warehouse' => $defaultWh ?? '',
+                'sales_order' => $soName,
+                'so_detail' => $soDetail,
+            ], fn ($v) => $v !== null);
+        })->toArray();
+
+        $postingDate = $this->localNow()->format('Y-m-d');
+        // Jatuh tempo tidak boleh mendahului tanggal posting.
+        $dueDate = max($postingDate, $order->delivery_date->format('Y-m-d'));
+
+        $payload = [
+            'doctype' => 'Sales Invoice',
+            'naming_series' => $namingSeries,
+            'customer' => $customer,
+            'posting_date' => $postingDate,
+            'set_posting_time' => 1,
+            'due_date' => $dueDate,
+            'company' => $company,
+            'currency' => $currency,
+            'conversion_rate' => 1,
+            'selling_price_list' => $priceList,
+            'price_list_currency' => $currency,
+            'plc_conversion_rate' => 1,
+            'update_stock' => 0,
+            'set_warehouse' => $defaultWh ?? '',
+            'po_no' => $order->order_no,
+            'items' => $items,
+            'remarks' => implode("\n", array_filter([
+                'Order: '.$order->order_no,
+                $order->billing_address ? 'Billing: '.$order->billing_address : null,
+                $order->notes,
+            ])),
+        ];
+
+        Log::info('DeliveryOrder SI payload', ['order' => $order->order_no, 'payload' => $payload]);
+
+        try {
+            $response = $this->client->post('/api/resource/Sales%20Invoice', ['json' => $payload]);
+            $data = json_decode($response->getBody()->getContents(), true);
+            $docname = $data['data']['name'] ?? null;
+        } catch (ConnectException $e) {
+            Log::warning('SI auto-sync: network unreachable', ['order' => $order->order_no]);
+
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::error('SI create failed', ['order' => $order->order_no, 'raw' => $rawBody]);
+            $error = $this->extractError($e);
+            $order->update(['erp_si_sync_error' => $error]);
+
+            return ['success' => false, 'error' => $error];
+        }
+
+        if ($docname) {
+            try {
+                $this->submitDoc('Sales Invoice', $docname);
+            } catch (RequestException $e) {
+                $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+                Log::error('SI submit failed', ['order' => $order->order_no, 'docname' => $docname, 'raw' => $rawBody]);
+                $error = 'Sales Invoice '.$docname.' dibuat tapi gagal submit: '.$this->extractError($e);
+                $order->update([
+                    'erp_sales_invoice' => $docname,
+                    'erp_si_sync_error' => $error,
+                ]);
+
+                return ['success' => false, 'error' => $error, 'docname' => $docname];
+            }
+        }
+
+        $order->update([
+            'erp_sales_invoice' => $docname,
+            'erp_si_sync_error' => null,
+        ]);
+
+        return ['success' => true, 'sales_invoice' => $docname, 'docname' => $docname];
+    }
+
+    /**
+     * Baris item Sales Order (name + item_code) untuk dipetakan ke so_detail.
+     * Gagal ambil bukan alasan membatalkan invoice — so_detail hanya dikosongkan.
+     */
+    private function fetchSalesOrderItemRows(string $soName): array
+    {
+        try {
+            $resp = $this->client->get('/api/resource/Sales%20Order/'.rawurlencode($soName));
+            $data = json_decode($resp->getBody()->getContents(), true);
+
+            return array_map(
+                fn ($row) => ['name' => $row['name'] ?? null, 'item_code' => $row['item_code'] ?? null],
+                $data['data']['items'] ?? []
+            );
+        } catch (\Exception $e) {
+            Log::warning('Gagal ambil baris Sales Order untuk so_detail', ['sales_order' => $soName, 'error' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Batalkan Sales Invoice sebuah Delivery Order beserta Payment Entry yang
+     * menempel padanya. Urutannya wajib PE dulu — ERP menolak membatalkan invoice
+     * yang masih direferensi pembayaran ter-submit.
+     *
+     * Sales Order-nya sengaja dibiarkan: pembatalan SI sudah mengembalikan
+     * per_billed ke 0, dan SO yang tertinggal tidak berdampak ke laporan penjualan.
+     */
+    public function cancelSalesInvoiceForOrder(DeliveryOrder $order): array
+    {
+        if (empty($this->baseUrl) || empty($order->erp_sales_invoice)) {
+            return ['success' => true, 'cancelled' => []];
+        }
+
+        $errors = [];
+        $cancelled = [];
+
+        $order->loadMissing('payments');
+        foreach ($order->payments as $payment) {
+            if (empty($payment->erp_payment_entry) || $payment->erp_sync_status === 'cancelled') {
+                continue;
+            }
+            try {
+                // Dokumen yang sudah batal di ERP tidak dibatalkan ulang — pembatalan
+                // bisa berhenti separuh jalan (mis. koneksi putus setelah PE batal
+                // tapi sebelum SI), dan percobaan berikutnya harus bisa melanjutkan
+                // dari titik itu, bukan gagal karena langkah yang sudah selesai.
+                if ($this->fetchDocStatus('Payment Entry', $payment->erp_payment_entry) !== 2) {
+                    $this->cancelDoc('Payment Entry', $payment->erp_payment_entry);
+                    $cancelled[] = $payment->erp_payment_entry;
+                }
+                $payment->update(['erp_sync_status' => 'cancelled']);
+            } catch (RequestException $e) {
+                $errors[] = 'Payment Entry '.$payment->erp_payment_entry.': '.$this->extractError($e);
+            }
+        }
+
+        // Invoice hanya dibatalkan bila seluruh pembayarannya lepas — kalau tidak,
+        // ERP pasti menolak dan kita berakhir dengan status lokal yang berbohong.
+        if (! empty($errors)) {
+            return ['success' => false, 'error' => implode('; ', $errors), 'cancelled' => $cancelled];
+        }
+
+        try {
+            if ($this->fetchDocStatus('Sales Invoice', $order->erp_sales_invoice) !== 2) {
+                $this->cancelDoc('Sales Invoice', $order->erp_sales_invoice);
+                $cancelled[] = $order->erp_sales_invoice;
+            }
+        } catch (RequestException $e) {
+            $error = 'Sales Invoice '.$order->erp_sales_invoice.': '.$this->extractError($e);
+            $order->update(['erp_si_sync_error' => $error]);
+
+            return ['success' => false, 'error' => $error, 'cancelled' => $cancelled];
+        }
+
+        $order->update(['erp_si_sync_error' => null]);
+
+        return ['success' => true, 'cancelled' => $cancelled];
+    }
+
+    /** docstatus dokumen ERP: 0 draft, 1 submitted, 2 cancelled. null bila tak terbaca. */
+    private function fetchDocStatus(string $doctype, string $name): ?int
+    {
+        try {
+            $resp = $this->client->get("/api/resource/{$doctype}/".rawurlencode($name).'?fields='.urlencode(json_encode(['docstatus'])));
+            $data = json_decode($resp->getBody()->getContents(), true);
+            $status = $data['data']['docstatus'] ?? null;
+
+            return $status === null ? null : (int) $status;
+        } catch (\Exception $e) {
+            // Tidak terbaca → biarkan pembatalan dicoba; ERP yang jadi penentu.
+            return null;
+        }
+    }
+
+    private function cancelDoc(string $doctype, string $name): void
+    {
+        $this->client->put("/api/resource/{$doctype}/".rawurlencode($name), [
+            'json' => ['docstatus' => 2],
+        ]);
+    }
+
+    // =========================================================
     // CREATE DELIVERY NOTE → ERPNext
     // =========================================================
     public function createDeliveryNote(DeliveryShipment $shipment): array
@@ -1552,10 +1798,16 @@ class ErpNextService
         }
 
         $order = $payment->order;
-        $soName = $order->erp_sales_order;
         $customer = $order->customer->erp_customer_name ?: $order->customer->name;
 
-        if (empty($soName)) {
+        // Utamakan Sales Invoice: pembayaran yang menempel ke invoice tercatat sebagai
+        // pelunasan piutang sehingga penjualannya ikut terhitung. Referensi ke Sales
+        // Order hanya uang muka dan tidak menutup apa pun — dipakai sebagai cadangan
+        // bila invoice belum sempat terbit (mis. pembuatannya gagal).
+        $refDoctype = $order->erp_sales_invoice ? 'Sales Invoice' : 'Sales Order';
+        $refName = $order->erp_sales_invoice ?: $order->erp_sales_order;
+
+        if (empty($refName)) {
             return ['success' => false, 'error' => 'Sales Order ERP belum ada. Konfirmasi order dan sync SO terlebih dahulu.'];
         }
         if (empty($customer)) {
@@ -1597,8 +1849,8 @@ class ErpNextService
             'target_exchange_rate' => 1,
             'references' => [
                 [
-                    'reference_doctype' => 'Sales Order',
-                    'reference_name' => $soName,
+                    'reference_doctype' => $refDoctype,
+                    'reference_name' => $refName,
                     'allocated_amount' => (float) $payment->amount,
                 ],
             ],

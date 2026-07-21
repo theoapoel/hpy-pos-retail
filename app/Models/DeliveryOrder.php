@@ -15,7 +15,7 @@ class DeliveryOrder extends Model
         'order_no', 'customer_id', 'billing_address', 'order_date', 'delivery_date',
         'notes', 'status', 'payment_status',
         'kitchen_status', 'kitchen_started_at', 'kitchen_ready_at', 'kitchen_scheduled_at', 'kitchen_confirmed_at',
-        'erp_sales_order', 'erp_sync_status', 'erp_sync_error',
+        'erp_sales_order', 'erp_sales_invoice', 'erp_si_sync_error', 'erp_sync_status', 'erp_sync_error',
         'subtotal', 'total', 'created_by',
     ];
 

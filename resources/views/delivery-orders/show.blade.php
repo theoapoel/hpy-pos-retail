@@ -464,6 +464,22 @@
                         <span class="badge badge-gray">BELUM SYNC</span>
                     @endif
                 </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span class="text-xs text-muted">Sales Invoice</span>
+                    @if($order->erp_sales_invoice)
+                        <span class="badge badge-green">{{ $order->erp_sales_invoice }}</span>
+                    @elseif($order->erp_si_sync_error)
+                        <span class="badge badge-red">FAILED</span>
+                    @else
+                        {{-- Invoice sengaja ditahan sampai ada pembayaran pertama. --}}
+                        <span class="badge badge-gray">MENUNGGU BAYAR</span>
+                    @endif
+                </div>
+                @if($order->erp_si_sync_error)
+                <div class="alert" style="background:#FEF3E2;color:#B45309;border-radius:6px;padding:8px 10px;font-size:12px;margin-top:6px">
+                    <i class="fas fa-exclamation-triangle"></i> {{ $order->erp_si_sync_error }}
+                </div>
+                @endif
                 @if($order->erp_sync_error)
                 <div class="alert" style="background:#FEF3E2;color:#B45309;border-radius:6px;padding:8px 10px;font-size:12px;margin-top:6px">
                     <i class="fas fa-exclamation-triangle"></i> {{ $order->erp_sync_error }}

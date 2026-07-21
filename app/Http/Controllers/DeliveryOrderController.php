@@ -232,8 +232,19 @@ class DeliveryOrderController extends Controller
                 if ($soResult['success']) {
                     $syncMsg = ' SO ERP: ' . ($soResult['docname'] ?? 'synced') . '.';
 
-                    // 2. Auto-sync semua payment yang belum disync
+                    // 2. Terbitkan Sales Invoice — hanya bila order sudah ada
+                    // pembayarannya. Order tanpa pembayaran tidak ditagihkan dulu
+                    // supaya tidak menumpuk piutang untuk order yang belum tentu jalan;
+                    // invoicenya menyusul saat pembayaran pertama masuk.
                     $deliveryOrder->load('payments');
+                    if ($deliveryOrder->payments->isNotEmpty()) {
+                        $siResult = $erp->createSalesInvoice($deliveryOrder);
+                        $syncMsg .= $siResult['success']
+                            ? ' Invoice ERP: ' . ($siResult['docname'] ?? 'synced') . '.'
+                            : ' (Buat invoice ERP gagal: ' . ($siResult['error'] ?? '') . ')';
+                    }
+
+                    // 3. Auto-sync semua payment yang belum disync
                     $paymentSyncFails = [];
                     foreach ($deliveryOrder->payments->where('erp_sync_status', '!=', 'synced') as $payment) {
                         $peResult = $erp->createPaymentEntry($payment);
@@ -311,8 +322,27 @@ class DeliveryOrderController extends Controller
         if (in_array($deliveryOrder->status, ['completed', 'cancelled'])) {
             return back()->with('error', 'Order tidak dapat dibatalkan.');
         }
+
+        // Invoice yang sudah terbit harus ikut dibatalkan di ERP HPY, kalau tidak
+        // penjualan dan piutangnya tetap terhitung padahal ordernya batal. Bila
+        // pembatalan di ERP gagal, order lokal TIDAK jadi dibatalkan supaya kedua
+        // sisi tidak berbeda tanpa ketahuan.
+        if ($deliveryOrder->erp_sales_invoice) {
+            try {
+                $erp = new ErpNextService();
+                $result = $erp->cancelSalesInvoiceForOrder($deliveryOrder);
+                if (! $result['success']) {
+                    return back()->with('error', 'Order tidak dibatalkan — gagal membatalkan invoice di ERP HPY: ' . ($result['error'] ?? ''));
+                }
+            } catch (\Exception $e) {
+                return back()->with('error', 'Order tidak dibatalkan — ERP HPY tidak dapat dihubungi: ' . $e->getMessage());
+            }
+        }
+
         $deliveryOrder->update(['status' => 'cancelled']);
-        return back()->with('success', 'Order dibatalkan.');
+
+        return back()->with('success', 'Order dibatalkan.'
+            . ($deliveryOrder->erp_sales_invoice ? ' Invoice & pembayaran di ERP HPY ikut dibatalkan.' : ''));
     }
 
     public function syncSalesOrder(DeliveryOrder $deliveryOrder)

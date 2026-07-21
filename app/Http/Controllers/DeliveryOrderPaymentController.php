@@ -39,7 +39,17 @@ class DeliveryOrderPaymentController extends Controller
         // Auto-sync jika SO ERP sudah ada
         if ($deliveryOrder->erp_sales_order) {
             try {
-                $erp    = new ErpNextService();
+                $erp = new ErpNextService();
+
+                // Invoice ditahan sampai ada pembayaran pertama — kalau order ini
+                // dikonfirmasi tanpa bayar, invoicenya baru terbit sekarang.
+                // createSalesInvoice() idempoten, jadi aman dipanggil berulang.
+                $siResult = $erp->createSalesInvoice($deliveryOrder);
+                if (!$siResult['success']) {
+                    return back()->with('warning', 'Payment disimpan, tapi invoice ERP gagal dibuat: ' . ($siResult['error'] ?? ''));
+                }
+                $deliveryOrder->refresh();
+
                 $result = $erp->createPaymentEntry($payment);
                 if (!$result['success']) {
                     return back()->with('warning', 'Payment disimpan, tapi sync ERP gagal: ' . ($result['error'] ?? ''));
@@ -79,7 +89,16 @@ class DeliveryOrderPaymentController extends Controller
             return response()->json(['success' => false, 'error' => 'Sales Order ERP belum ada. Konfirmasi order terlebih dahulu.']);
         }
 
-        $erp    = new ErpNextService();
+        $erp = new ErpNextService();
+
+        // Pastikan invoicenya ada dulu supaya pembayaran ini tercatat sebagai
+        // pelunasan piutang, bukan uang muka di Sales Order.
+        $siResult = $erp->createSalesInvoice($deliveryOrder);
+        if (!$siResult['success']) {
+            return response()->json(['success' => false, 'error' => 'Invoice ERP gagal dibuat: ' . ($siResult['error'] ?? '')]);
+        }
+        $deliveryOrder->refresh();
+
         $result = $erp->createPaymentEntry($payment);
 
         return response()->json($result);
