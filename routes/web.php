@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryNoteController;
 use App\Http\Controllers\DeliveryOrderController;
 use App\Http\Controllers\DeliveryOrderPaymentController;
+use App\Http\Controllers\DeliveryOrderReportController;
 use App\Http\Controllers\ErpSyncController;
 use App\Http\Controllers\FactoryResetController;
 use App\Http\Controllers\KitchenController;
@@ -326,6 +327,12 @@ Route::middleware('auth')->group(function () {
     Route::prefix('mop-report')->name('mop-report.')->middleware('permission:mop_report')->group(function () {
         Route::get('/', [ModeOfPaymentReportController::class, 'index'])->name('index');
         Route::post('/fetch', [ModeOfPaymentReportController::class, 'fetch'])->name('fetch');
+    });
+
+    // Laporan DO — penjualan Delivery Order dari data lokal + verifikasi SI/DN ke HPY
+    Route::prefix('do-report')->name('do-report.')->middleware('permission:do_report')->group(function () {
+        Route::get('/', [DeliveryOrderReportController::class, 'index'])->name('index');
+        Route::get('/{deliveryOrder}/check-erp', [DeliveryOrderReportController::class, 'checkErp'])->name('check-erp');
     });
 
     // Sync HPY — jalankan (permission:sync), konfigurasi (admin only)

@@ -2580,6 +2580,108 @@ class ErpNextService
         }
     }
 
+    /**
+     * Ambil status Sales Invoice + Delivery Note sebuah Delivery Order dari ERP HPY.
+     *
+     * Dipakai Laporan DO Lokal untuk verifikasi ke HPY: apakah invoice sudah terbit
+     * & lunas, dan apakah barang sudah diterbitkan Delivery Note-nya. Sumber referensi
+     * lokal: delivery_orders.erp_sales_invoice (satu) dan delivery_shipments.erp_delivery_note
+     * (bisa banyak — satu DO bisa dikirim beberapa kali).
+     */
+    public function fetchDeliveryOrderErpStatus(DeliveryOrder $order): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $statusLabel = [0 => 'Draft', 1 => 'Submitted', 2 => 'Dibatalkan'];
+
+        try {
+            $salesInvoice = null;
+            if (! empty($order->erp_sales_invoice)) {
+                $fields = ['name', 'status', 'docstatus', 'grand_total', 'outstanding_amount', 'per_billed', 'posting_date'];
+                $resp = $this->client->get(
+                    '/api/resource/Sales Invoice/'.rawurlencode($order->erp_sales_invoice)
+                    .'?fields='.urlencode(json_encode($fields))
+                );
+                $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? null;
+                if ($doc) {
+                    $salesInvoice = [
+                        'name' => $doc['name'] ?? $order->erp_sales_invoice,
+                        'status' => $doc['status'] ?? null,
+                        'docstatus' => (int) ($doc['docstatus'] ?? 0),
+                        'docstatus_label' => $statusLabel[(int) ($doc['docstatus'] ?? 0)] ?? '-',
+                        'grand_total' => (float) ($doc['grand_total'] ?? 0),
+                        'outstanding' => (float) ($doc['outstanding_amount'] ?? 0),
+                        'per_billed' => (float) ($doc['per_billed'] ?? 0),
+                        'posting_date' => $doc['posting_date'] ?? null,
+                    ];
+                }
+            }
+
+            $deliveryNotes = [];
+            $dnNames = $order->shipments
+                ->pluck('erp_delivery_note')
+                ->filter()
+                ->unique()
+                ->all();
+
+            foreach ($dnNames as $dnName) {
+                $fields = ['name', 'status', 'docstatus', 'grand_total', 'per_billed', 'posting_date'];
+                $resp = $this->client->get(
+                    '/api/resource/Delivery Note/'.rawurlencode($dnName)
+                    .'?fields='.urlencode(json_encode($fields))
+                );
+                $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? null;
+                if ($doc) {
+                    $deliveryNotes[] = [
+                        'name' => $doc['name'] ?? $dnName,
+                        'status' => $doc['status'] ?? null,
+                        'docstatus' => (int) ($doc['docstatus'] ?? 0),
+                        'docstatus_label' => $statusLabel[(int) ($doc['docstatus'] ?? 0)] ?? '-',
+                        'grand_total' => (float) ($doc['grand_total'] ?? 0),
+                        'per_billed' => (float) ($doc['per_billed'] ?? 0),
+                        'posting_date' => $doc['posting_date'] ?? null,
+                    ];
+                }
+            }
+
+            // Payment Entry — referensinya per pembayaran DO (delivery_order_payments.erp_payment_entry).
+            $paymentEntries = [];
+            foreach ($order->payments as $payment) {
+                if (empty($payment->erp_payment_entry)) {
+                    continue;
+                }
+                $fields = ['name', 'docstatus', 'paid_amount', 'posting_date'];
+                $resp = $this->client->get(
+                    '/api/resource/Payment Entry/'.rawurlencode($payment->erp_payment_entry)
+                    .'?fields='.urlencode(json_encode($fields))
+                );
+                $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? null;
+                $paymentEntries[] = [
+                    'name' => $payment->erp_payment_entry,
+                    'method' => $payment->payment_method,
+                    'local_amount' => (float) $payment->amount,
+                    'docstatus' => $doc ? (int) ($doc['docstatus'] ?? 0) : null,
+                    'docstatus_label' => $doc ? ($statusLabel[(int) ($doc['docstatus'] ?? 0)] ?? '-') : 'Tak ditemukan',
+                    'paid_amount' => $doc ? (float) ($doc['paid_amount'] ?? 0) : null,
+                    'posting_date' => $doc['posting_date'] ?? null,
+                ];
+            }
+
+            return [
+                'success' => true,
+                'sales_invoice' => $salesInvoice,
+                'delivery_notes' => $deliveryNotes,
+                'payment_entries' => $paymentEntries,
+            ];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     private function readResponseBody(ResponseInterface $response): string
     {
         $stream = $response->getBody();
