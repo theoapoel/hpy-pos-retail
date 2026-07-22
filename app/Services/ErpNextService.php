@@ -1672,6 +1672,13 @@ class ErpNextService
             return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
         }
 
+        // Idempoten: DN yang sudah pernah dibuat (mis. tertahan sebagai draft karena
+        // stok kurang) tidak dibuat ulang — cukup diselesaikan submit-nya, supaya sync
+        // ulang tidak menumpuk Delivery Note baru untuk pengiriman yang sama.
+        if (! empty($shipment->erp_delivery_note)) {
+            return $this->submitOrKeepDraftDeliveryNote($shipment, $shipment->erp_delivery_note);
+        }
+
         $order = $shipment->order;
         $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
         $currency = Setting::get('erpnext_currency', 'IDR');
@@ -1699,10 +1706,16 @@ class ErpNextService
         }
 
         $items = collect($shipment->items ?? [])->map(function ($item) use ($defaultWh, $soName, $soItemMap) {
-            // Resolve erp_item_code: prefer product lookup so it matches what was sent to the SO
+            // Resolve erp_item_code: prefer product lookup so it matches what was sent to the SO.
+            // Shipment lama bisa tak menyimpan product_sku (form pengiriman hanya mengirim nama);
+            // jatuh ke pencarian nama supaya erp_item_code yang benar tetap dipakai — bukan
+            // nama produk yang dikirim sebagai item_code (ERP menolak: "Could not find Item Code").
             $sku = $item['product_sku'] ?? null;
             $product = $sku ? Product::where('sku', $sku)->first() : null;
-            $itemCode = $product?->erp_item_code ?? $sku ?? $item['product_name'];
+            if (! $product && ! empty($item['product_name'])) {
+                $product = Product::where('name', $item['product_name'])->first();
+            }
+            $itemCode = $product?->erp_item_code ?: ($product?->sku ?: ($sku ?: $item['product_name']));
 
             $row = [
                 'item_code' => $itemCode,
@@ -1760,13 +1773,53 @@ class ErpNextService
             return ['success' => false, 'error' => $error];
         }
 
-        $shipment->update([
-            'erp_delivery_note' => $docname,
-            'erp_sync_status' => 'synced',
-            'erp_sync_error' => null,
-        ]);
+        // DN baru masih draft (docstatus 0) — coba submit; kalau stok tak cukup,
+        // biarkan sebagai draft dan laporkan statusnya.
+        return $this->submitOrKeepDraftDeliveryNote($shipment, $docname);
+    }
 
-        return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname];
+    /**
+     * Selesaikan sebuah Delivery Note: coba submit supaya stok terpotong. Bila submit
+     * gagal (paling sering karena stok tidak cukup), DN tetap tersimpan sebagai DRAFT
+     * di HPY — nomornya dicatat supaya sync ulang menyelesaikan submit, bukan membuat
+     * DN baru. Mengembalikan nomor + status ('Submitted'/'Draft') untuk diinfokan.
+     */
+    private function submitOrKeepDraftDeliveryNote(DeliveryShipment $shipment, ?string $docname): array
+    {
+        if (empty($docname)) {
+            $shipment->update(['erp_sync_status' => 'failed', 'erp_sync_error' => 'Delivery Note gagal dibuat.']);
+
+            return ['success' => false, 'error' => 'Delivery Note gagal dibuat.'];
+        }
+
+        // Sudah ter-submit sebelumnya → jangan submit ulang.
+        if ($this->fetchDocStatus('Delivery Note', $docname) === 1) {
+            $shipment->update(['erp_delivery_note' => $docname, 'erp_sync_status' => 'synced', 'erp_sync_error' => null]);
+
+            return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname, 'submitted' => true, 'status' => 'Submitted'];
+        }
+
+        try {
+            $this->submitDoc('Delivery Note', $docname);
+        } catch (RequestException $e) {
+            $rawBody = $e->hasResponse() ? $this->readResponseBody($e->getResponse()) : '';
+            Log::warning('DN submit ditahan sebagai draft', ['shipment' => $shipment->id, 'dn' => $docname, 'raw' => $rawBody]);
+            $error = $this->extractError($e);
+            $shipment->update(['erp_delivery_note' => $docname, 'erp_sync_status' => 'draft', 'erp_sync_error' => $error]);
+
+            return [
+                'success' => true,
+                'delivery_note' => $docname,
+                'docname' => $docname,
+                'submitted' => false,
+                'status' => 'Draft',
+                'warning' => 'Delivery Note '.$docname.' dibuat sebagai DRAFT (belum ter-submit). Kemungkinan stok tidak cukup: '.$error,
+            ];
+        }
+
+        $shipment->update(['erp_delivery_note' => $docname, 'erp_sync_status' => 'synced', 'erp_sync_error' => null]);
+
+        return ['success' => true, 'delivery_note' => $docname, 'docname' => $docname, 'submitted' => true, 'status' => 'Submitted'];
     }
 
     // =========================================================

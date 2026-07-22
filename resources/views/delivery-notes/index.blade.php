@@ -115,7 +115,9 @@
                 </td>
                 <td>
                     @if($ship->erp_sync_status === 'synced' && $ship->erp_delivery_note)
-                        <span class="badge badge-green text-xs">{{ $ship->erp_delivery_note }}</span>
+                        <span class="badge badge-green text-xs" title="Submitted">{{ $ship->erp_delivery_note }}</span>
+                    @elseif($ship->erp_sync_status === 'draft' && $ship->erp_delivery_note)
+                        <span class="badge badge-yellow text-xs" title="Draft (belum submit — {{ $ship->erp_sync_error ?? 'stok tidak cukup' }})">{{ $ship->erp_delivery_note }} · DRAFT</span>
                     @elseif($ship->erp_sync_status === 'failed')
                         <span class="badge badge-red text-xs" title="{{ $ship->erp_sync_error ?? '' }}">FAILED</span>
                     @else
@@ -270,8 +272,13 @@ async function syncDn(btn) {
     try {
         const res = await api.post(url);
         if (res.success) {
-            toast('Delivery Note dibuat: ' + res.delivery_note, 'success');
-            setTimeout(() => location.reload(), 1200);
+            if (res.submitted === false) {
+                // DN dibuat tapi tertahan sebagai draft (mis. stok tidak cukup).
+                toast('Delivery Note ' + res.delivery_note + ' dibuat sebagai DRAFT (belum submit). ' + (res.warning ?? ''), 'warning');
+            } else {
+                toast('Delivery Note ' + res.delivery_note + ' berhasil di-submit.', 'success');
+            }
+            setTimeout(() => location.reload(), 1800);
         } else {
             toast('Sync gagal: ' + (res.error ?? 'Unknown error'), 'error');
             btn.disabled = false;
