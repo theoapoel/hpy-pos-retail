@@ -3004,9 +3004,17 @@ class ErpNextService
         $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
         $namingSeries = Setting::get('erp_mr_naming_series', 'MAT-MR-.YYYY.-');
         $defaultWh = Warehouse::getDefault()?->name ?? '';
-        $scheduleDate = $stockRequest->needed_date
+        $today = $this->localNow()->format('Y-m-d');
+        $neededDate = $stockRequest->needed_date
             ? $stockRequest->needed_date->format('Y-m-d')
-            : $this->localNow()->format('Y-m-d');
+            : $today;
+
+        // ERPNext menolak "Reqd by Date cannot be before Transaction Date". Permintaan
+        // yang tanggal butuhnya sudah lewat (mis. dibuat pekan lalu, baru disync hari
+        // ini) pasti ditolak — jadwalnya dimajukan ke hari ini supaya MR tetap terbit.
+        // Tanggal butuh aslinya dicatat di remarks agar informasinya tidak hilang.
+        $scheduleDate = $neededDate < $today ? $today : $neededDate;
+        $backdated = $scheduleDate !== $neededDate;
 
         $items = $stockRequest->items->map(fn ($item) => [
             'item_code' => $item->item_code ?? $item->item_name,
@@ -3029,6 +3037,7 @@ class ErpNextService
             'items' => $items,
             'remarks' => implode("\n", array_filter([
                 'Request: '.$stockRequest->request_no,
+                $backdated ? 'Tanggal butuh asli: '.$neededDate.' (dimajukan ke '.$scheduleDate.' karena sudah lewat)' : null,
                 $stockRequest->notes,
             ])),
         ];
