@@ -2742,6 +2742,61 @@ class ErpNextService
         return (string) $stream;
     }
 
+    /**
+     * Periksa apakah User di ERP HPY (dicocokkan lewat email) memegang role tertentu.
+     *
+     * Role tersimpan di child table `roles` pada doctype User. Child table tidak bisa
+     * di-GET langsung, jadi ambil dokumen User-nya lalu baca kolom rolesnya.
+     *
+     * Sengaja fail-closed: kalau ERP tidak bisa dihubungi atau usernya tidak ada,
+     * `has_role` = false disertai `error`. Pemanggilnya harus menolak, bukan
+     * menganggap boleh — ini gerbang untuk aksi yang mengubah uang.
+     */
+    public function userHasErpRole(?string $email, string $role): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'has_role' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+
+        if (empty($email)) {
+            return ['success' => false, 'has_role' => false, 'error' => 'User ini tidak punya email yang bisa dicocokkan ke ERP HPY.'];
+        }
+
+        try {
+            $resp = $this->client->get(
+                '/api/resource/User/'.rawurlencode($email)
+                .'?fields='.urlencode(json_encode(['name', 'enabled', 'roles']))
+            );
+            $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? null;
+
+            if (! $doc) {
+                return ['success' => false, 'has_role' => false, 'error' => "User {$email} tidak ditemukan di ERP HPY."];
+            }
+
+            if (isset($doc['enabled']) && ! $doc['enabled']) {
+                return ['success' => true, 'has_role' => false, 'roles' => [], 'error' => "User {$email} nonaktif di ERP HPY."];
+            }
+
+            $roles = array_values(array_filter(array_map(
+                fn ($r) => is_array($r) ? ($r['role'] ?? null) : $r,
+                $doc['roles'] ?? []
+            )));
+
+            $hasRole = in_array(mb_strtolower($role), array_map('mb_strtolower', $roles), true);
+
+            return [
+                'success' => true,
+                'has_role' => $hasRole,
+                'roles' => $roles,
+                'erp_user' => $doc['name'] ?? $email,
+            ];
+        } catch (RequestException $e) {
+            return ['success' => false, 'has_role' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'has_role' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     private function extractError(RequestException $e): string
     {
         if (! $e->hasResponse()) {

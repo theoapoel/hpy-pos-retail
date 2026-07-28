@@ -65,10 +65,49 @@ class TransactionController extends Controller {
         return view('transactions.show', compact('transaction'));
     }
 
+    /**
+     * Role di ERP HPY yang boleh membatalkan transaksi lokal.
+     */
+    private const ERP_CANCEL_ROLE = 'Accounts Manager';
+
+    /**
+     * Pemeriksaan sebelum konfirmasi: apakah user yang menekan tombol Batalkan
+     * memegang role Accounts Manager di ERP HPY. Dipanggil dari UI supaya user
+     * tidak sempat mengonfirmasi pembatalan yang toh akan ditolak.
+     *
+     * Ini hanya untuk pengalaman pemakaian — cancel() memeriksa ulang sendiri,
+     * karena hasil pemeriksaan di sisi klien tidak bisa dipercaya.
+     */
+    public function cancelCheck(Transaction $transaction) {
+        if ($transaction->status !== 'completed') {
+            return response()->json(['allowed'=>false,'error'=>'Transaksi tidak bisa dibatalkan'],422);
+        }
+
+        $check = $this->erpCancelPermission();
+
+        return response()->json([
+            'allowed'         => $check['has_role'],
+            'error'           => $check['has_role'] ? null : $this->erpCancelDenialMessage($check),
+            'erp_pos_invoice' => $transaction->erp_pos_invoice,
+        ]);
+    }
+
     public function cancel(Transaction $transaction) {
         if ($transaction->status !== 'completed') {
             return response()->json(['success'=>false,'error'=>'Transaksi tidak bisa dibatalkan'],422);
         }
+
+        // Kewenangan membatalkan ditentukan oleh role di ERP HPY, bukan role lokal —
+        // pembatalan transaksi menyentuh pembukuan, jadi yang berlaku adalah daftar
+        // wewenang di ERP. Ditolak juga bila ERP tidak bisa dihubungi (fail-closed).
+        $check = $this->erpCancelPermission();
+        if (! $check['has_role']) {
+            return response()->json([
+                'success' => false,
+                'error'   => $this->erpCancelDenialMessage($check),
+            ], 403);
+        }
+
         // Restore stock
         foreach ($transaction->items as $item) {
             if ($item->product && $item->product->track_stock) {
@@ -76,6 +115,30 @@ class TransactionController extends Controller {
             }
         }
         $transaction->update(['status'=>'cancelled']);
-        return response()->json(['success'=>true]);
+
+        // Pembatalan ini hanya berlaku di sini. Invoice yang sudah tersinkron tetap
+        // hidup di ERP HPY dan masih terhitung sebagai penjualan sampai dibatalkan
+        // manual di sana — user harus diberi tahu, bukan dibiarkan mengira selesai.
+        return response()->json([
+            'success'         => true,
+            'erp_pos_invoice' => $transaction->erp_pos_invoice,
+            'warning'         => $transaction->erp_pos_invoice
+                ? "Transaksi dibatalkan di sini saja. Pastikan POS Invoice {$transaction->erp_pos_invoice} juga dibatalkan di ERP HPY, kalau tidak penjualannya tetap terhitung di sana."
+                : null,
+        ]);
+    }
+
+    private function erpCancelPermission(): array {
+        return (new \App\Services\ErpNextService)
+            ->userHasErpRole(auth()->user()?->email, self::ERP_CANCEL_ROLE);
+    }
+
+    private function erpCancelDenialMessage(array $check): string {
+        if (! $check['success']) {
+            return 'Tidak bisa memastikan wewenang Anda di ERP HPY ('.($check['error'] ?? 'gagal menghubungi ERP').'). Pembatalan dihentikan demi keamanan.';
+        }
+
+        return $check['error']
+            ?? 'Pembatalan transaksi hanya untuk pemegang role '.self::ERP_CANCEL_ROLE.' di ERP HPY.';
     }
 }

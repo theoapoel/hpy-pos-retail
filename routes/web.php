@@ -187,10 +187,13 @@ Route::middleware('auth')->group(function () {
     Route::middleware('permission:transactions')->group(function () {
         Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
         Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
+
+        // Wewenang membatalkan ditentukan di controller lewat role Accounts Manager di
+        // ERP HPY, bukan role lokal. Route tetap di dalam grup permission:transactions
+        // supaya endpointnya tidak terbuka bagi yang halaman transaksinya saja tak boleh.
+        Route::get('/transactions/{transaction}/cancel-check', [TransactionController::class, 'cancelCheck'])->name('transactions.cancel-check');
+        Route::post('/transactions/{transaction}/cancel', [TransactionController::class, 'cancel'])->name('transactions.cancel');
     });
-    Route::post('/transactions/{transaction}/cancel', [TransactionController::class, 'cancel'])
-        ->middleware('role:admin,manager')
-        ->name('transactions.cancel');
 
     // Produk
     Route::middleware('permission:products')->group(function () {

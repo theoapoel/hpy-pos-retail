@@ -7,6 +7,9 @@
     <div style="display:flex;gap:8px">
         <a href="{{ route('pos.print-kitchen',$transaction) }}" target="_blank" class="btn btn-warning"><i class="fas fa-utensils"></i> Cetak Kitchen</a>
         <a href="{{ route('pos.print',$transaction) }}" target="_blank" class="btn btn-outline"><i class="fas fa-print"></i> Cetak Struk</a>
+        @if($transaction->status === 'completed')
+        <button id="cancelBtn" class="btn btn-danger" onclick="cancelTransaction()"><i class="fas fa-ban"></i> Batalkan</button>
+        @endif
         <a href="{{ route('transactions.index') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Kembali</a>
     </div>
 </div>
@@ -82,6 +85,52 @@ async function syncThis() {
     const data = await resp.json();
     toast(data.success?'Berhasil sync!':'Gagal: '+(data.error||''),data.success?'success':'error');
     if(data.success) setTimeout(()=>location.reload(),1000);
+}
+
+// Batalkan transaksi: periksa dulu wewenang di ERP HPY, baru minta konfirmasi.
+// Server memeriksa ulang saat pembatalan dikirim — pemeriksaan di sini hanya agar
+// user tidak sempat mengonfirmasi sesuatu yang akan ditolak.
+async function cancelTransaction() {
+    const btn = document.getElementById('cancelBtn');
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memeriksa wewenang...';
+
+    try {
+        const resp = await fetch('{{ route("transactions.cancel-check", $transaction) }}',{headers:{'Accept':'application/json'}});
+        const check = await resp.json();
+
+        if (!check.allowed) {
+            toast(check.error || 'Anda tidak berwenang membatalkan transaksi ini.','error');
+            return;
+        }
+
+        const erpNote = check.erp_pos_invoice
+            ? `\n\nTransaksi ini sudah tersinkron ke ERP HPY sebagai:\n${check.erp_pos_invoice}\n\nPembatalan di sini TIDAK membatalkannya di ERP. Anda harus membatalkan invoice tersebut secara manual di ERP HPY, kalau tidak penjualannya tetap terhitung di sana.`
+            : '';
+
+        if (!confirm(`Batalkan transaksi {{ $transaction->invoice_no }}?\n\nStok akan dikembalikan dan transaksi ditandai dibatalkan.${erpNote}`)) {
+            return;
+        }
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Membatalkan...';
+        const cancelResp = await fetch('{{ route("transactions.cancel", $transaction) }}',{method:'POST',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}});
+        const data = await cancelResp.json();
+
+        if (!data.success) {
+            toast(data.error || 'Gagal membatalkan transaksi','error');
+            return;
+        }
+
+        toast('Transaksi dibatalkan','success');
+        if (data.warning) alert(data.warning);
+        setTimeout(()=>location.reload(),800);
+    } catch (e) {
+        toast('Gagal menghubungi server','error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = label;
+    }
 }
 </script>
 @endpush
