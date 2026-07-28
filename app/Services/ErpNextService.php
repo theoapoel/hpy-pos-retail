@@ -302,25 +302,22 @@ class ErpNextService
         $baseDiscAmt = (float) $transaction->discount_amount;
         $baseDiscPct = (float) $transaction->discount_percent;
 
-        // Kupon di ERPNext bekerja lewat field `coupon_code` yang memicu Pricing Rule
-        // terkait — ERP menghitung sendiri potongannya dari rule tsb, bukan dari angka
-        // yang kita kirim manual. Kalau kita kirim coupon_code, JANGAN juga masukkan
-        // coupon_discount ke discount_amount (hindari double discount).
+        // Potongan kupon HARUS dikirim eksplisit lewat discount_amount. ERP menerapkan
+        // Pricing Rule kupon dari form JavaScript (`apply_pricing_rule`), bukan dari
+        // validasi server — invoice yang dibuat lewat REST tidak pernah memicunya, jadi
+        // `coupon_code` cuma tersimpan sebagai teks dan discount_amount tetap 0. Tanpa ini
+        // grand_total tercatat harga penuh sementara pembayaran sudah dipotong: laporan
+        // omzet (baca grand_total) jadi lebih besar dari laporan MOP (baca payments),
+        // dan invoice menyisakan outstanding_amount palsu.
+        $erpDiscPct = $couponDiscount > 0 ? 0 : $baseDiscPct;
+        $erpDiscAmt = $baseDiscAmt + $couponDiscount;
+
+        // Tetap kirim kode kuponnya sebagai jejak audit di dokumen ERP (tidak memicu
+        // perhitungan apa pun, jadi tidak ada risiko diskon dobel).
         $erpCouponCode = null;
         if ($couponDiscount > 0 && $transaction->coupon_code) {
             $coupon = Coupon::where('code', $transaction->coupon_code)->first();
             $erpCouponCode = $coupon?->erp_coupon_name ?: null;
-        }
-
-        if ($erpCouponCode) {
-            $erpDiscPct = $baseDiscPct;
-            $erpDiscAmt = $baseDiscAmt;
-        } else {
-            // Fallback: kupon lokal tidak punya link erp_coupon_name (mis. kupon manual,
-            // bukan hasil pull dari ERP) — tetap masukkan potongannya manual ke discount_amount
-            // seperti sebelumnya, supaya diskon tidak hilang sama sekali.
-            $erpDiscPct = $couponDiscount > 0 ? 0 : $baseDiscPct;
-            $erpDiscAmt = $baseDiscAmt + $couponDiscount;
         }
 
         $payload = [
