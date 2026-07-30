@@ -336,6 +336,14 @@ class ErpNextService
             'base_paid_amount' => $docPaidAmount,
             'change_amount' => $docChangeAmount,
             'base_change_amount' => $docChangeAmount,
+            // update_stock HARUS dikirim eksplisit 1. Kalau tidak dikirim, ERP mengambil
+            // nilainya dari centang "Update Stock" di POS Profile — dan bila centang itu
+            // mati, invoice terbit tanpa memotong stok sama sekali. Padahal stok lokal
+            // sudah dikurangi PosController::checkout(), jadi stok POS dan ERP melenceng
+            // makin jauh setiap transaksi. Penjualan POS memang serah-terima barang di
+            // tempat (tidak ada Delivery Note menyusul seperti alur Delivery Order), jadi
+            // invoice inilah yang berhak memotong stok.
+            'update_stock' => 1,
             'apply_discount_on' => 'Net Total',
             'additional_discount_percentage' => $erpDiscPct,
             'discount_amount' => $erpDiscAmt,

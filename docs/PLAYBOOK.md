@@ -149,10 +149,32 @@ Pesanan pengiriman ke pelanggan. Nomor `DO-YYYYMMDD-XXXX`.
   serta **Proforma Invoice / Invoice**.
 - **Sync Sales Order** ke ERP HPY.
 
+**Penerbitan Sales Invoice (otomatis).** Begitu order **punya pembayaran**,
+sistem menerbitkan **Sales Invoice** di ERP HPY (bukan berhenti di Sales Order):
+lewat **confirm** bila pembayaran sudah ada, atau lewat **penambahan pembayaran**
+bila order dikonfirmasi tanpa bayar. Order **tanpa pembayaran sengaja tidak
+ditagihkan** agar piutang tidak menumpuk untuk order yang belum tentu jalan.
+- Invoice dibuat dengan `update_stock = 0`; **stok tetap dipotong oleh Delivery
+  Note** saat pengiriman — supaya satu pengiriman tidak memotong stok dua kali.
+- Item invoice membawa referensi Sales Order sehingga order yang sama **tidak
+  bisa ditagih dua kali**, dan Payment Entry menutup piutang (bukan uang muka).
+- **Pembatalan order** ikut membatalkan Payment Entry lalu Sales Invoice (urutan
+  wajib). Bila ERP gagal dihubungi, **order lokal TIDAK jadi dibatalkan** agar
+  kedua sisi tidak berbeda diam-diam. Pembatalan yang putus di tengah bisa
+  dilanjutkan (langkah yang sudah batal dilewati).
+
 ### Delivery Notes
 Bekerja pada **pengiriman (shipment)**, bukan order.
 - Tandai **Delivered**.
-- **Sync Delivery Note** ke ERP HPY.
+- **Sync Delivery Note** ke ERP HPY — sistem mencoba **submit** DN, bukan hanya
+  membuat draft.
+- Bila submit gagal (**paling sering karena stok di ERP kurang**), DN **tetap
+  tersimpan sebagai draft** di HPY, nomornya dicatat, dan status
+  (`Submitted`/`Draft`) diinfokan ke user. **Sync ulang bersifat idempoten**:
+  menyelesaikan submit DN yang sudah ada, bukan membuat DN baru.
+- Shipment lama yang tersimpan tanpa SKU tetap dikirim dengan `item_code` yang
+  benar — produk dicari lewat namanya, jadi tidak lagi ditolak "Could not find
+  Item Code".
 
 ---
 
@@ -162,6 +184,12 @@ Permintaan barang jadi (Finished Goods) ke dapur/pusat. Nomor `FG-YYYYMMDD-XXXX`
 - Alur: **draft → submitted** (bisa dibatalkan).
 - Status dapur: `requested → preparing → done`.
 - **Sync** ke ERP HPY sebagai *Material Request*.
+- **Tanggal butuh yang sudah lewat dimajukan otomatis.** Material Request dikirim
+  dengan tanggal transaksi = hari ini; bila `needed_date`-nya sudah lewat (mis.
+  dibuat pekan lalu, baru disync hari ini) *Reqd by Date* dimajukan ke hari ini
+  supaya ERP tidak menolak ("Reqd by Date cannot be before Transaction Date").
+  Jadwal yang masih di depan dipakai apa adanya; tanggal butuh asli dicatat di
+  remarks agar informasinya tidak hilang.
 
 ---
 
@@ -170,6 +198,9 @@ Permintaan barang jadi (Finished Goods) ke dapur/pusat. Nomor `FG-YYYYMMDD-XXXX`
 Layar gabungan untuk mengelola **pembayaran** dan **jadwal produksi** lintas
 **Delivery Order** dan **Permintaan FG** dalam satu tempat.
 - Atur jadwal DO / SR, konfirmasi ke dapur, catat pembayaran DO.
+- Pembayaran DO yang dicatat di sini **menerbitkan Sales Invoice dulu (idempoten)
+  lalu Payment Entry** — sama seperti mencatat bayar dari layar Delivery Order,
+  sehingga pembayaran menutup piutang, bukan tercatat sebagai uang muka.
 
 ---
 
@@ -200,9 +231,34 @@ Menu **Sync HPY** untuk menyinkronkan data dengan server pusat.
 - Badge angka di menu = jumlah transaksi yang belum tersinkron.
 - **Laporan Online**: data historis langsung dari ERP HPY.
 - **Laporan Pembayaran (MOP)**: matriks tanggal × metode pembayaran.
+- **Laporan DO**: penjualan **Delivery Order** dari data lokal (ringkasan
+  total / dibayar / outstanding + tabel per order). Penjualan DO tidak muncul di
+  Laporan Online/Pembayaran karena keduanya membaca POS Invoice, sedangkan DO
+  terbit sebagai Sales Invoice biasa. Listing tidak memanggil ERP agar cepat;
+  tombol **Cek HPY** per order menarik langsung dari ERP HPY (Sales Invoice:
+  status/outstanding/per_billed, Delivery Note per shipment, Payment Entry per
+  pembayaran). Diatur via hak akses **`do_report`**.
 
 Status sinkron tiap data: `pending / synced / failed`, tercatat di log audit.
 Sync berjalan **saat itu juga** (tidak ada antrean background).
+
+### Pemotongan stok POS Invoice
+
+Invoice POS dikirim dengan **`update_stock = 1` eksplisit**. Ini wajib: centang
+"Update Stock" di POS Profile **tidak** diwarisi oleh dokumen yang dibuat lewat
+REST — ERP mengisinya dari JavaScript form POS, yang tidak pernah jalan untuk
+sync ini. Tanpa dikirim eksplisit, invoice terbit dengan nilai 0 walau POS
+Profile-nya tercentang, dan **stok di ERP tidak pernah berkurang** padahal stok
+lokal sudah dipotong saat checkout — selisihnya menumpuk tiap transaksi.
+
+Flag ini **tidak** menyebabkan stok terpotong dua kali saat POS Invoice
+dikonsolidasi. POS Invoice sendiri tidak pernah membuat Stock Ledger Entry
+(diverifikasi ke ERP HPY: invoice ber-`update_stock = 1` yang sudah submit tidak
+punya SLE sama sekali); nilai itu hanya ikut terbawa ke **Sales Invoice
+konsolidasi**, dan invoice konsolidasi itulah satu-satunya yang memotong stok.
+
+Beda dengan alur **Delivery Order**, yang memakai `update_stock = 0` karena di
+sana stok dipotong Delivery Note saat barang benar-benar dikirim.
 
 ---
 
