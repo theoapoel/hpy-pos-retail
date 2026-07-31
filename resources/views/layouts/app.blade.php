@@ -320,11 +320,9 @@
             $canStock         = $u->hasPermission('stock');
             $canSync          = $u->hasPermission('sync');
             $canDelivery      = $u->hasPermission('delivery');
-            $canKitchen       = $u->hasPermission('kitchen');
             $canStockRequest  = $u->hasPermission('stock_request');
             $canSlice         = $u->hasPermission('slice');
             $canRekapOrder    = $u->hasPermission('rekap_order');
-            $canPullingOrder  = $u->hasPermission('pulling_order');
             $canStockOpname   = $u->hasPermission('stock_opname');
             $canDeliveryNotes = $u->hasPermission('delivery_notes');
             $canOnlineReport  = $u->hasPermission('online_report');
@@ -385,8 +383,8 @@
         @endif
         @endif
 
-        @if($canDelivery || $canDeliveryNotes || $canKitchen || $canStockRequest || $canRekapOrder || $canPullingOrder)
-        <div class="nav-section">Delivery & Dapur</div>
+        @if($canDelivery || $canDeliveryNotes || $canStockRequest || $canRekapOrder)
+        <div class="nav-section">Delivery</div>
         @if($canDelivery)
         {!! $navItem(route('delivery-orders.index'), 'fas fa-truck', 'Delivery Order', request()->routeIs('delivery-orders.*')) !!}
         @endif
@@ -396,14 +394,8 @@
         @if($canStockRequest)
         {!! $navItem(route('stock-requests.index'), 'fas fa-clipboard-check', 'Permintaan FG', request()->routeIs('stock-requests.*')) !!}
         @endif
-        @if($canPullingOrder)
-        {!! $navItem(route('pulling-order.index'), 'fas fa-list-check', 'Pulling Order', request()->routeIs('pulling-order.*')) !!}
-        @endif
         @if($canRekapOrder)
         {!! $navItem(route('rekap-order.index'), 'fas fa-layer-group', 'Rekap Order', request()->routeIs('rekap-order.*')) !!}
-        @endif
-        @if($canKitchen)
-        {!! $navItem(route('kitchen.index'), 'fas fa-utensils', 'Kitchen Monitor', request()->routeIs('kitchen.*')) !!}
         @endif
         @endif
 

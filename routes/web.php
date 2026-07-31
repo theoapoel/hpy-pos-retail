@@ -10,14 +10,12 @@ use App\Http\Controllers\DeliveryOrderPaymentController;
 use App\Http\Controllers\DeliveryOrderReportController;
 use App\Http\Controllers\ErpSyncController;
 use App\Http\Controllers\FactoryResetController;
-use App\Http\Controllers\KitchenController;
 use App\Http\Controllers\ModeOfPaymentReportController;
 use App\Http\Controllers\OnlineReportController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PosController;
 use App\Http\Controllers\PosShiftController;
 use App\Http\Controllers\ProductController;
-use App\Http\Controllers\PullingOrderController;
 use App\Http\Controllers\RekapOrderController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingsController;
@@ -70,7 +68,6 @@ Route::post('/login', function (Request $req) {
         $req->session()->regenerate();
         $landing = match ($user->role) {
             'cashier' => route('pos.index'),
-            'dapur' => route('kitchen.index'),
             default => route('dashboard'),
         };
 
@@ -135,7 +132,6 @@ Route::post('/login', function (Request $req) {
     $req->session()->regenerate();
     $landing = match ($user->role) {
         'cashier' => route('pos.index'),
-        'dapur' => route('kitchen.index'),
         default => route('dashboard'),
     };
 
@@ -169,8 +165,6 @@ Route::middleware('auth')->group(function () {
         Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}', [PosController::class, 'printReceipt'])->name('print');
-        Route::get('/print-kitchen/{transaction}', [PosController::class, 'printKitchen'])->name('print-kitchen');
-        Route::post('/print-kitchen-draft', [PosController::class, 'printKitchenDraft'])->name('print-kitchen-draft');
         Route::get('/direct-print/{transaction}', [PosController::class, 'directPrint'])->name('direct-print');
     });
 
@@ -299,23 +293,6 @@ Route::middleware('auth')->group(function () {
     // Rekap Order
     Route::prefix('rekap-order')->name('rekap-order.')->middleware('permission:rekap_order')->group(function () {
         Route::get('/', [RekapOrderController::class, 'index'])->name('index');
-    });
-
-    // Pulling Order — edit pembayaran & jadwal produksi lintas Delivery Order + Permintaan FG
-    Route::prefix('pulling-order')->name('pulling-order.')->middleware('permission:pulling_order')->group(function () {
-        Route::get('/', [PullingOrderController::class, 'index'])->name('index');
-        Route::post('/delivery-orders/{deliveryOrder}/schedule', [PullingOrderController::class, 'scheduleDeliveryOrder'])->name('delivery.schedule');
-        Route::post('/delivery-orders/{deliveryOrder}/confirm-kitchen', [PullingOrderController::class, 'confirmKitchen'])->name('delivery.confirm-kitchen');
-        Route::post('/delivery-orders/{deliveryOrder}/payments', [PullingOrderController::class, 'storePayment'])->name('delivery.payment');
-        Route::post('/stock-requests/{stockRequest}/schedule', [PullingOrderController::class, 'scheduleStockRequest'])->name('sr.schedule');
-    });
-
-    // Kitchen Monitor
-    Route::prefix('kitchen')->name('kitchen.')->middleware('permission:kitchen')->group(function () {
-        Route::get('/', [KitchenController::class, 'index'])->name('index');
-        Route::get('/poll', [KitchenController::class, 'poll'])->name('poll');
-        Route::get('/calendar', [KitchenController::class, 'calendar'])->name('calendar');
-        Route::post('/{order}/status', [KitchenController::class, 'updateStatus'])->name('update-status');
     });
 
     // Laporan Online — data historis langsung dari ERPNext

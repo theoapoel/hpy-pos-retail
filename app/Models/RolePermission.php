@@ -25,13 +25,11 @@ class RolePermission extends Model
             'stock_opname'   => ['label' => 'Stock Opname',      'icon' => 'fa-clipboard-list'],
             'slice'          => ['label' => 'Repack (Konversi)', 'icon' => 'fa-scissors'],
             'stock_transfer' => ['label' => 'Transfer Barang',   'icon' => 'fa-truck-loading'],
-            // Delivery & Dapur
+            // Delivery
             'delivery'       => ['label' => 'Delivery Order',    'icon' => 'fa-truck'],
             'delivery_notes' => ['label' => 'Delivery Notes',    'icon' => 'fa-map-marker-alt'],
             'stock_request'  => ['label' => 'Permintaan FG',     'icon' => 'fa-clipboard-check'],
-            'pulling_order'  => ['label' => 'Pulling Order',     'icon' => 'fa-list-check'],
             'rekap_order'    => ['label' => 'Rekap Order',       'icon' => 'fa-layer-group'],
-            'kitchen'        => ['label' => 'Kitchen Monitor',   'icon' => 'fa-utensils'],
             // Integrasi
             'sync'           => ['label' => 'Sync HPY',          'icon' => 'fa-sync-alt'],
             'online_report'  => ['label' => 'Laporan Online',    'icon' => 'fa-cloud-download-alt'],

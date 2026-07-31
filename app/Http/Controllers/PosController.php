@@ -33,21 +33,12 @@ class PosController extends Controller
         $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
-        $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods  = pos_payment_methods();
-        $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
+        $posPaymentMethods = pos_payment_methods();
         $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
-        $dineInCharges     = [
-            'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',
-            'service_charge_pct'     => (float) ($storeSettings['service_charge_pct'] ?? 0),
-            'pb1_enabled'            => $storeSettings['pb1_enabled'] === '1',
-            'pb1_pct'                => (float) ($storeSettings['pb1_pct'] ?? 0),
-        ];
 
         return view('pos.quick', compact(
             'categories', 'customers', 'posClass',
-            'walkinCustomerName', 'erpBaseUrl', 'deliveryPrices', 'dineInCharges',
-            'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
         ));
     }
 
@@ -57,21 +48,12 @@ class PosController extends Controller
         $customers         = Customer::where('is_active', true)->get(['id', 'code', 'name', 'phone', 'loyalty_points']);
         $storeSettings     = SettingsController::storeSettings();
         $posClass          = $storeSettings['pos_class'] ?? '';
-        $walkinCustomerName = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods  = pos_payment_methods();
-        $deliveryPrices    = \App\Models\DeliveryPrice::allGrouped();
+        $posPaymentMethods = pos_payment_methods();
         $erpBaseUrl        = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
-        $dineInCharges     = [
-            'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',
-            'service_charge_pct'     => (float) ($storeSettings['service_charge_pct'] ?? 0),
-            'pb1_enabled'            => $storeSettings['pb1_enabled'] === '1',
-            'pb1_pct'                => (float) ($storeSettings['pb1_pct'] ?? 0),
-        ];
 
         return view('pos.express', compact(
             'categories', 'customers', 'posClass',
-            'walkinCustomerName', 'erpBaseUrl', 'deliveryPrices', 'dineInCharges',
-            'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
         ));
     }
 
@@ -83,23 +65,12 @@ class PosController extends Controller
         $storeSettings      = SettingsController::storeSettings();
         $posClass           = $storeSettings['pos_class'] ?? '';
         $posProductDisplay  = $storeSettings['pos_product_display'] ?? 'image';
-        $walkinCustomerName  = \App\Models\Setting::get('erpnext_walkin_customer', 'Walk-in Customer');
-        $posPaymentMethods   = pos_payment_methods();
+        $posPaymentMethods  = pos_payment_methods();
         $erpBaseUrl         = rtrim(\App\Models\Setting::get('erpnext_url', ''), '/');
-
-        $deliveryPrices = \App\Models\DeliveryPrice::allGrouped();
-
-        $dineInCharges = [
-            'service_charge_enabled' => $storeSettings['service_charge_enabled'] === '1',
-            'service_charge_pct'     => (float) ($storeSettings['service_charge_pct'] ?? 0),
-            'pb1_enabled'            => $storeSettings['pb1_enabled'] === '1',
-            'pb1_pct'                => (float) ($storeSettings['pb1_pct'] ?? 0),
-        ];
 
         return view('pos.index', compact(
             'categories', 'products', 'customers', 'posClass', 'posProductDisplay',
-            'walkinCustomerName', 'erpBaseUrl', 'deliveryPrices', 'dineInCharges',
-            'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
         ));
     }
 
@@ -183,8 +154,12 @@ class PosController extends Controller
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
+            // Customer wajib: setiap POS Invoice harus punya pelanggan terdaftar.
+            'customer_id' => 'required|exists:customers,id',
             'payment_method' => 'required|string',
             'paid_amount' => 'required|numeric|min:0',
+        ], [
+            'customer_id.required' => 'Customer wajib diisi.',
         ]);
 
         DB::beginTransaction();
@@ -252,61 +227,29 @@ class PosController extends Controller
                 }
             }
 
-            $orderType        = $request->order_type ?? 'dine_in';
-            $deliveryPlatform = $request->delivery_platform ?? null;
-
-            // Service Charge & PB1 — hanya untuk Dine In
-            $serviceChargePct    = 0;
-            $serviceChargeAmount = 0;
-            $pb1Pct              = 0;
-            $pb1Amount           = 0;
-
-            if ($orderType === 'dine_in') {
-                $base = $subtotal - $discountAmount - $couponDiscount;
-
-                $scEnabled = \App\Models\Setting::get('service_charge_enabled', '0') === '1';
-                if ($scEnabled) {
-                    $serviceChargePct    = (float) \App\Models\Setting::get('service_charge_pct', '0');
-                    $serviceChargeAmount = round($base * $serviceChargePct / 100, 2);
-                }
-
-                $pb1Enabled = \App\Models\Setting::get('pb1_enabled', '0') === '1';
-                if ($pb1Enabled) {
-                    $pb1Pct    = (float) \App\Models\Setting::get('pb1_pct', '0');
-                    $pb1Amount = round(($base + $serviceChargeAmount) * $pb1Pct / 100, 2);
-                }
-            }
-
-            $total      = $subtotal + $taxAmount - $discountAmount - $couponDiscount + $serviceChargeAmount + $pb1Amount;
+            $total      = $subtotal + $taxAmount - $discountAmount - $couponDiscount;
             $paidAmount = $request->paid_amount;
             $change     = $paidAmount - $total;
 
             $transaction = Transaction::create([
-                'invoice_no'            => Transaction::generateInvoiceNo(),
-                'user_id'               => Auth::id(),
-                'customer_id'           => $request->customer_id,
-                'status'                => 'completed',
-                'subtotal'              => $subtotal,
-                'discount_amount'       => $discountAmount,
-                'discount_percent'      => $discountPercent,
-                'coupon_code'           => $couponCode,
-                'coupon_discount'       => $couponDiscount,
-                'tax_amount'            => $taxAmount,
-                'total'                 => $total,
-                'paid_amount'           => $paidAmount,
-                'change_amount'         => max(0, $change),
-                'payment_method'        => $request->payment_method,
-                'payment_details'       => $request->payment_details,
-                'notes'                 => $request->notes,
-                'pos_class'             => $request->pos_class,
-                'order_type'            => $orderType,
-                'delivery_platform'     => $deliveryPlatform,
-                'table_number'          => $request->table_number ?: null,
-                'service_charge_pct'    => $serviceChargePct,
-                'service_charge_amount' => $serviceChargeAmount,
-                'pb1_pct'               => $pb1Pct,
-                'pb1_amount'            => $pb1Amount,
-                'erp_sync_status'       => 'pending',
+                'invoice_no'       => Transaction::generateInvoiceNo(),
+                'user_id'          => Auth::id(),
+                'customer_id'      => $request->customer_id,
+                'status'           => 'completed',
+                'subtotal'         => $subtotal,
+                'discount_amount'  => $discountAmount,
+                'discount_percent' => $discountPercent,
+                'coupon_code'      => $couponCode,
+                'coupon_discount'  => $couponDiscount,
+                'tax_amount'       => $taxAmount,
+                'total'            => $total,
+                'paid_amount'      => $paidAmount,
+                'change_amount'    => max(0, $change),
+                'payment_method'   => $request->payment_method,
+                'payment_details'  => $request->payment_details,
+                'notes'            => $request->notes,
+                'pos_class'        => $request->pos_class,
+                'erp_sync_status'  => 'pending',
             ]);
 
             $transaction->items()->insert(array_map(fn($i) => array_merge($i, ['transaction_id' => $transaction->id]), $itemsData));
@@ -354,73 +297,6 @@ class PosController extends Controller
         $transaction->load('items.product', 'customer', 'user');
         $store = SettingsController::storeSettings();
         return view('pos.print-receipt', compact('transaction', 'store'));
-    }
-
-    public function printKitchen(Request $request, Transaction $transaction)
-    {
-        $transaction->load('items.product.itemCategory', 'customer', 'user');
-        $store = SettingsController::storeSettings();
-
-        // Nomor meja: dari query (saat checkout) atau tersimpan di transaksi (cetak ulang)
-        $table = trim((string) $request->query('table', $transaction->table_number ?? ''));
-
-        // Kelompokkan item per kategori: MAKANAN / MINUMAN / dll.
-        // Item tanpa kategori masuk ke "LAINNYA".
-        $groups = $transaction->items
-            ->groupBy(fn($item) => $item->product?->itemCategory?->name ?: 'LAINNYA')
-            ->sortKeys();
-
-        return view('pos.print-kitchen', compact('transaction', 'store', 'groups', 'table'));
-    }
-
-    /**
-     * Struk dapur untuk pesanan yang belum disubmit (ditahan / keranjang berjalan).
-     * Tidak menyimpan apa pun — hanya merender view yang sama dari data draft,
-     * supaya dapur bisa mulai memasak sebelum pembayaran.
-     */
-    public function printKitchenDraft(Request $request)
-    {
-        $data = $request->validate([
-            'items'          => 'required|array|min:1',
-            'items.*.id'     => 'nullable|integer',
-            'items.*.name'   => 'required|string|max:200',
-            'items.*.qty'    => 'required|numeric|min:0.01',
-            'table'          => 'nullable|string|max:20',
-            'order_type'     => 'nullable|string|max:20',
-            'customer_name'  => 'nullable|string|max:150',
-            'notes'          => 'nullable|string|max:500',
-        ]);
-
-        $store = SettingsController::storeSettings();
-        $table = trim((string) ($data['table'] ?? ''));
-
-        // Ambil kategori produk sekali jalan untuk pengelompokan.
-        $ids       = collect($data['items'])->pluck('id')->filter()->all();
-        $products  = Product::with('itemCategory')->whereIn('id', $ids)->get()->keyBy('id');
-
-        $items = collect($data['items'])->map(fn ($row) => (object) [
-            'product_name' => $row['name'],
-            'quantity'     => 0 + $row['qty'],
-            // get() — bukan akses array — supaya produk yang sudah dihapus
-            // tidak membuat cetak gagal, cukup masuk kategori LAINNYA.
-            'category'     => $products->get($row['id'] ?? null)?->itemCategory?->name ?: 'LAINNYA',
-        ]);
-
-        $groups = $items->groupBy('category')->sortKeys();
-
-        $customerName = trim((string) ($data['customer_name'] ?? ''));
-
-        $transaction = (object) [
-            'invoice_no' => 'BELUM DISUBMIT',
-            'created_at' => now(),
-            'user'       => (object) ['name' => auth()->user()->name],
-            'customer'   => $customerName !== '' ? (object) ['name' => $customerName] : null,
-            'order_type' => $data['order_type'] ?? null,
-            'notes'      => $data['notes'] ?? null,
-            'items'      => $items,
-        ];
-
-        return view('pos.print-kitchen', compact('transaction', 'store', 'groups', 'table'));
     }
 
     public function directPrint(Transaction $transaction)

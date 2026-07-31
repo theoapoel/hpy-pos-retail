@@ -185,57 +185,6 @@
             display: flex; flex-direction: column; flex-shrink: 0;
         }
 
-        /* Order type + table */
-        .order-type-bar {
-            padding: 10px 14px; border-bottom: 1px solid var(--border);
-            display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap;
-        }
-        .order-type-btn {
-            flex: 1; padding: 8px 6px; border-radius: 10px;
-            border: 2px solid var(--border); background: var(--surface2);
-            font-size: 12px; font-weight: 800; color: var(--text2);
-            cursor: pointer; text-align: center; transition: all .2s;
-            font-family: 'Roboto', sans-serif;
-        }
-        .order-type-btn.active {
-            background: var(--primary); color: #fff; border-color: var(--primary);
-        }
-        .table-input-wrap { display: flex; align-items: center; gap: 6px; margin-left: 4px; }
-        .table-input {
-            width: 80px; padding: 7px 10px; border: 2px solid var(--border);
-            border-radius: 10px; font-size: 13px; font-weight: 800;
-            text-align: center; font-family: 'Roboto', sans-serif;
-            color: var(--text); background: var(--bg); transition: all .2s;
-        }
-        .table-input:focus { outline: none; border-color: var(--primary); }
-        .table-label { font-size: 11px; font-weight: 700; color: var(--text3); white-space: nowrap; }
-
-        /* Delivery platform picker */
-        .delivery-platform-bar {
-            padding: 8px 14px 10px; border-bottom: 1px solid var(--border);
-            display: none; gap: 8px; align-items: center; flex-shrink: 0; background: #FFF8F0;
-        }
-        .delivery-platform-bar.show { display: flex; }
-        .delivery-platform-label { font-size: 11px; font-weight: 800; color: var(--text3); white-space: nowrap; }
-        .platform-btn {
-            flex: 1; padding: 8px 6px; border-radius: 10px; border: 2px solid var(--border);
-            cursor: pointer; text-align: center; transition: all .2s;
-            font-size: 12px; font-weight: 800; font-family: 'Roboto', sans-serif;
-            display: flex; flex-direction: column; align-items: center; gap: 3px; background: var(--surface);
-        }
-        .platform-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-        .platform-btn.gofood       { color: #00AE11; }
-        .platform-btn.gofood.active{ background: #00AE11; color: #fff; border-color: #00AE11; }
-        .platform-btn.grabfood       { color: #00B14F; }
-        .platform-btn.grabfood.active{ background: #00B14F; color: #fff; border-color: #00B14F; }
-        .platform-btn.shopeefood       { color: #EE4D2D; }
-        .platform-btn.shopeefood.active{ background: #EE4D2D; color: #fff; border-color: #EE4D2D; }
-        .platform-logo { font-size: 20px; line-height: 1; }
-        .delivery-price-badge {
-            display: inline-block; font-size: 10px; font-weight: 800; padding: 1px 6px;
-            border-radius: 8px; background: #FFF3E0; color: #E65100; margin-left: 4px;
-        }
-
         /* Customer */
         .cart-customer { padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
         .customer-select-btn {
@@ -501,47 +450,13 @@
         <div class="products-grid" id="productsGrid">
             <div id="loadingProducts" style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text3)">
                 <div style="font-size:36px;margin-bottom:8px">⏳</div>
-                <div style="font-size:14px;font-weight:700">Memuat menu...</div>
+                <div style="font-size:14px;font-weight:700">Memuat produk...</div>
             </div>
         </div>
     </div>
 
     <!-- RIGHT: Order Panel -->
     <div class="pos-cart">
-
-        <!-- Order Type + Table -->
-        <div class="order-type-bar">
-            <button class="order-type-btn active" data-type="dine_in" onclick="selectOrderType(this)">
-                🍽 Dine In
-            </button>
-            <button class="order-type-btn" data-type="take_away" onclick="selectOrderType(this)">
-                🥡 Take Away
-            </button>
-            <button class="order-type-btn" data-type="delivery" onclick="selectOrderType(this)">
-                🛵 Delivery
-            </button>
-            <div class="table-input-wrap" id="tableWrap">
-                <div class="table-label"><i class="fas fa-chair"></i></div>
-                <input type="text" id="tableNumber" class="table-input" placeholder="Meja" maxlength="6">
-            </div>
-        </div>
-
-        <!-- Delivery Platform Picker (visible only when Delivery selected) -->
-        <div class="delivery-platform-bar" id="deliveryPlatformBar">
-            <span class="delivery-platform-label">📦 Via:</span>
-            <button class="platform-btn gofood" data-platform="gofood" onclick="selectDeliveryPlatform(this)">
-                <span class="platform-logo">🟢</span>
-                <span>GoFood</span>
-            </button>
-            <button class="platform-btn grabfood" data-platform="grabfood" onclick="selectDeliveryPlatform(this)">
-                <span class="platform-logo">🟩</span>
-                <span>GrabFood</span>
-            </button>
-            <button class="platform-btn shopeefood" data-platform="shopeefood" onclick="selectDeliveryPlatform(this)">
-                <span class="platform-logo">🟠</span>
-                <span>ShopeeFood</span>
-            </button>
-        </div>
 
         <!-- Customer -->
         <div class="cart-customer">
@@ -561,8 +476,8 @@
         <!-- Order Items -->
         <div class="cart-items" id="cartItems">
             <div class="cart-empty" id="cartEmpty">
-                <div class="cart-empty-icon">🍽️</div>
-                <div class="cart-empty-text">Belum ada pesanan<br><small style="font-size:12px;font-weight:600">Pilih menu untuk menambahkan</small></div>
+                <div class="cart-empty-icon">🛒</div>
+                <div class="cart-empty-text">Belum ada item<br><small style="font-size:12px;font-weight:600">Pilih produk untuk menambahkan</small></div>
             </div>
         </div>
 
@@ -617,14 +532,6 @@
             <div class="summary-row">
                 <span>Pajak</span>
                 <span id="taxDisplay">Rp 0</span>
-            </div>
-            <div class="summary-row" id="scRow" style="display:none;color:#E65100">
-                <span id="scLabel">Service Charge</span>
-                <span id="scDisplay">Rp 0</span>
-            </div>
-            <div class="summary-row" id="pb1Row" style="display:none;color:#E65100">
-                <span id="pb1Label">PB1</span>
-                <span id="pb1Display">Rp 0</span>
             </div>
             <div class="summary-row total">
                 <span>TOTAL</span>
@@ -777,7 +684,6 @@
         </div>
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeReceiptAndReset()"><i class="fas fa-times"></i> Tutup</button>
-            <button class="btn btn-warning" onclick="printKitchen()"><i class="fas fa-utensils"></i> Cetak Kitchen</button>
             <button class="btn btn-primary" onclick="printReceipt()"><i class="fas fa-print"></i> Cetak Struk</button>
             <button class="btn btn-success" onclick="closeReceiptAndReset()"><i class="fas fa-plus"></i> Pesanan Baru</button>
         </div>
@@ -794,8 +700,6 @@ let cart = [];
 let selectedCustomer = null;
 let selectedPayment = 'cash';
 let selectedPaymentIsCash = true;
-let selectedOrderType = 'dine_in';
-let selectedDeliveryPlatform = null;
 let allProducts = [];
 let currentCategoryFilter = null;
 let lastReceipt = null;
@@ -805,12 +709,9 @@ let appliedCoupon = null;
 
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 const defaultPosClass = @json($posClass);
-const walkinCustomerName = @json($walkinCustomerName);
 const posProductDisplay = @json($posProductDisplay);
 const erpBaseUrl = @json($erpBaseUrl);
 const appBaseUrl = @json(url('/'));
-const deliveryPrices  = @json($deliveryPrices);
-const dineInCharges   = @json($dineInCharges);
 
 // ============================================================
 // CLOCK
@@ -821,71 +722,11 @@ function updateClock() {
 setInterval(updateClock, 1000); updateClock();
 
 // ============================================================
-// ORDER TYPE + DELIVERY PLATFORM
-// ============================================================
-function selectOrderType(btn) {
-    document.querySelectorAll('.order-type-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    selectedOrderType = btn.dataset.type;
-    document.getElementById('tableWrap').style.display = selectedOrderType === 'dine_in' ? 'flex' : 'none';
-
-    const bar = document.getElementById('deliveryPlatformBar');
-    if (selectedOrderType === 'delivery') {
-        bar.classList.add('show');
-    } else {
-        bar.classList.remove('show');
-        // Reset platform & restore normal prices when leaving Delivery
-        if (selectedDeliveryPlatform) {
-            selectedDeliveryPlatform = null;
-            document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
-            applyDeliveryPrices();
-            renderCart();
-        }
-    }
-    // Recalculate to show/hide Service Charge & PB1 rows
-    recalculate();
-}
-
-function selectDeliveryPlatform(btn) {
-    const platform = btn.dataset.platform;
-    if (selectedDeliveryPlatform === platform) {
-        // Toggle off
-        btn.classList.remove('active');
-        selectedDeliveryPlatform = null;
-    } else {
-        document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selectedDeliveryPlatform = platform;
-    }
-    applyDeliveryPrices();
-    renderCart();
-}
-
-function getDeliveryPrice(erpItemCode) {
-    if (!selectedDeliveryPlatform || !erpItemCode) return null;
-    const map = deliveryPrices[selectedDeliveryPlatform] ?? {};
-    return map[erpItemCode] !== undefined ? map[erpItemCode] : null;
-}
-
-function applyDeliveryPrices() {
-    // Update cart item prices to reflect active delivery platform
-    cart.forEach(item => {
-        const dp = getDeliveryPrice(item.erpItemCode);
-        item.price = dp !== null ? dp : item.basePrice;
-        // Reset item discount when price changes
-        item.discount = 0;
-        item.discountPct = 0;
-    });
-    // Re-render product grid with new prices
-    renderProducts(allProducts);
-}
-
-// ============================================================
 // LOAD & RENDER PRODUCTS
 // ============================================================
 async function loadProducts(categoryId = null) {
     const grid = document.getElementById('productsGrid');
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text3)"><div style="font-size:36px;margin-bottom:8px">⏳</div><div style="font-size:14px;font-weight:700">Memuat menu...</div></div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text3)"><div style="font-size:36px;margin-bottom:8px">⏳</div><div style="font-size:14px;font-weight:700">Memuat produk...</div></div>';
     const url = '{{ route("pos.search-products") }}' + '?q=' + (categoryId ? '&category_id=' + categoryId : '');
     try {
         const resp = await fetch(url, { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
@@ -912,15 +753,10 @@ function renderProducts(products) {
         if (p.image.startsWith('/images/')) return appBaseUrl + p.image;
         return erpBaseUrl + p.image;
     };
-    const effectivePrice = p => {
-        const dp = getDeliveryPrice(p.erp_item_code);
-        return dp !== null ? dp : p.price;
-    };
-
     const cardAttrs = (p, extra = '') => `
         class="product-card ${extra} ${outOfStock(p) ? 'out-of-stock' : ''}"
         data-id="${p.id}" data-name="${p.name.replace(/'/g,"&#39;")}"
-        data-price="${effectivePrice(p)}" data-base-price="${p.price}"
+        data-price="${p.price}"
         data-sku="${p.sku}" data-stock="${p.stock}"
         data-unit="${p.unit}" data-tax="${p.tax_rate}"
         data-track="${p.track_stock ? 1 : 0}" data-category="${p.category_id || ''}"
@@ -930,8 +766,6 @@ function renderProducts(products) {
     if (posProductDisplay === 'text') {
         grid.classList.add('text-mode');
         grid.innerHTML = products.map(p => {
-            const ep = effectivePrice(p);
-            const hasDeliveryPrice = ep !== p.price;
             const stockInfo = p.track_stock
                 ? (p.stock <= 0
                     ? `<span style="margin-left:6px;font-size:10px;font-weight:800;background:var(--red-light);color:var(--red);padding:1px 6px;border-radius:8px">Habis</span>`
@@ -945,33 +779,27 @@ function renderProducts(products) {
                     ${stockInfo}
                 </div>
                 <div style="text-align:right;flex-shrink:0">
-                    <div style="font-size:14px;font-weight:900;color:${outOfStock(p)?'var(--text3)':'var(--primary)'}">Rp ${fmt(ep)}</div>
-                    ${hasDeliveryPrice ? `<div style="font-size:10px;text-decoration:line-through;color:var(--text3)">Rp ${fmt(p.price)}</div>` : ''}
+                    <div style="font-size:14px;font-weight:900;color:${outOfStock(p)?'var(--text3)':'var(--primary)'}">Rp ${fmt(p.price)}</div>
                 </div>
             </div>`;
         }).join('');
     } else {
         grid.classList.remove('text-mode');
         grid.innerHTML = products.map(p => {
-            const ep = effectivePrice(p);
-            const hasDeliveryPrice = ep !== p.price;
             return `
             <div ${cardAttrs(p)}>
                 <div class="product-img">
                     ${imgUrl(p)
                         ? `<img src="${imgUrl(p)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display=''">`
                         : ''}
-                    <span style="font-size:38px;${imgUrl(p)?'display:none':''}">🍽️</span>
+                    <span style="font-size:38px;${imgUrl(p)?'display:none':''}">👕</span>
                     ${p.category ? `<span class="product-cat-dot">${p.category}</span>` : ''}
                     ${p.is_low_stock && !outOfStock(p) ? '<span class="low-stock-badge">LOW</span>' : ''}
                     ${outOfStock(p) ? '<span class="out-badge">HABIS</span>' : ''}
                 </div>
                 <div class="product-info">
                     <div class="product-name">${p.name}</div>
-                    <div class="product-price">
-                        Rp ${fmt(ep)}
-                        ${hasDeliveryPrice ? `<span style="font-size:10px;text-decoration:line-through;color:var(--text3);font-weight:600;margin-left:4px">Rp ${fmt(p.price)}</span>` : ''}
-                    </div>
+                    <div class="product-price">Rp ${fmt(p.price)}</div>
                     <div class="product-stock ${p.is_low_stock?'stock-low':''}">
                         ${p.track_stock ? (p.stock<=0 ? '⚠ Stok Habis' : 'Stok: '+p.stock+' '+p.unit) : '∞ Tersedia'}
                     </div>
@@ -1022,20 +850,15 @@ function addToCart(el) {
     const existing = cart.find(i => i.id === id);
     if (existing) {
         existing.qty++;
-        // Update price if delivery platform is active (in case platform changed after adding)
-        const dp = getDeliveryPrice(existing.erpItemCode);
-        if (dp !== null) existing.price = dp;
     } else {
-        const basePrice  = parseFloat(el.dataset.basePrice || el.dataset.price);
+        const basePrice = parseFloat(el.dataset.price);
         if (basePrice === 0) { toast('⚠ Harga produk ini Rp 0, harap periksa kembali.', 'warn'); }
-        const erpCode    = el.dataset.erpCode || '';
-        const dp         = getDeliveryPrice(erpCode);
         // Item baru diletakkan paling atas keranjang (memudahkan lihat hasil scan terbaru)
         cart.unshift({
             id, name: el.dataset.name,
-            price: dp !== null ? dp : basePrice,
+            price: basePrice,
             basePrice,
-            erpItemCode: erpCode,
+            erpItemCode: el.dataset.erpCode || '',
             sku: el.dataset.sku, stock, unit: el.dataset.unit,
             tax: parseFloat(el.dataset.tax), track,
             qty: 1, discount: 0, discountPct: 0, note: ''
@@ -1344,48 +1167,13 @@ function recalculate() {
         document.getElementById('couponDiscountRow').style.display = 'none';
     }
 
-    const base = subtotal - discAmt - couponDiscount;
-
-    // Service Charge & PB1 — only for Dine In
-    let scAmt  = 0;
-    let pb1Amt = 0;
-
-    if (selectedOrderType === 'dine_in') {
-        if (dineInCharges.service_charge_enabled && dineInCharges.service_charge_pct > 0) {
-            scAmt = Math.round(base * dineInCharges.service_charge_pct / 100);
-        }
-        if (dineInCharges.pb1_enabled && dineInCharges.pb1_pct > 0) {
-            pb1Amt = Math.round((base + scAmt) * dineInCharges.pb1_pct / 100);
-        }
-    }
-
-    const total = base + tax + scAmt + pb1Amt;
+    const total = subtotal - discAmt - couponDiscount + tax;
 
     document.getElementById('subtotalDisplay').textContent = 'Rp ' + fmt(subtotal);
     document.getElementById('discountDisplay').textContent = '- Rp ' + fmt(discAmt);
     document.getElementById('taxDisplay').textContent      = 'Rp ' + fmt(tax);
     document.getElementById('totalDisplay').textContent    = 'Rp ' + fmt(total);
     document.getElementById('topbarTotalDisplay').textContent = 'Rp ' + fmt(total);
-
-    // Show/hide Service Charge row
-    const scRow = document.getElementById('scRow');
-    if (scAmt > 0) {
-        scRow.style.display = '';
-        document.getElementById('scLabel').textContent   = `Service Charge (${dineInCharges.service_charge_pct}%)`;
-        document.getElementById('scDisplay').textContent = 'Rp ' + fmt(scAmt);
-    } else {
-        scRow.style.display = 'none';
-    }
-
-    // Show/hide PB1 row
-    const pb1Row = document.getElementById('pb1Row');
-    if (pb1Amt > 0) {
-        pb1Row.style.display = '';
-        document.getElementById('pb1Label').textContent   = `PB1 (${dineInCharges.pb1_pct}%)`;
-        document.getElementById('pb1Display').textContent = 'Rp ' + fmt(pb1Amt);
-    } else {
-        pb1Row.style.display = 'none';
-    }
 
     if (selectedPaymentIsCash) {
         const amounts = [total, Math.ceil(total/10000)*10000, Math.ceil(total/50000)*50000, Math.ceil(total/100000)*100000];
@@ -1435,10 +1223,10 @@ function renderCustomerBtn() {
     const btn     = document.getElementById('customerBtn');
     const textEl  = document.getElementById('customerBtnText');
     const clearEl = document.getElementById('customerClearBtn');
-    if (!selectedCustomer || selectedCustomer.id === null) {
+    if (!selectedCustomer) {
         btn.classList.remove('has-customer');
         btn.style.cssText = '';
-        textEl.textContent = '🚶 ' + walkinCustomerName;
+        textEl.textContent = '👤 Pilih Customer (wajib)';
         clearEl.style.display = 'none';
     } else {
         btn.classList.add('has-customer');
@@ -1448,8 +1236,10 @@ function renderCustomerBtn() {
     }
 }
 
-function setWalkin() {
-    selectedCustomer = { id: null, name: walkinCustomerName };
+// Customer wajib diisi — tidak ada lagi fallback walk-in di kasir.
+function resetCustomer() {
+    selectedCustomer = null;
+
     renderCustomerBtn();
 }
 
@@ -1466,22 +1256,11 @@ function closeModal(id) {
 
 function renderCustomerList(list) {
     const el = document.getElementById('customerList');
-    const walkinRow = `
-        <div onclick="selectWalkin()"
-            style="padding:10px 12px;border-radius:10px;cursor:pointer;display:flex;align-items:center;gap:10px;background:${(!selectedCustomer||selectedCustomer.id===null)?'var(--primary-light)':''};transition:background .15s"
-            onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background='${(!selectedCustomer||selectedCustomer.id===null)?'var(--primary-light)':''}'">
-            <span style="font-size:20px">🚶</span>
-            <div>
-                <div style="font-weight:800;font-size:14px;color:var(--primary)">${walkinCustomerName}</div>
-                <div style="font-size:12px;color:var(--text3)">Transaksi tanpa pelanggan terdaftar</div>
-            </div>
-            ${(!selectedCustomer||selectedCustomer.id===null)?'<i class="fas fa-check" style="margin-left:auto;color:var(--primary)"></i>':''}
-        </div>`;
     if (list.length === 0) {
-        el.innerHTML = walkinRow + '<div style="padding:20px;text-align:center;color:var(--text3);font-size:14px;font-weight:700">Tidak ditemukan</div>';
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:14px;font-weight:700">Tidak ditemukan</div>';
         return;
     }
-    el.innerHTML = walkinRow + list.slice(0, 8).map(c => `
+    el.innerHTML = list.slice(0, 8).map(c => `
         <div onclick="selectCustomer(${c.id},'${c.name.replace(/'/g,"\\'")}','${c.code}')"
             style="padding:10px 12px;border-radius:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .15s"
             onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
@@ -1503,8 +1282,6 @@ function searchCustomers(q) {
     renderCustomerList(filtered);
 }
 
-function selectWalkin() { setWalkin(); closeModal('customerModal'); }
-
 function selectCustomer(id, name, code) {
     selectedCustomer = { id, name, code };
     renderCustomerBtn();
@@ -1513,7 +1290,7 @@ function selectCustomer(id, name, code) {
 
 function clearCustomer(e) {
     if (e) e.stopPropagation();
-    setWalkin();
+    resetCustomer();
 }
 
 async function addNewCustomer() {
@@ -1540,8 +1317,7 @@ async function addNewCustomer() {
 // ============================================================
 async function processCheckout() {
     if (cart.length === 0) return;
-    if (selectedOrderType === 'delivery' && !selectedDeliveryPlatform) { toast('Pilih platform delivery (GoFood/GrabFood/ShopeeFood) terlebih dahulu!', 'err'); return; }
-    if (!selectedCustomer) { toast('Pilih customer terlebih dahulu!', 'err'); openCustomerModal(); return; }
+    if (!selectedCustomer) { toast('Customer wajib diisi! Pilih customer terlebih dahulu.', 'err'); openCustomerModal(); return; }
     const totalText = document.getElementById('totalDisplay').textContent;
     const total = parseFloat(totalText.replace(/[^0-9]/g,''));
     const paid = selectedPaymentIsCash ? parseFloat(document.getElementById('paidAmount').value) || 0 : total;
@@ -1553,20 +1329,16 @@ async function processCheckout() {
 
     const discAmt = parseFloat(document.getElementById('discountAmt').value) || 0;
     const discPct = parseFloat(document.getElementById('discountPct').value) || 0;
-    const tableNumber = document.getElementById('tableNumber').value.trim();
 
     const payload = {
         items: cart.map(i => ({ product_id: i.id, quantity: i.qty, price: i.price, discount_amount: i.discount, note: i.note || '' })),
-        customer_id: selectedCustomer?.id || null,
+        customer_id: selectedCustomer.id,
         payment_method: selectedPayment,
         paid_amount: paid,
         discount_amount: discAmt,
         discount_percent: discPct,
         coupon_code: appliedCoupon?.code || null,
         pos_class: defaultPosClass || null,
-        order_type: selectedOrderType,
-        table_number: tableNumber || null,
-        delivery_platform: selectedOrderType === 'delivery' ? selectedDeliveryPlatform : null,
     };
 
     try {
@@ -1595,9 +1367,6 @@ async function processCheckout() {
 // RECEIPT
 // ============================================================
 function showReceipt(tx) {
-    const orderTypeLabel = { dine_in: 'Dine In', take_away: 'Take Away', delivery: 'Delivery' };
-    const platformLabel  = { gofood: 'GoFood', grabfood: 'GrabFood', shopeefood: 'ShopeeFood' };
-    const tableNumber = document.getElementById('tableNumber').value.trim();
     const items = tx.items.map(i =>
         `<div class="receipt-row"><span>${i.product_name} x${i.quantity}</span><span>Rp ${fmt(i.subtotal)}</span></div>`
     ).join('');
@@ -1619,7 +1388,6 @@ function showReceipt(tx) {
         <hr class="receipt-divider">
         <div class="receipt-row"><span>No. Invoice</span><span><strong>${tx.invoice_no}</strong></span></div>
         <div class="receipt-row"><span>Kasir</span><span>${'{{ auth()->user()->name }}'}</span></div>
-        <div class="receipt-row"><span>Tipe</span><span>${orderTypeLabel[selectedOrderType]||selectedOrderType}${selectedDeliveryPlatform?' via '+platformLabel[selectedDeliveryPlatform]:''}${tableNumber?' — Meja '+tableNumber:''}</span></div>
         ${tx.customer ? `<div class="receipt-row"><span>Customer</span><span>${tx.customer.name}</span></div>` : ''}
         <hr class="receipt-divider">
         ${items}
@@ -1628,8 +1396,6 @@ function showReceipt(tx) {
         ${parseFloat(tx.discount_amount) > 0 ? `<div class="receipt-row"><span>Diskon</span><span>- Rp ${fmt(tx.discount_amount)}</span></div>` : ''}
         ${tx.coupon_code && parseFloat(tx.coupon_discount||0) > 0 ? `<div class="receipt-row" style="color:var(--green)"><span>Kupon (${tx.coupon_code})</span><span>- Rp ${fmt(tx.coupon_discount)}</span></div>` : ''}
         ${parseFloat(tx.tax_amount) > 0 ? `<div class="receipt-row"><span>Pajak</span><span>Rp ${fmt(tx.tax_amount)}</span></div>` : ''}
-        ${parseFloat(tx.service_charge_amount||0) > 0 ? `<div class="receipt-row" style="color:#E65100"><span>Service Charge (${tx.service_charge_pct}%)</span><span>Rp ${fmt(tx.service_charge_amount)}</span></div>` : ''}
-        ${parseFloat(tx.pb1_amount||0) > 0 ? `<div class="receipt-row" style="color:#E65100"><span>PB1 (${tx.pb1_pct}%)</span><span>Rp ${fmt(tx.pb1_amount)}</span></div>` : ''}
         <hr class="receipt-divider">
         <div class="receipt-row receipt-total"><span>TOTAL</span><span>Rp ${fmt(tx.total)}</span></div>
         <div class="receipt-row"><span>Bayar (${tx.payment_method.toUpperCase()})</span><span>Rp ${fmt(tx.paid_amount)}</span></div>
@@ -1645,23 +1411,13 @@ function printReceipt() {
     window.open(`{{ url('pos/print') }}/${lastReceipt.id}`, '_blank', 'width=400,height=600');
 }
 
-function printKitchen() {
-    if (!lastReceipt) return;
-    const table = document.getElementById('tableNumber').value.trim();
-    const q = table ? `?table=${encodeURIComponent(table)}` : '';
-    window.open(`{{ url('pos/print-kitchen') }}/${lastReceipt.id}${q}`, '_blank', 'width=400,height=600');
-}
-
 function closeReceiptAndReset() {
     closeModal('receiptModal');
     clearCart();
-    setWalkin();
+    resetCustomer();
     document.getElementById('paidAmount').value = '';
     document.getElementById('discountAmt').value = '';
     document.getElementById('discountPct').value = '';
-    // Reset delivery platform
-    selectedDeliveryPlatform = null;
-    document.querySelectorAll('.platform-btn').forEach(b => b.classList.remove('active'));
 }
 
 // ============================================================
@@ -1693,7 +1449,7 @@ function toast(msg, type='ok') {
 }
 
 // Initial
-setWalkin();
+resetCustomer();
 renderCart();
 loadProducts();
 </script>

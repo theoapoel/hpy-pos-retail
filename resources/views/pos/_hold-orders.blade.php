@@ -2,10 +2,9 @@
      HOLD / RECALL ORDERS (client-side, localStorage)
      Shared across POS layouts (index / quick / express).
      Relies on shared globals defined in each layout's main
-     <script>: cart, selectedCustomer, selectedOrderType,
-     selectedDeliveryPlatform, appliedCoupon, walkinCustomerName,
-     and helpers renderCart(), recalculate(), renderCustomerBtn(),
-     selectOrderType(), selectDeliveryPlatform(), removeCoupon().
+     <script>: cart, selectedCustomer, appliedCoupon, and helpers
+     renderCart(), recalculate(), renderCustomerBtn(),
+     selectCustomer(), resetCustomer(), removeCoupon().
      ========================================================= --}}
 <style>
     .hold-btn-group { display:inline-flex; align-items:center; gap:6px; margin-left:8px; vertical-align:middle; }
@@ -18,7 +17,6 @@
     .hold-pill:hover { filter:brightness(.97); }
     .hold-pill.hold-do { border-color:var(--secondary,#f59e0b); color:var(--secondary,#f59e0b); background:transparent; }
     .hold-pill.hold-recall { border-color:var(--primary); color:#fff; background:var(--primary); }
-    .hold-pill.hold-kitchen { border-color:var(--secondary,#f59e0b); color:#fff; background:var(--secondary,#f59e0b); }
     .hold-pill .hold-count {
         background:#fff; color:var(--primary); border-radius:10px; padding:0 6px; font-size:11px; font-weight:900; line-height:18px;
     }
@@ -45,7 +43,6 @@
     .held-card-actions { display:flex; gap:6px; }
     .held-act { border:none; border-radius:9px; padding:8px 12px; font-size:12px; font-weight:800; cursor:pointer; font-family:'Nunito',sans-serif; }
     .held-act.recall { background:var(--primary); color:#fff; }
-    .held-act.kitchen { background:var(--secondary,#f59e0b); color:#fff; }
     .held-act.del { background:var(--red-light,#fee2e2); color:var(--red,#dc2626); }
     .held-tag { font-size:10px; font-weight:800; padding:2px 7px; border-radius:8px; background:var(--primary-light,#e0e7ff); color:var(--primary); }
 </style>
@@ -86,16 +83,12 @@
             notify('Keranjang masih kosong', 'warn');
             return;
         }
-        const tableEl = document.getElementById('tableNumber');
         const snapshot = {
             id: Date.now(),
             ts: new Date().toISOString(),
             cart: JSON.parse(JSON.stringify(cart)),
             customer: (typeof selectedCustomer !== 'undefined' && selectedCustomer)
                 ? JSON.parse(JSON.stringify(selectedCustomer)) : null,
-            orderType: (typeof selectedOrderType !== 'undefined') ? selectedOrderType : 'dine_in',
-            deliveryPlatform: (typeof selectedDeliveryPlatform !== 'undefined') ? selectedDeliveryPlatform : null,
-            tableNumber: tableEl ? tableEl.value.trim() : '',
             discountAmt: document.getElementById('discountAmt') ? document.getElementById('discountAmt').value : '',
             discountPct: document.getElementById('discountPct') ? document.getElementById('discountPct').value : '',
             coupon: (typeof appliedCoupon !== 'undefined') ? appliedCoupon : null,
@@ -107,7 +100,7 @@
 
         // Clear current order for a fresh start.
         if (typeof clearCart === 'function') clearCart();
-        if (typeof setWalkin === 'function') setWalkin();
+        if (typeof resetCustomer === 'function') resetCustomer();
 
         notify('Pesanan ditahan', 'ok');
     };
@@ -133,25 +126,9 @@
                 selectedCustomer = h.customer;
                 if (typeof renderCustomerBtn === 'function') renderCustomerBtn();
             }
-        } else {
-            if (typeof setWalkin === 'function') setWalkin();
-            else selectedCustomer = { id: null, name: (typeof walkinCustomerName !== 'undefined' ? walkinCustomerName : 'Walk-in') };
+        } else if (typeof resetCustomer === 'function') {
+            resetCustomer();
         }
-
-        // Order type (re-trigger the layout handler so UI + related bars update)
-        const otBtn = document.querySelector('.order-type-btn[data-type="' + (h.orderType || 'dine_in') + '"]');
-        if (otBtn && typeof selectOrderType === 'function') selectOrderType(otBtn);
-
-        // Delivery platform
-        selectedDeliveryPlatform = null;
-        if (h.deliveryPlatform) {
-            const pBtn = document.querySelector('.platform-btn[data-platform="' + h.deliveryPlatform + '"]');
-            if (pBtn && typeof selectDeliveryPlatform === 'function') selectDeliveryPlatform(pBtn);
-        }
-
-        // Table number
-        const tableEl = document.getElementById('tableNumber');
-        if (tableEl) tableEl.value = h.tableNumber || '';
 
         // Discounts
         if (document.getElementById('discountAmt')) document.getElementById('discountAmt').value = h.discountAmt || '';
@@ -177,67 +154,6 @@
     };
 
     // ---- Delete a held order -------------------------------------------
-    // ---- Cetak struk dapur untuk pesanan yang BELUM disubmit ------------
-    // Dikirim lewat form POST ke tab baru; server merender struk tanpa
-    // menyimpan transaksi apa pun.
-    window.printKitchenDraft = function (items, meta) {
-        const rows = (items || []).filter(i => Number(i.qty) > 0);
-        if (rows.length === 0) { notify('Tidak ada item untuk dicetak', 'warn'); return; }
-
-        const f = document.createElement('form');
-        f.method = 'POST';
-        f.action = '{{ route('pos.print-kitchen-draft') }}';
-        f.target = '_blank';
-        f.style.display = 'none';
-
-        const add = (name, value) => {
-            const el = document.createElement('input');
-            el.type = 'hidden';
-            el.name = name;
-            el.value = value ?? '';
-            f.appendChild(el);
-        };
-
-        add('_token', '{{ csrf_token() }}');
-        rows.forEach((it, i) => {
-            add(`items[${i}][id]`, it.id ?? '');
-            add(`items[${i}][name]`, it.name ?? '');
-            add(`items[${i}][qty]`, it.qty ?? 0);
-        });
-        add('table', (meta && meta.table) || '');
-        add('order_type', (meta && meta.orderType) || 'dine_in');
-        add('customer_name', (meta && meta.customerName) || '');
-
-        document.body.appendChild(f);
-        f.submit();
-        setTimeout(() => f.remove(), 1000);
-    };
-
-    // Cetak dapur untuk satu pesanan yang ditahan.
-    window.printHeldKitchen = function (id) {
-        const h = getHeld().find(x => x.id === id);
-        if (!h) { notify('Pesanan tidak ditemukan', 'warn'); return; }
-        printKitchenDraft(h.cart || [], {
-            table: h.tableNumber,
-            orderType: h.orderType,
-            customerName: h.customer ? h.customer.name : '',
-        });
-    };
-
-    // Cetak dapur untuk keranjang berjalan (belum ditahan, belum disubmit).
-    window.printCurrentKitchen = function () {
-        if (!Array.isArray(cart) || cart.length === 0) {
-            notify('Keranjang masih kosong', 'warn');
-            return;
-        }
-        const tableEl = document.getElementById('tableNumber');
-        printKitchenDraft(cart, {
-            table: tableEl ? tableEl.value.trim() : '',
-            orderType: (typeof selectedOrderType !== 'undefined') ? selectedOrderType : 'dine_in',
-            customerName: (typeof selectedCustomer !== 'undefined' && selectedCustomer) ? selectedCustomer.name : '',
-        });
-    };
-
     window.deleteHeldOrder = function (id) {
         if (!confirm('Hapus pesanan yang ditahan ini?')) return;
         setHeld(getHeld().filter(x => x.id !== id));
@@ -261,30 +177,22 @@
             box.innerHTML = '<div class="held-empty"><i class="fas fa-inbox" style="font-size:32px;display:block;margin-bottom:8px;opacity:.5"></i>Tidak ada pesanan yang ditahan</div>';
             return;
         }
-        const otLabel = { dine_in: 'Dine In', take_away: 'Take Away', delivery: 'Delivery' };
         box.innerHTML = list.map(h => {
             const items = h.cart || [];
             const qty = items.reduce((s, i) => s + i.qty, 0);
-            // Nama walk-in mengikuti setting POS (mis. "Hi Customer") agar
-            // sama persis dengan yang tampil di layar kasir.
-            const walkin = (typeof walkinCustomerName !== 'undefined' && walkinCustomerName)
-                ? walkinCustomerName : 'Walk-in';
-            const custName = (h.customer && h.customer.id) ? h.customer.name : walkin;
+            const custName = (h.customer && h.customer.id) ? h.customer.name : '—';
             const time = new Date(h.ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            const tableTxt = h.tableNumber ? (' • Meja ' + h.tableNumber) : '';
             return `
             <div class="held-card">
                 <div class="held-card-info">
                     <div class="held-card-title">
                         <i class="fas fa-user" style="font-size:11px;color:var(--text3)"></i> ${custName}
-                        <span class="held-tag">${otLabel[h.orderType] || h.orderType}</span>
                     </div>
-                    <div class="held-card-meta">${qty} item${tableTxt} • ${time}</div>
+                    <div class="held-card-meta">${qty} item • ${time}</div>
                     <div class="held-card-total">Rp ${rp(previewTotal(items))}</div>
                 </div>
                 <div class="held-card-actions">
                     <button class="held-act recall" onclick="recallHeldOrder(${h.id})"><i class="fas fa-play"></i> Panggil</button>
-                    <button class="held-act kitchen" onclick="printHeldKitchen(${h.id})" title="Cetak struk dapur"><i class="fas fa-utensils"></i> Dapur</button>
                     <button class="held-act del" onclick="deleteHeldOrder(${h.id})"><i class="fas fa-trash"></i></button>
                 </div>
             </div>`;
@@ -310,8 +218,6 @@
         group.innerHTML =
             '<button type="button" class="hold-pill hold-do" onclick="holdCurrentOrder()" title="Tahan pesanan ini">' +
                 '<i class="fas fa-pause"></i> Tahan</button>' +
-            '<button type="button" class="hold-pill hold-kitchen" onclick="printCurrentKitchen()" title="Cetak struk dapur (belum disubmit)">' +
-                '<i class="fas fa-utensils"></i> Dapur</button>' +
             '<button type="button" class="hold-pill hold-recall" id="heldRecallBtn" onclick="openHeldOrders()" style="display:none" title="Pesanan yang ditahan">' +
                 '<i class="fas fa-list"></i> Ditahan <span class="hold-count" id="heldCount">0</span></button>';
         anchor.insertAdjacentElement('afterend', group);

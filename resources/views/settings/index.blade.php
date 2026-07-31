@@ -237,59 +237,6 @@
                     @endforeach
                 </div>
 
-                {{-- Service Charge & PB1 --}}
-                <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:16px">
-                    <div style="font-weight:700;font-size:13px;color:var(--text2);margin-bottom:12px;display:flex;align-items:center;gap:6px">
-                        <i class="fas fa-receipt" style="color:var(--blue)"></i>
-                        Biaya Tambahan Dine In
-                        <span style="font-size:11px;font-weight:500;color:var(--text3)">(berlaku hanya untuk pesanan Dine In)</span>
-                    </div>
-
-                    {{-- Service Charge --}}
-                    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;margin-bottom:10px;border:1px solid var(--border)">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-                            <input type="checkbox" name="service_charge_enabled" value="1" id="scCheck"
-                                {{ ($settings['service_charge_enabled'] ?? '0') === '1' ? 'checked' : '' }}
-                                style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer"
-                                onchange="toggleChargeInput('scInput', this.checked)">
-                            <div>
-                                <div style="font-weight:700;font-size:13px">Service Charge</div>
-                                <div style="font-size:11px;color:var(--text3)">Biaya pelayanan ditambahkan ke tagihan Dine In</div>
-                            </div>
-                        </label>
-                        <div style="display:flex;align-items:center;gap:6px" id="scInput">
-                            <input type="number" name="service_charge_pct" id="scPct"
-                                value="{{ $settings['service_charge_pct'] ?? '0' }}"
-                                min="0" max="100" step="0.1"
-                                style="width:80px;padding:8px 10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-weight:800;text-align:right;font-family:'Roboto Mono',monospace;{{ ($settings['service_charge_enabled'] ?? '0') !== '1' ? 'opacity:.4;pointer-events:none' : '' }}"
-                                placeholder="10">
-                            <span style="font-weight:700;color:var(--text2);font-size:15px">%</span>
-                        </div>
-                    </div>
-
-                    {{-- PB1 --}}
-                    <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border)">
-                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-                            <input type="checkbox" name="pb1_enabled" value="1" id="pb1Check"
-                                {{ ($settings['pb1_enabled'] ?? '0') === '1' ? 'checked' : '' }}
-                                style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer"
-                                onchange="toggleChargeInput('pb1Input', this.checked)">
-                            <div>
-                                <div style="font-weight:700;font-size:13px">PB1 — Pajak Daerah</div>
-                                <div style="font-size:11px;color:var(--text3)">Pajak Bangunan 1 / Pajak Restoran daerah (dikenakan pada Dine In)</div>
-                            </div>
-                        </label>
-                        <div style="display:flex;align-items:center;gap:6px" id="pb1Input">
-                            <input type="number" name="pb1_pct" id="pb1Pct"
-                                value="{{ $settings['pb1_pct'] ?? '0' }}"
-                                min="0" max="100" step="0.1"
-                                style="width:80px;padding:8px 10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-weight:800;text-align:right;font-family:'Roboto Mono',monospace;{{ ($settings['pb1_enabled'] ?? '0') !== '1' ? 'opacity:.4;pointer-events:none' : '' }}"
-                                placeholder="10">
-                            <span style="font-weight:700;color:var(--text2);font-size:15px">%</span>
-                        </div>
-                    </div>
-                </div>
-
                 <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveSettings()">
                     <i class="fas fa-save"></i> Simpan Pengaturan
                 </button>
@@ -355,13 +302,6 @@
 
 @push('scripts')
 <script>
-function toggleChargeInput(wrapperId, enabled) {
-    const input = document.querySelector('#' + wrapperId + ' input[type="number"]');
-    if (!input) return;
-    input.style.opacity        = enabled ? '1' : '.4';
-    input.style.pointerEvents  = enabled ? '' : 'none';
-}
-
 // Radio button visual untuk tampilan produk
 function updateProdDisplayUI() {
     document.querySelectorAll('.prod-display-radio').forEach(radio => {
@@ -521,19 +461,9 @@ function updatePreview() {
     html += divider;
     html += `<div>Produk Contoh</div><div style="display:flex;justify-content:space-between;padding-left:8px;"><span>1 x Rp 50.000</span><span>Rp 50.000</span></div>`;
     html += divider;
-    const scEnabled  = document.getElementById('scCheck')?.checked;
-    const scPct      = parseFloat(document.getElementById('scPct')?.value || 0);
-    const pb1Enabled = document.getElementById('pb1Check')?.checked;
-    const pb1Pct     = parseFloat(document.getElementById('pb1Pct')?.value || 0);
-    const scAmt      = scEnabled  ? Math.round(50000 * scPct / 100)  : 0;
-    const pb1Amt     = pb1Enabled ? Math.round((50000 + scAmt) * pb1Pct / 100) : 0;
-    const grandTotal = 50000 + scAmt + pb1Amt;
-
     html += `<div style="display:flex;justify-content:space-between;"><span>Subtotal</span><span>Rp 50.000</span></div>`;
-    if (scEnabled && scAmt > 0) html += `<div style="display:flex;justify-content:space-between;"><span>Service Charge (${scPct}%)</span><span>Rp ${scAmt.toLocaleString('id-ID')}</span></div>`;
-    if (pb1Enabled && pb1Amt > 0) html += `<div style="display:flex;justify-content:space-between;"><span>PB1 (${pb1Pct}%)</span><span>Rp ${pb1Amt.toLocaleString('id-ID')}</span></div>`;
     html += divider;
-    html += `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;"><span>TOTAL</span><span>Rp ${grandTotal.toLocaleString('id-ID')}</span></div>`;
+    html += `<div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;"><span>TOTAL</span><span>Rp 50.000</span></div>`;
     html += `<div style="display:flex;justify-content:space-between;"><span>Bayar (CASH)</span><span>Rp 100.000</span></div>`;
     html += `<div style="display:flex;justify-content:space-between;"><span>Kembalian</span><span>Rp 50.000</span></div>`;
     html += divider;
@@ -575,12 +505,6 @@ async function saveSettings() {
     btn.disabled  = false;
 }
 
-// Wire charge inputs to preview
-['scCheck','pb1Check','scPct','pb1Pct'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('change', updatePreview);
-    if (el) el.addEventListener('input', updatePreview);
-});
 
 // Item Group filter chips → sync hidden CSV input + visual state + count
 function toggleItemGroup(key) {
