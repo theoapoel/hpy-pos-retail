@@ -168,13 +168,19 @@ class ErpSyncController extends Controller
                     'price'            => (float) ($item['standard_rate'] ?? 0),
                     'cost_price'       => (float) ($item['valuation_rate'] ?? 0),
                     'unit'             => $item['stock_uom'] ?? 'Nos',
-                    'barcode'          => $item['barcode'] ?? null,
                     'category_id'      => $category?->id,
                     'item_category_id' => $itemCategory?->id,
                     'erp_item_code'    => $item['name'],
                     'erp_last_sync'    => now(),
                     'is_active'        => !($item['disabled'] ?? false),
                 ];
+
+                // Barcode hanya ditulis kalau ERP memang punya. Kalau kosong, barcode
+                // yang diisi manual di POS dibiarkan — jangan ditimpa null tiap sync.
+                $erpBarcode = trim((string) ($item['barcode'] ?? ''));
+                if ($erpBarcode !== '') {
+                    $data['barcode'] = $erpBarcode;
+                }
 
                 // Download image only when ERPNext has one and the path has changed
                 if ($erpImage && $erpImage !== ($exists?->erp_image)) {

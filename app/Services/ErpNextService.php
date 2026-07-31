@@ -550,6 +550,17 @@ class ErpNextService
                 unset($item);
             }
 
+            // Barcode tidak ada di dokumen Item — tersimpan di child table `Item Barcode`
+            // (fieldname `barcodes`), jadi harus ditarik terpisah lalu ditempelkan.
+            if (count($items) > 0) {
+                $barcodeMap = $this->fetchItemBarcodesMap(array_column($items, 'name'));
+
+                foreach ($items as &$item) {
+                    $item['barcode'] = $barcodeMap[$item['name']] ?? null;
+                }
+                unset($item);
+            }
+
             return ['success' => true, 'data' => $items];
 
         } catch (\Exception $e) {
@@ -632,6 +643,56 @@ class ErpNextService
 
         } catch (\Exception $e) {
             Log::warning("Failed to fetch Item Prices from price list '{$priceList}': ".$e->getMessage());
+
+            return [];
+        }
+    }
+
+    // =========================================================
+    // FETCH BARCODES FROM `Item Barcode` CHILD TABLE
+    // =========================================================
+    /**
+     * Doctype Item tidak punya field `barcode`; barcode disimpan di child table
+     * `Item Barcode` (fieldname `barcodes`), dan satu item boleh punya beberapa
+     * baris. Frappe mewajibkan query param `parent=Item` untuk membaca child
+     * doctype lewat REST. Kolom lokal products.barcode hanya menampung satu
+     * nilai, jadi diambil baris pertama (urutan idx sesuai tampilan di ERP).
+     *
+     * @param  array<int,string>  $itemCodes
+     * @return array<string,string> item code => barcode
+     */
+    private function fetchItemBarcodesMap(array $itemCodes): array
+    {
+        try {
+            $response = $this->client->get('/api/resource/Item Barcode', [
+                'query' => [
+                    'parent' => 'Item',
+                    'fields' => json_encode(['parent', 'barcode', 'idx']),
+                    'filters' => json_encode([['parent', 'in', $itemCodes]]),
+                    // Satu item bisa punya banyak barcode, jadi jangan dibatasi
+                    // jumlah item — ambil semua baris lalu saring di bawah.
+                    'limit_page_length' => 0,
+                    'order_by' => 'idx asc',
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            $map = [];
+            foreach ($data['data'] ?? [] as $row) {
+                $code = $row['parent'] ?? '';
+                $barcode = trim((string) ($row['barcode'] ?? ''));
+
+                // Baris pertama menang; sisanya diabaikan.
+                if ($code !== '' && $barcode !== '' && ! isset($map[$code])) {
+                    $map[$code] = $barcode;
+                }
+            }
+
+            return $map;
+
+        } catch (\Exception $e) {
+            Log::warning('Failed to fetch Item Barcodes: '.$e->getMessage());
 
             return [];
         }
