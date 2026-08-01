@@ -749,12 +749,16 @@ function addFromDropdown(el) {
 let searchTimeout;
 // Cari ke server (bukan filter dari daftar terbatas), agar semua produk
 // ikut tercari — bukan hanya 50 pertama — dan urutan kata bebas.
+async function fetchProducts(term) {
+    const resp = await fetch('{{ route("pos.search-products") }}?q=' + encodeURIComponent(term),
+        { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
+    const results = await resp.json();
+    return Array.isArray(results) ? results : [];
+}
+
 async function remoteSearch(term) {
     try {
-        const resp = await fetch('{{ route("pos.search-products") }}?q=' + encodeURIComponent(term),
-            { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
-        const results = await resp.json();
-        openDropdown(Array.isArray(results) ? results : []);
+        openDropdown(await fetchProducts(term));
     } catch(e) { openDropdown([]); }
 }
 
@@ -763,6 +767,45 @@ searchInput.addEventListener('input', function () {
     if (!term) { closeDropdown(); return; }
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => remoteSearch(term), 200);
+});
+
+// Scanner barcode mengetik kode lalu menekan Enter. Tanpa handler ini
+// Enter tidak melakukan apa pun dan kasir harus mengklik hasil dropdown.
+searchInput.addEventListener('keydown', async function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+
+    const term = this.value.trim();
+    if (!term) return;
+
+    clearTimeout(searchTimeout);
+
+    let products;
+    try {
+        products = await fetchProducts(term);
+    } catch (err) {
+        toast('Gagal mencari produk: ' + err.message, 'err');
+        return;
+    }
+
+    // Barcode/SKU harus cocok persis; kalau tidak ada, satu-satunya hasil
+    // pencarian dianggap yang dimaksud. Selain itu buka dropdown saja
+    // supaya kasir memilih sendiri — jangan menebak.
+    const key   = term.toLowerCase();
+    const exact = products.find(p => (p.barcode || '').toLowerCase() === key)
+               || products.find(p => (p.sku || '').toLowerCase() === key)
+               || (products.length === 1 ? products[0] : null);
+
+    if (!exact) {
+        openDropdown(products);
+        toast(products.length === 0 ? 'Produk tidak ditemukan' : 'Pilih produk yang dimaksud', 'warn');
+        return;
+    }
+
+    addProductToCart(exact);
+    this.value = '';
+    closeDropdown();
+    this.focus();
 });
 
 searchInput.addEventListener('focus', function () {
@@ -786,23 +829,36 @@ document.addEventListener('keydown', e => {
 // CART
 // ============================================================
 function addToCart(el) {
-    const id = parseInt(el.dataset.id);
-    const track = el.dataset.track === '1';
-    const stock = parseInt(el.dataset.stock);
-    if (track && stock <= 0) toast('⚠ Stok habis! Penjualan tetap diproses.', 'warn');
+    addProductToCart({
+        id:            parseInt(el.dataset.id),
+        name:          el.dataset.name,
+        price:         parseFloat(el.dataset.price),
+        sku:           el.dataset.sku,
+        stock:         parseInt(el.dataset.stock),
+        unit:          el.dataset.unit,
+        tax_rate:      parseFloat(el.dataset.tax),
+        track_stock:   el.dataset.track === '1',
+        erp_item_code: el.dataset.erpCode || '',
+    });
+}
 
-    const existing = cart.find(i => i.id === id);
+// Dipakai pilihan dropdown maupun scan barcode, supaya keduanya
+// menambah item dengan aturan yang sama persis.
+function addProductToCart(p) {
+    if (p.track_stock && p.stock <= 0) toast('⚠ Stok habis! Penjualan tetap diproses.', 'warn');
+
+    const existing = cart.find(i => i.id === p.id);
     if (existing) {
         existing.qty++;
     } else {
-        const basePrice = parseFloat(el.dataset.price);
+        const basePrice = parseFloat(p.price);
         if (basePrice === 0) toast('⚠ Harga produk ini Rp 0, harap periksa kembali.', 'warn');
         cart.push({
-            id, name: el.dataset.name,
+            id: p.id, name: p.name,
             price: basePrice,
-            basePrice, erpItemCode: el.dataset.erpCode || '',
-            sku: el.dataset.sku, stock, unit: el.dataset.unit,
-            tax: parseFloat(el.dataset.tax), track,
+            basePrice, erpItemCode: p.erp_item_code || '',
+            sku: p.sku, stock: p.stock, unit: p.unit,
+            tax: parseFloat(p.tax_rate) || 0, track: !!p.track_stock,
             qty: 1, discount: 0, discountPct: 0, note: ''
         });
     }

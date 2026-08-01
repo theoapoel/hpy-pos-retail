@@ -819,19 +819,69 @@ function filterCategory(catId, btn) {
     loadProducts(catId);
 }
 
+async function fetchProducts(term) {
+    const url = '{{ route("pos.search-products") }}' + '?q=' + encodeURIComponent(term)
+        + (currentCategoryFilter ? '&category_id=' + currentCategoryFilter : '');
+    const resp = await fetch(url, { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
+    const products = await resp.json();
+    return Array.isArray(products) ? products : [];
+}
+
 let searchTimeout;
-document.getElementById('searchInput').addEventListener('input', function() {
+const searchInput = document.getElementById('searchInput');
+
+searchInput.addEventListener('input', function() {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(async () => {
-        const term = this.value.trim();
-        const url = '{{ route("pos.search-products") }}' + '?q=' + encodeURIComponent(term) + (currentCategoryFilter ? '&category_id=' + currentCategoryFilter : '');
         try {
-            const resp = await fetch(url, { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
-            const products = await resp.json();
-            allProducts = Array.isArray(products) ? products : [];
+            allProducts = await fetchProducts(this.value.trim());
             renderProducts(allProducts);
         } catch(e) { console.error(e); }
     }, 300);
+});
+
+// Scanner barcode mengetik kode lalu menekan Enter. Tanpa handler ini
+// Enter tidak melakukan apa pun dan kasir harus mengklik kartu produk.
+// Pencarian dijalankan langsung (debounce input dibatalkan) supaya scan
+// beruntun tidak saling mendahului.
+searchInput.addEventListener('keydown', async function (e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+
+    const term = this.value.trim();
+    if (!term) return;
+
+    clearTimeout(searchTimeout);
+
+    let products;
+    try {
+        products = await fetchProducts(term);
+    } catch (err) {
+        toast('Gagal mencari produk: ' + err.message, 'err');
+        return;
+    }
+
+    // Barcode/SKU harus cocok persis; kalau tidak ada, satu-satunya hasil
+    // pencarian dianggap yang dimaksud. Selain itu tampilkan hasilnya saja
+    // supaya kasir memilih sendiri — jangan menebak.
+    const key   = term.toLowerCase();
+    const exact = products.find(p => (p.barcode || '').toLowerCase() === key)
+               || products.find(p => (p.sku || '').toLowerCase() === key)
+               || (products.length === 1 ? products[0] : null);
+
+    if (!exact) {
+        allProducts = products;
+        renderProducts(allProducts);
+        toast(products.length === 0 ? 'Produk tidak ditemukan' : 'Pilih produk yang dimaksud', 'warn');
+        return;
+    }
+
+    addProductToCart(exact);
+    this.value = '';
+    this.focus();
+
+    // Kembalikan grid ke daftar penuh supaya siap untuk scan berikutnya.
+    loadProducts(currentCategoryFilter);
 });
 
 document.addEventListener('keydown', e => {
@@ -843,24 +893,37 @@ document.addEventListener('keydown', e => {
 // CART
 // ============================================================
 function addToCart(el) {
-    const id = parseInt(el.dataset.id);
-    const track = el.dataset.track === '1';
-    const stock = parseInt(el.dataset.stock);
-    if (track && stock <= 0) { toast('⚠ Stok habis! Penjualan tetap diproses.', 'warn'); }
-    const existing = cart.find(i => i.id === id);
+    addProductToCart({
+        id:            parseInt(el.dataset.id),
+        name:          el.dataset.name,
+        price:         parseFloat(el.dataset.price),
+        sku:           el.dataset.sku,
+        stock:         parseInt(el.dataset.stock),
+        unit:          el.dataset.unit,
+        tax_rate:      parseFloat(el.dataset.tax),
+        track_stock:   el.dataset.track === '1',
+        erp_item_code: el.dataset.erpCode || '',
+    });
+}
+
+// Dipakai klik kartu produk maupun scan barcode, supaya keduanya
+// menambah item dengan aturan yang sama persis.
+function addProductToCart(p) {
+    if (p.track_stock && p.stock <= 0) { toast('⚠ Stok habis! Penjualan tetap diproses.', 'warn'); }
+    const existing = cart.find(i => i.id === p.id);
     if (existing) {
         existing.qty++;
     } else {
-        const basePrice = parseFloat(el.dataset.price);
+        const basePrice = parseFloat(p.price);
         if (basePrice === 0) { toast('⚠ Harga produk ini Rp 0, harap periksa kembali.', 'warn'); }
         // Item baru diletakkan paling atas keranjang (memudahkan lihat hasil scan terbaru)
         cart.unshift({
-            id, name: el.dataset.name,
+            id: p.id, name: p.name,
             price: basePrice,
             basePrice,
-            erpItemCode: el.dataset.erpCode || '',
-            sku: el.dataset.sku, stock, unit: el.dataset.unit,
-            tax: parseFloat(el.dataset.tax), track,
+            erpItemCode: p.erp_item_code || '',
+            sku: p.sku, stock: p.stock, unit: p.unit,
+            tax: parseFloat(p.tax_rate) || 0, track: !!p.track_stock,
             qty: 1, discount: 0, discountPct: 0, note: ''
         });
     }
