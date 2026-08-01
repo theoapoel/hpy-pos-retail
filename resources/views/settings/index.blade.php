@@ -6,6 +6,8 @@
     .ig-chip { display:inline-flex; align-items:center; padding:6px 12px; border:2px solid var(--border); border-radius:20px; font-size:12px; font-weight:600; cursor:pointer; user-select:none; transition:all .15s; }
     .ig-chip:hover { border-color:var(--blue); }
     .ig-chip.on { background:var(--blue); border-color:var(--blue); color:#fff; }
+    .ig-bulk { border:none; background:none; padding:0; margin-left:2px; font-size:11px; font-weight:700; color:var(--blue); cursor:pointer; font-family:inherit; text-decoration:underline; }
+    .ig-bulk:hover { opacity:.75; }
 </style>
 <div class="page-header">
     <div>
@@ -203,7 +205,11 @@
                         <i class="fas fa-filter" style="color:var(--blue)"></i>
                         Filter Item Group
                     </div>
-                    <p style="font-size:11px;color:var(--text3);margin-bottom:12px">Pilih Item Group yang ditampilkan di tiap layar. Kosongkan = tampilkan semua.</p>
+                    <p style="font-size:11px;color:var(--text3);margin-bottom:12px">
+                        Pilih Item Group yang ditampilkan di tiap layar.
+                        <strong>Default: kosong = semua tampil</strong>, termasuk Item Group baru dari ERP.
+                        Centang hanya kalau ingin membatasi.
+                    </p>
 
                     @php
                         $igScreens = [
@@ -221,6 +227,10 @@
                             <div style="font-weight:700;font-size:12px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
                                 <i class="fas {{ $igMeta[1] }}" style="color:var(--text3)"></i> {{ $igMeta[0] }}
                                 <span style="font-size:11px;font-weight:500;color:var(--text3)" id="igcount_{{ $igKey }}"></span>
+                                @if(count($itemGroups))
+                                    <button type="button" class="ig-bulk" onclick="setAllItemGroups('{{ $igKey }}', true)">Pilih semua</button>
+                                    <button type="button" class="ig-bulk" onclick="setAllItemGroups('{{ $igKey }}', false)">Kosongkan</button>
+                                @endif
                             </div>
                             <div style="display:flex;flex-wrap:wrap;gap:6px">
                                 @forelse($itemGroups as $g)
@@ -516,7 +526,15 @@ function toggleItemGroup(key) {
         if (on) ids.push(chip.dataset.id);
     });
     document.getElementById('ig_' + key).value = ids.join(',');
-    document.getElementById('igcount_' + key).textContent = ids.length ? '(' + ids.length + ' dipilih)' : '(semua tampil)';
+    document.getElementById('igcount_' + key).textContent = ids.length
+        ? '(' + ids.length + ' dipilih)'
+        : '(semua tampil — default)';
+}
+
+// Centang/lepas semua chip sekaligus untuk satu layar.
+function setAllItemGroups(key, on) {
+    document.querySelectorAll('.ig-chip[data-key="' + key + '"] input').forEach(cb => cb.checked = on);
+    toggleItemGroup(key);
 }
 ['pos_item_groups', 'delivery_item_groups', 'stock_request_item_groups', 'slice_item_groups'].forEach(toggleItemGroup);
 
