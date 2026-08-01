@@ -568,6 +568,15 @@ async function syncSingle(id, btn) {
     else { btn.innerHTML = '<i class="fas fa-sync-alt"></i> Retry'; btn.disabled = false; }
 }
 
+// Kalau server melempar exception, Laravel membalas {message, exception, ...}
+// tanpa field `error` — tanpa fallback ini pesannya jadi "Gagal: undefined"
+// dan penyebab sebenarnya hilang.
+function errMessage(data, resp) {
+    return data?.error
+        || data?.message
+        || (resp && !resp.ok ? `HTTP ${resp.status} ${resp.statusText}` : 'Error tidak diketahui');
+}
+
 async function pullPaymentMethods() {
     const btn = document.getElementById('pullPaymentBtn');
     btn.innerHTML = '<span class="spinner"></span> Menarik...';
@@ -583,7 +592,7 @@ async function pullPaymentMethods() {
             const cust  = data.customer ? ` | Customer: ${data.customer}` : '';
             toast(`Payment methods disimpan: ${names}${cust}`, 'success');
         } else {
-            toast('Gagal: ' + (data.error || 'Error'), 'error');
+            toast('Gagal: ' + errMessage(data, resp), 'error');
         }
     } catch(e) {
         toast('Error: ' + e.message, 'error');
@@ -621,8 +630,9 @@ async function pullProducts() {
             if (reset) msg += `, ${data.deactivated} dinonaktifkan, ${data.categories_pruned} kategori dibersihkan`;
             toast(msg, 'success');
         } else {
-            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${data.error}`;
-            toast('Gagal pull produk: ' + (data.error||'Error'), 'error');
+            const msg = errMessage(data, resp);
+            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${msg}`;
+            toast('Gagal pull produk: ' + msg, 'error');
         }
     } catch(e) {
         resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Error: ${e.message}`;
@@ -654,8 +664,9 @@ async function pullUsers() {
                 <span style="color:var(--text3)">— total ${data.total} user dari POS Profile</span>`;
             toast(`${data.created} user baru, ${data.updated} diperbarui dari POS Profile`, 'success');
         } else {
-            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${data.error}`;
-            toast('Gagal pull user: ' + (data.error || 'Error'), 'error');
+            const msg = errMessage(data, resp);
+            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${msg}`;
+            toast('Gagal pull user: ' + msg, 'error');
         }
     } catch(e) {
         resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Error: ${e.message}`;

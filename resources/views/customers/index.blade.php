@@ -103,7 +103,10 @@ async function pushCustomer(id, btn) {
     btn.disabled = true;
     const resp = await fetch(`{{ url('sync/push-customer') }}/${id}`, {method:'POST',headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}});
     const data = await resp.json();
-    toast(data.success ? 'Berhasil push ke HPY: '+data.docname : 'Gagal: '+data.error, data.success?'success':'error');
+    // Exception di server dibalas {message,...} tanpa `error` — tanpa fallback
+    // ini pesannya jadi "Gagal: undefined".
+    const errMsg = data.error || data.message || `HTTP ${resp.status} ${resp.statusText}`;
+    toast(data.success ? 'Berhasil push ke HPY: '+data.docname : 'Gagal: '+errMsg, data.success?'success':'error');
     if (data.success) setTimeout(()=>location.reload(),1000);
     else { btn.innerHTML='<i class="fas fa-upload"></i> Push ERP'; btn.disabled=false; }
 }

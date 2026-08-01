@@ -230,10 +230,22 @@ class ErpSyncController extends Controller
         if ($reset) {
             // Produk lokal yang sudah punya erp_item_code tapi tidak lagi muncul di ERP saat ini —
             // dinonaktifkan (bukan dihapus, supaya riwayat transaksi/order lama tetap utuh).
-            $deactivated = Product::whereNotNull('erp_item_code')
-                ->whereNotIn('erp_item_code', $seenItemCodes)
+            //
+            // Jangan pakai whereNotIn($seenItemCodes): tiap item code jadi satu placeholder,
+            // dan dengan ribuan item ERP query-nya menembus batas 65535 placeholder MySQL
+            // (error 1390). Bandingkan di PHP, lalu update per potongan id.
+            $seen = array_flip($seenItemCodes);
+
+            $staleIds = Product::whereNotNull('erp_item_code')
                 ->where('is_active', true)
-                ->update(['is_active' => false]);
+                ->pluck('erp_item_code', 'id')
+                ->reject(fn ($code) => isset($seen[$code]))
+                ->keys()
+                ->all();
+
+            foreach (array_chunk($staleIds, 1000) as $chunk) {
+                $deactivated += Product::whereIn('id', $chunk)->update(['is_active' => false]);
+            }
 
             // Bersihkan kategori/item group lokal yang sudah tidak dipakai produk manapun
             $categoriesPruned = Category::doesntHave('products')->delete()
