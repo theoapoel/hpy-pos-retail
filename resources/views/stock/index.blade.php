@@ -376,10 +376,14 @@ async function syncFromBin() {
                 );
                 grandTotal += res.updated;
             } else {
+                // Exception di server dibalas Laravel sebagai {message, exception}
+                // tanpa field `error` — tanpa fallback ini yang tampil hanya
+                // "Gagal: undefined" dan penyebab aslinya hilang.
+                const errMsg = res.error || res.message || `HTTP ${resp.status} ${resp.statusText}`;
                 addLogRow(rowId, 'error',
                     '<i class="fas fa-times-circle" style="color:var(--red)"></i>',
                     wh.label,
-                    'Gagal: ' + res.error
+                    'Gagal: ' + errMsg
                 );
                 hasError = true;
             }

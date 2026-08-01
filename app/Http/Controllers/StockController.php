@@ -125,6 +125,9 @@ class StockController extends Controller
 
     public function syncWarehouse(Warehouse $warehouse)
     {
+        // Puluhan ribu bin per gudang — jangan dipotong batas 120 detik PHP.
+        set_time_limit(0);
+
         // Pastikan tabel ada
         if (!Schema::hasTable('product_stocks')) {
             return response()->json([
@@ -166,6 +169,13 @@ class StockController extends Controller
         $writeError  = null;
         $updatedIds  = [];
 
+        // Kumpulkan dulu, tulis belakangan secara borongan. updateOrCreate per bin
+        // berarti satu SELECT + satu INSERT/UPDATE untuk tiap item — dengan puluhan
+        // ribu bin, request-nya habis waktu sebelum selesai.
+        $now      = now();
+        $rows     = [];
+        $idsByQty = [];
+
         foreach ($bins as $bin) {
             // Cocokkan bin.item_code dengan products.erp_item_code
             $product = $products->get($bin['item_code']);
@@ -177,24 +187,37 @@ class StockController extends Controller
 
             $qty = (int) round($bin['actual_qty']);
 
-            try {
-                // Update stok per warehouse di tabel product_stocks
-                ProductStock::updateOrCreate(
-                    ['product_id' => $product->id, 'warehouse_id' => $warehouse->id],
-                    ['quantity'   => $qty]
-                );
+            $rows[] = [
+                'product_id'   => $product->id,
+                'warehouse_id' => $warehouse->id,
+                'quantity'     => $qty,
+                'created_at'   => $now,
+                'updated_at'   => $now,
+            ];
 
-                // Sinkronkan juga products.stock untuk warehouse default
-                if ($warehouse->is_default) {
-                    $product->update(['stock' => $qty]);
-                }
-
-                $updatedIds[] = $product->id;
-                $updated++;
-            } catch (\Exception $e) {
-                $writeError = $e->getMessage();
-                break;
+            // products.stock hanya mengikuti warehouse default. Dikelompokkan per
+            // qty supaya bisa diupdate borongan, bukan satu query per produk.
+            if ($warehouse->is_default) {
+                $idsByQty[$qty][] = $product->id;
             }
+
+            $updatedIds[] = $product->id;
+            $updated++;
+        }
+
+        try {
+            // 500 baris x 5 kolom = 2.500 placeholder, aman di bawah batas 65.535 MySQL.
+            foreach (array_chunk($rows, 500) as $chunk) {
+                ProductStock::upsert($chunk, ['product_id', 'warehouse_id'], ['quantity', 'updated_at']);
+            }
+
+            foreach ($idsByQty as $qty => $ids) {
+                foreach (array_chunk($ids, 1000) as $chunk) {
+                    Product::whereIn('id', $chunk)->update(['stock' => $qty]);
+                }
+            }
+        } catch (\Throwable $e) {
+            $writeError = $e->getMessage();
         }
 
         if ($writeError) {
@@ -206,10 +229,21 @@ class StockController extends Controller
             ]);
         }
 
-        // Hapus baris stok lama yang tidak ada di ERP (sudah tidak relevan)
-        $removed = ProductStock::where('warehouse_id', $warehouse->id)
-            ->whereNotIn('product_id', $updatedIds)
-            ->delete();
+        // Hapus baris stok lama yang tidak ada di ERP (sudah tidak relevan).
+        // whereNotIn($updatedIds) tidak dipakai: tiap id jadi satu placeholder dan
+        // dengan puluhan ribu produk query-nya menembus batas 65.535 milik MySQL
+        // (error 1390). Bandingkan di PHP, lalu hapus per potongan.
+        $keep     = array_flip($updatedIds);
+        $staleIds = ProductStock::where('warehouse_id', $warehouse->id)
+            ->pluck('product_id', 'id')
+            ->reject(fn ($productId) => isset($keep[$productId]))
+            ->keys()
+            ->all();
+
+        $removed = 0;
+        foreach (array_chunk($staleIds, 1000) as $chunk) {
+            $removed += ProductStock::whereIn('id', $chunk)->delete();
+        }
 
         // Verifikasi: hitung baris yang tersimpan
         $savedRows = ProductStock::where('warehouse_id', $warehouse->id)->count();
@@ -229,6 +263,8 @@ class StockController extends Controller
 
     public function syncFromBin()
     {
+        set_time_limit(0);
+
         $activeWarehouses = Warehouse::where('is_active', true)->get();
 
         if ($activeWarehouses->isEmpty()) {
