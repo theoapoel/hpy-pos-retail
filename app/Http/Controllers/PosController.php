@@ -285,6 +285,10 @@ class PosController extends Controller
             'customer_id' => 'required|exists:customers,id',
             'payment_method' => 'required|string',
             'paid_amount' => 'required|numeric|min:0',
+            // Pembayaran campuran: {Mode of Payment => nominal}. Dipakai ErpNextService
+            // untuk menulis satu baris `payments` per metode di POS Invoice.
+            'payment_details' => 'nullable|array',
+            'payment_details.*' => 'numeric|min:0',
             'loyalty_points' => 'nullable|numeric|min:0',
         ], [
             'customer_id.required' => 'Customer wajib diisi.',

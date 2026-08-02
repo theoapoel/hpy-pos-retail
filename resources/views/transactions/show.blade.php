@@ -39,7 +39,12 @@
             <div class="card-body">
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px"><span class="text-muted">Kasir</span><span>{{ $transaction->user->name }}</span></div>
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px"><span class="text-muted">Customer</span><span>{{ $transaction->customer?->name ?? 'Walk-in' }}</span></div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px"><span class="text-muted">Pembayaran</span><span class="badge badge-blue">{{ strtoupper($transaction->payment_method) }}</span></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px"><span class="text-muted">Pembayaran</span><span class="badge badge-blue">{{ $transaction->payment_method === 'mixed' ? 'CAMPURAN' : strtoupper($transaction->payment_method) }}</span></div>
+                @if($transaction->payment_method === 'mixed' && $transaction->payment_details)
+                    @foreach($transaction->payment_details as $method => $amount)
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;padding-left:12px"><span class="text-muted">↳ {{ $method }}</span><span>Rp {{ number_format($amount, 0, ',', '.') }}</span></div>
+                    @endforeach
+                @endif
                 @if($transaction->pos_class)
                 <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px"><span class="text-muted">POS Class</span><span class="badge badge-gray">{{ $transaction->pos_class }}</span></div>
                 @endif

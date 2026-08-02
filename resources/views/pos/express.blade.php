@@ -287,6 +287,47 @@
         .pay-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
         .pay-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; }
         .pay-icon { font-size: 16px; display: block; margin-bottom: 2px; }
+        /* --- Pembayaran campuran (split payment) --- */
+        .pay-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .split-toggle {
+            display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px;
+            border: 2px solid var(--border); border-radius: 14px; background: var(--surface2);
+            font-family: 'Roboto', sans-serif; font-size: 10.5px; font-weight: 800;
+            color: var(--text2); cursor: pointer; transition: all .15s; white-space: nowrap;
+        }
+        .split-toggle:hover { border-color: var(--primary); color: var(--primary); }
+        .split-toggle.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .pay-btn.picked { border-color: var(--primary); background: var(--primary-light); color: var(--primary); position: relative; }
+        .pay-btn.picked::after {
+            content: '✓'; position: absolute; top: 2px; right: 4px;
+            font-size: 10px; font-weight: 900; color: var(--primary);
+        }
+        .split-panel {
+            border: 2px dashed var(--border); border-radius: 12px;
+            padding: 10px; background: var(--surface2);
+        }
+        .split-empty { font-size: 11.5px; color: var(--text3); text-align: center; padding: 6px 2px; font-weight: 700; }
+        .split-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .split-row .nm {
+            flex: 1; min-width: 0; font-size: 11.5px; font-weight: 800; color: var(--text2);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .split-amt {
+            width: 112px; flex-shrink: 0; padding: 7px 9px; border: 2px solid var(--border);
+            border-radius: 8px; background: var(--surface); color: var(--text);
+            font-family: 'Roboto Mono', monospace; font-size: 13px; font-weight: 800; text-align: right;
+        }
+        .split-amt:focus { border-color: var(--primary); outline: none; }
+        .split-mini {
+            flex-shrink: 0; width: 26px; height: 30px; border-radius: 8px; cursor: pointer;
+            border: 2px solid var(--border); background: var(--surface);
+            font-size: 11px; font-weight: 900; color: var(--text3); line-height: 1;
+        }
+        .split-mini:hover { border-color: var(--red); color: var(--red); }
+        .split-bar { height: 6px; border-radius: 4px; background: var(--border); overflow: hidden; margin: 9px 0 6px; }
+        .split-bar > i { display: block; height: 100%; width: 0; background: var(--green); transition: width .25s; }
+        .split-foot { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 800; color: var(--text3); }
+        .split-foot b { font-family: 'Roboto Mono', monospace; font-size: 14px; font-weight: 900; }
         .paid-input {
             width: 100%; padding: 10px 14px; border: 2px solid var(--primary);
             border-radius: 10px; font-size: 20px; font-weight: 800;
@@ -525,7 +566,12 @@
 
         <!-- Payment Method -->
         <div class="sec">
-            <div class="sec-label">Metode Bayar</div>
+            <div class="sec-label pay-head">
+                <span id="payHeadLabel">Metode Bayar</span>
+                <button type="button" class="split-toggle" id="splitToggle" onclick="toggleSplitMode()">
+                    <i class="fas fa-layer-group"></i> Bayar Campuran
+                </button>
+            </div>
             <div class="payment-methods">
                 @if(!empty($posPaymentMethods))
                     @foreach($posPaymentMethods as $i => $pm)
@@ -543,6 +589,19 @@
                     <button class="pay-btn" data-method="transfer" data-cash-type="0" onclick="selectPayment(this)"><span class="pay-icon">🏦</span>Transfer</button>
                     <button class="pay-btn" data-method="qris" data-cash-type="0" onclick="selectPayment(this)"><span class="pay-icon">📱</span>QRIS</button>
                 @endif
+            </div>
+        </div>
+
+        <!-- Rincian pembayaran campuran — hanya tampil saat mode campuran aktif -->
+        <div class="sec" id="splitSection" style="display:none">
+            <div class="sec-label">Rincian Pembayaran</div>
+            <div class="split-panel">
+                <div id="splitRows"></div>
+                <div class="split-bar"><i id="splitBarFill"></i></div>
+                <div class="split-foot">
+                    <span id="splitPaidLabel">Terbayar Rp 0</span>
+                    <span id="splitRemainLabel" style="color:var(--red)">Sisa <b>Rp 0</b></span>
+                </div>
             </div>
         </div>
 
@@ -1277,6 +1336,7 @@ function recalculate() {
             `<button class="quick-amt-btn" onclick="setPaid(${a})">Rp ${fmt(a)}</button>`
         ).join('');
     }
+    updateSplitSummary();
     calcChange();
 }
 
@@ -1299,6 +1359,8 @@ function setPaid(amount) {
 }
 
 function selectPayment(btn) {
+    // Di mode campuran tombol metode berfungsi sebagai pilih/batal, bukan radio.
+    if (splitMode) { toggleSplitMethod(btn); return; }
     document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedPayment = btn.dataset.method;
@@ -1306,6 +1368,113 @@ function selectPayment(btn) {
     document.getElementById('cashSection').style.display = selectedPaymentIsCash ? 'block' : 'none';
 }
 
+// ============================================================
+// PEMBAYARAN CAMPURAN (SPLIT PAYMENT)
+// ============================================================
+// Setiap baris = satu Mode of Payment ERP beserta nominalnya. Total baris wajib
+// pas dengan yang harus dibayar: di ERP invoice campuran dikirim tanpa kembalian
+// (lihat ErpNextService::syncTransaction cabang 'mixed'), jadi kelebihan bayar
+// tidak boleh lolos dari kasir.
+let splitMode  = false;
+let splitLines = []; // [{ method, isCash, icon, amount }]
+
+function payButtons() { return [...document.querySelectorAll('.pay-btn')]; }
+
+function toggleSplitMode() {
+    splitMode = !splitMode;
+    document.getElementById('splitToggle').classList.toggle('on', splitMode);
+    document.getElementById('payHeadLabel').textContent = splitMode
+        ? 'Pilih Metode (bisa lebih dari 1)' : 'Metode Bayar';
+    document.getElementById('splitSection').style.display = splitMode ? '' : 'none';
+
+    if (splitMode) {
+        document.getElementById('cashSection').style.display = 'none';
+        payButtons().forEach(b => b.classList.remove('active'));
+        splitLines = [];
+        renderSplit();
+    } else {
+        splitLines = [];
+        payButtons().forEach(b => b.classList.remove('picked'));
+        // Kembali ke metode tunggal: pakai tombol pertama sebagai default.
+        const first = payButtons()[0];
+        if (first) selectPayment(first);
+    }
+}
+
+function toggleSplitMethod(btn) {
+    const method = btn.dataset.method;
+    const idx = splitLines.findIndex(l => l.method === method);
+    if (idx >= 0) {
+        splitLines.splice(idx, 1);
+        btn.classList.remove('picked');
+    } else {
+        const icon = btn.querySelector('.pay-icon')?.textContent || '💳';
+        // Baris baru langsung diisi sisa tagihan supaya kasir tinggal menyesuaikan.
+        splitLines.push({ method, isCash: btn.dataset.cashType === '1', icon, amount: splitRemaining() });
+        btn.classList.add('picked');
+    }
+    renderSplit();
+}
+
+function splitPaid()      { return splitLines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0); }
+function splitRemaining() { return Math.max(0, Math.round(amountDue - splitPaid())); }
+
+function renderSplit() {
+    const box = document.getElementById('splitRows');
+    if (!splitLines.length) {
+        box.innerHTML = '<div class="split-empty">Pilih dua metode atau lebih di atas ↑</div>';
+    } else {
+        box.innerHTML = splitLines.map((l, i) => `
+            <div class="split-row">
+                <span class="pay-icon" style="margin:0">${l.icon}</span>
+                <span class="nm" title="${l.method}">${l.method}</span>
+                <input type="number" class="split-amt" min="0" value="${l.amount || ''}"
+                    placeholder="0" oninput="setSplitAmount(${i}, this.value)">
+                <button type="button" class="split-mini" title="Hapus metode"
+                    onclick="removeSplitLine(${i})">&times;</button>
+            </div>
+        `).join('');
+    }
+    updateSplitSummary();
+}
+
+function setSplitAmount(i, val) {
+    if (!splitLines[i]) return;
+    splitLines[i].amount = parseFloat(val) || 0;
+    updateSplitSummary();
+}
+
+function removeSplitLine(i) {
+    const line = splitLines[i];
+    if (!line) return;
+    splitLines.splice(i, 1);
+    payButtons().find(b => b.dataset.method === line.method)?.classList.remove('picked');
+    renderSplit();
+}
+
+function updateSplitSummary() {
+    if (!splitMode) return;
+    const paid   = splitPaid();
+    const remain = Math.round(amountDue - paid);
+    const pct    = amountDue > 0 ? Math.min(100, (paid / amountDue) * 100) : 0;
+    const fill   = document.getElementById('splitBarFill');
+
+    fill.style.width = pct + '%';
+    fill.style.background = remain < 0 ? 'var(--red)' : 'var(--green)';
+    document.getElementById('splitPaidLabel').textContent = 'Terbayar Rp ' + fmt(paid);
+
+    const label = document.getElementById('splitRemainLabel');
+    if (remain > 0) {
+        label.style.color = 'var(--red)';
+        label.innerHTML = 'Sisa <b>Rp ' + fmt(remain) + '</b>';
+    } else if (remain < 0) {
+        label.style.color = 'var(--red)';
+        label.innerHTML = 'Lebih <b>Rp ' + fmt(-remain) + '</b>';
+    } else {
+        label.style.color = 'var(--green)';
+        label.innerHTML = '<b>✓ Pas</b>';
+    }
+}
 // ============================================================
 // CUSTOMER
 // ============================================================
@@ -1402,8 +1571,27 @@ async function processCheckout() {
     const total = parseFloat(totalText.replace(/[^0-9]/g,''));
     const loyalty = currentLoyaltyRedemption(total);
     const due   = Math.max(0, total - loyalty.amount);
-    const paid  = selectedPaymentIsCash ? parseFloat(document.getElementById('paidAmount').value) || 0 : due;
-    if (selectedPaymentIsCash && paid < due) { toast('Nominal bayar kurang!', 'err'); return; }
+    let paid, paymentMethod = selectedPayment, paymentDetails = null;
+
+    if (splitMode) {
+        const lines = splitLines.filter(l => (parseFloat(l.amount) || 0) > 0);
+        if (lines.length < 2) { toast('Pembayaran campuran butuh minimal 2 metode dengan nominal.', 'err'); return; }
+        const sum = lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0);
+        if (Math.round(sum) !== Math.round(due)) {
+            const selisih = Math.round(due - sum);
+            toast(selisih > 0 ? 'Kurang Rp ' + fmt(selisih) + ' — nominal harus pas.'
+                              : 'Lebih Rp ' + fmt(-selisih) + ' — nominal harus pas.', 'err');
+            return;
+        }
+        paid = sum;
+        paymentMethod = 'mixed';
+        // {Mode of Payment: nominal} — dibaca ErpNextService & struk untuk rincian.
+        paymentDetails = {};
+        lines.forEach(l => { paymentDetails[l.method] = (paymentDetails[l.method] || 0) + (parseFloat(l.amount) || 0); });
+    } else {
+        paid = selectedPaymentIsCash ? parseFloat(document.getElementById('paidAmount').value) || 0 : due;
+        if (selectedPaymentIsCash && paid < due) { toast('Nominal bayar kurang!', 'err'); return; }
+    }
 
     const btn = document.getElementById('checkoutBtn');
     btn.disabled = true;
@@ -1415,7 +1603,8 @@ async function processCheckout() {
     const payload = {
         items: cart.map(i => ({ product_id: i.id, quantity: i.qty, price: i.price, discount_amount: i.discount, note: i.note || '' })),
         customer_id: selectedCustomer.id,
-        payment_method: selectedPayment,
+        payment_method: paymentMethod,
+        payment_details: paymentDetails,
         paid_amount: paid,
         discount_amount: discAmt,
         discount_percent: discPct,
@@ -1484,8 +1673,11 @@ function showReceipt(tx) {
         <hr class="receipt-divider">
         <div class="receipt-row receipt-total"><span>TOTAL</span><span>Rp ${fmt(tx.total)}</span></div>
         ${loyaltyAmt > 0 ? `<div class="receipt-row"><span>Poin ditukar (${fmt(tx.loyalty_points_redeemed)})</span><span>− Rp ${fmt(loyaltyAmt)}</span></div>` : ''}
-        <div class="receipt-row"><span>Bayar (${tx.payment_method.toUpperCase()})</span><span>Rp ${fmt(tx.paid_amount)}</span></div>
-        ${selectedPaymentIsCash && change > 0 ? `<div class="receipt-row"><span>Kembalian</span><span>Rp ${fmt(change)}</span></div>` : ''}
+        ${tx.payment_method === 'mixed' && tx.payment_details
+            ? Object.entries(tx.payment_details).map(([m, a]) =>
+                `<div class="receipt-row"><span>Bayar (${m})</span><span>Rp ${fmt(a)}</span></div>`).join('')
+            : `<div class="receipt-row"><span>Bayar (${tx.payment_method.toUpperCase()})</span><span>Rp ${fmt(tx.paid_amount)}</span></div>`}
+        ${!splitMode && selectedPaymentIsCash && change > 0 ? `<div class="receipt-row"><span>Kembalian</span><span>Rp ${fmt(change)}</span></div>` : ''}
         <hr class="receipt-divider">
         <div style="text-align:center;font-size:11px;margin-top:8px">{{ $storeSettings['receipt_footer'] }}</div>
     `;
@@ -1504,6 +1696,7 @@ function closeReceiptAndReset() {
     document.getElementById('paidAmount').value = '';
     document.getElementById('discountAmt').value = '';
     document.getElementById('discountPct').value = '';
+    if (splitMode) toggleSplitMode(); // kembali ke metode tunggal untuk transaksi berikutnya
 }
 
 // ============================================================

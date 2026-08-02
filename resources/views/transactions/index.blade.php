@@ -86,9 +86,12 @@
                 </td>
                 <td class="money font-bold">Rp {{ number_format($tx->total,0,',','.') }}</td>
                 <td>
-                    @php $payBadge=['cash'=>'badge-green','card'=>'badge-blue','transfer'=>'badge-yellow','qris'=>'badge-blue']; @endphp
-                    <span class="badge {{ $payBadge[$tx->payment_method]??'badge-gray' }}">
-                        {{ strtoupper($tx->payment_method) }}
+                    @php $payBadge=['cash'=>'badge-green','card'=>'badge-blue','transfer'=>'badge-yellow','qris'=>'badge-blue','mixed'=>'badge-blue']; @endphp
+                    <span class="badge {{ $payBadge[$tx->payment_method]??'badge-gray' }}"
+                        @if($tx->payment_method==='mixed' && $tx->payment_details)
+                            title="{{ collect($tx->payment_details)->map(fn($a,$m)=>$m.': '.number_format($a,0,',','.'))->implode(' + ') }}"
+                        @endif>
+                        {{ $tx->payment_method==='mixed' ? 'CAMPURAN' : strtoupper($tx->payment_method) }}
                     </span>
                 </td>
                 <td>
