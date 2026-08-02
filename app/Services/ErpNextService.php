@@ -2607,6 +2607,50 @@ class ErpNextService
     }
 
     /**
+     * Detail POS Opening Entry berstatus Open milik kasir, termasuk waktu buka
+     * dan modal kas yang tercatat di ERP.
+     *
+     * Dipakai saat POS tidak punya catatan shift lokal (instalasi baru, ganti
+     * perangkat, database lokal direset) padahal ERP masih menyimpan shift yang
+     * terbuka. Tanpa ini kasir diminta buka kasir lagi, dan modal kas yang
+     * diketiknya akan berbeda dari yang ada di ERP sehingga rekonsiliasi meleset.
+     *
+     * @return array{name:string, period_start_date:?string, opening_cash:float}|null
+     */
+    public function getOpenPosOpeningEntry(string $userEmail): ?array
+    {
+        $name = $this->findOpenPosOpeningEntry($userEmail);
+        if (! $name) {
+            return null;
+        }
+
+        try {
+            $resp = $this->client->get('/api/resource/POS Opening Entry/'.rawurlencode($name));
+            $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? [];
+        } catch (\Throwable $e) {
+            Log::warning("getOpenPosOpeningEntry gagal mengambil {$name}: ".$e->getMessage());
+
+            return null;
+        }
+
+        // balance_details bisa memuat beberapa mode; yang dihitung sebagai modal
+        // kas hanya mode bertipe Cash, sama seperti saat shift ditutup.
+        $cashModes = $this->getCashModeNames();
+        $openingCash = 0.0;
+        foreach ($doc['balance_details'] ?? [] as $row) {
+            if (in_array($row['mode_of_payment'] ?? '', $cashModes, true)) {
+                $openingCash += (float) ($row['opening_amount'] ?? 0);
+            }
+        }
+
+        return [
+            'name' => $name,
+            'period_start_date' => $doc['period_start_date'] ?? null,
+            'opening_cash' => $openingCash,
+        ];
+    }
+
+    /**
      * Buat + submit POS Opening Entry untuk kasir.
      * $periodStart (Y-m-d H:i:s) dipakai saat menyusulkan shift yang dibuka offline,
      * supaya waktu buka di ERP sama dengan waktu buka sebenarnya.

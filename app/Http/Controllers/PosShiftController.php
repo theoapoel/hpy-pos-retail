@@ -31,6 +31,9 @@ class PosShiftController extends Controller
             $this->backfillOpeningEntry($shift);
             $shift->refresh();
         }
+        if (! $shift) {
+            $shift = $this->adoptOpenErpShift($user);
+        }
 
         $shifts = null;
         $cashiers = collect();
@@ -102,6 +105,12 @@ class PosShiftController extends Controller
             $this->backfillOpeningEntry($shift);
         }
 
+        // Tidak ada catatan lokal, tapi ERP masih menyimpan shift terbuka milik
+        // kasir ini → pungut shift itu daripada menyuruh buka kasir lagi.
+        if (! $shift) {
+            $shift = $this->adoptOpenErpShift(auth()->user());
+        }
+
         return response()->json([
             'has_open_shift' => (bool) $shift,
             'shift' => $shift ? [
@@ -140,17 +149,30 @@ class PosShiftController extends Controller
 
         $erp = new ErpNextService;
         $openingCash = (float) $request->opening_cash;
+        $openedAt = now();
         $openingName = null;
         $offlineError = null;
+        $adopted = false;
 
         // Cek koneksi sekali di depan (±3 detik) supaya saat internet mati kasir
         // tidak menunggu tiap panggilan ERP timeout satu per satu.
         if (! $erp->quickPing()) {
             $offlineError = 'ERP HPY tidak dapat dijangkau (internet mati).';
         } else {
-            // Bila kasir masih punya opening entry Open di ERP (mis. sisa dari sesi lain), pakai itu.
-            $openingName = $erp->findOpenPosOpeningEntry($user->email);
-            if (! $openingName) {
+            // Bila kasir masih punya opening entry Open di ERP (mis. sisa dari sesi
+            // lain), pakai itu — berikut waktu buka dan modal kas versi ERP. Angka
+            // yang diketik kasir diabaikan: ERP tidak bisa diubah lagi setelah
+            // submit, jadi menyimpan angka berbeda secara lokal hanya membuat
+            // rekonsiliasi tutup kasir meleset.
+            $existing = $erp->getOpenPosOpeningEntry($user->email);
+            if ($existing) {
+                $openingName = $existing['name'];
+                $openingCash = $existing['opening_cash'];
+                $adopted = true;
+                if ($existing['period_start_date']) {
+                    $openedAt = Carbon::parse($existing['period_start_date'], $this->tz());
+                }
+            } else {
                 $result = $erp->createPosOpeningEntry($user->email, $openingCash);
                 if ($result['success']) {
                     $openingName = $result['docname'];
@@ -166,21 +188,67 @@ class PosShiftController extends Controller
             'user_id' => $user->id,
             'pos_profile' => Setting::get('erpnext_pos_profile', ''),
             'status' => 'open',
-            'opened_at' => now(),
+            'opened_at' => $openedAt,
             'opening_cash' => $openingCash,
             'erp_opening_entry' => $openingName,
             'erp_sync_status' => $openingName ? 'synced' : 'pending',
             'erp_sync_error' => $offlineError,
         ]);
 
+        $message = 'Kasir dibuka.';
+        if ($adopted) {
+            $message = 'Melanjutkan shift yang masih terbuka di ERP HPY ('.$openingName.') sejak '
+                .$openedAt->isoFormat('D MMM HH:mm').'. Modal kas mengikuti ERP: Rp '
+                .number_format($openingCash, 0, ',', '.').'.';
+        } elseif (! $openingName) {
+            $message = 'Kasir dibuka OFFLINE — buka kasir di ERP HPY akan disusulkan otomatis saat internet kembali.';
+        }
+
         return response()->json([
             'success' => true,
             'shift_id' => $shift->id,
             'erp_opening_entry' => $openingName,
             'offline' => ! $openingName,
-            'message' => $openingName
-                ? 'Kasir dibuka.'
-                : 'Kasir dibuka OFFLINE — buka kasir di ERP HPY akan disusulkan otomatis saat internet kembali.',
+            'adopted' => $adopted,
+            'message' => $message,
+        ]);
+    }
+
+    /**
+     * Pungut POS Opening Entry yang masih Open di ERP menjadi shift lokal.
+     *
+     * Waktu buka dan modal kas diambil dari ERP, bukan dari input kasir, supaya
+     * rekonisiliasi saat tutup kasir memakai angka dan rentang tanggal yang sama
+     * dengan yang tercatat di ERP.
+     */
+    private function adoptOpenErpShift(User $user): ?PosShift
+    {
+        if (! $user->email) {
+            return null;
+        }
+
+        $erp = new ErpNextService;
+        if (! $erp->isConfigured() || ! $erp->isReachable()) {
+            return null;
+        }
+
+        $entry = $erp->getOpenPosOpeningEntry($user->email);
+        if (! $entry) {
+            return null;
+        }
+
+        $openedAt = $entry['period_start_date']
+            ? Carbon::parse($entry['period_start_date'], $this->tz())
+            : now();
+
+        return PosShift::create([
+            'user_id' => $user->id,
+            'pos_profile' => Setting::get('erpnext_pos_profile', ''),
+            'status' => 'open',
+            'opened_at' => $openedAt,
+            'opening_cash' => $entry['opening_cash'],
+            'erp_opening_entry' => $entry['name'],
+            'erp_sync_status' => 'synced',
         ]);
     }
 
