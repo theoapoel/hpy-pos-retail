@@ -783,7 +783,10 @@
 // STATE
 // ============================================================
 let cart = [];
-let selectedCustomer = null;
+// Customer bawaan dari field "Walk-in Customer" di menu Sync HPY; null kalau
+// settingnya kosong atau customernya belum ada di data lokal.
+const DEFAULT_CUSTOMER = @json($defaultCustomer ?? null);
+let selectedCustomer = DEFAULT_CUSTOMER ? { ...DEFAULT_CUSTOMER } : null;
 let selectedPayment = 'cash';
 let selectedPaymentIsCash = true;
 let allProducts = [];
@@ -1576,9 +1579,10 @@ function renderCustomerBtn() {
     }
 }
 
-// Customer wajib diisi — tidak ada lagi fallback walk-in di kasir.
+// Kembali ke customer bawaan (Walk-in Customer dari Sync HPY). Kalau tidak ada
+// setting-nya, customer tetap wajib dipilih manual sebelum checkout.
 function resetCustomer() {
-    selectedCustomer = null;
+    selectedCustomer = DEFAULT_CUSTOMER ? { ...DEFAULT_CUSTOMER } : null;
     resetLoyalty();
     renderCustomerBtn();
     recalculate();

@@ -134,6 +134,9 @@
                     <tbody id="paymentBody"></tbody>
                     <tfoot id="paymentFoot"></tfoot>
                 </table>
+                {{-- Poin yang ditukar bukan baris payments di POS Invoice, tapi ikut
+                     menutup tagihan — jadi dipisah sebagai komponen sendiri. --}}
+                <div id="loyaltyNote" class="text-sm text-muted" style="display:none;margin-top:10px"></div>
             </div>
         </div>
     </div>
@@ -344,10 +347,27 @@ function renderResult(json) {
 
     // Payment breakdown
     renderPayment(stats.payment_data || []);
+    renderLoyaltyNote(stats);
 
     // Table
     renderTable(allInvoices);
     document.getElementById('resultArea').style.display = 'block';
+}
+
+function renderLoyaltyNote(stats) {
+    const el = document.getElementById('loyaltyNote');
+    if (stats.loyalty_error) {
+        el.style.display = '';
+        el.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Redeem loyalty gagal dibaca: ${stats.loyalty_error}`;
+        return;
+    }
+    if (!stats.loyalty_total) { el.style.display = 'none'; return; }
+
+    el.style.display = '';
+    el.innerHTML = `<i class="fas fa-gift"></i> <strong>Loyalty Point (Redeem)</strong> `
+        + `${fmt(stats.loyalty_total)} dari ${Number(stats.loyalty_count).toLocaleString('id-ID')} nota `
+        + `(${Number(stats.loyalty_points).toLocaleString('id-ID')} poin). `
+        + `Nilai ini sudah dikurangkan dari tiap metode bayar, jadi kolom Total tetap sama dengan omzet.`;
 }
 
 function renderPayment(rows) {

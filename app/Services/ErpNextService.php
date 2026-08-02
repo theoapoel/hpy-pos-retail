@@ -2337,6 +2337,79 @@ class ErpNextService
     }
 
     /**
+     * Nilai redeem Loyalty Point per POS Invoice pada satu rentang tanggal.
+     *
+     * Poin yang ditukar dicatat di POS Invoice sebagai `loyalty_amount` dan BUKAN
+     * bagian dari baris payments — mode bayar hanya memuat sisa yang benar-benar
+     * dibayar tunai/kartu. Jadi: grand_total = Σ payments + loyalty_amount.
+     *
+     * @return array{success:bool,data:array<string,array{amount:float,points:float}>,error?:string}
+     */
+    public function fetchLoyaltyRedemptions(string $dateFrom, string $dateTo, string $posProfile = '', string $owner = ''): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'data' => [], 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $filters = [
+            ['posting_date', '>=', $dateFrom],
+            ['posting_date', '<=', $dateTo],
+            ['docstatus', '=', 1],
+            ['redeem_loyalty_points', '=', 1],
+        ];
+
+        if ($posProfile) {
+            $filters[] = ['pos_profile', '=', $posProfile];
+        }
+        if ($owner) {
+            $filters[] = ['owner', '=', $owner];
+        }
+
+        try {
+            $map = [];
+            $start = 0;
+            $batchSize = 500;
+
+            do {
+                $response = $this->client->get('/api/resource/POS Invoice', [
+                    'query' => [
+                        'fields' => json_encode(['name', 'loyalty_amount', 'loyalty_points']),
+                        'filters' => json_encode($filters),
+                        'limit_start' => $start,
+                        'limit_page_length' => $batchSize,
+                    ],
+                    'timeout' => 60,
+                ]);
+
+                $batch = json_decode($response->getBody()->getContents(), true)['data'] ?? [];
+
+                foreach ($batch as $row) {
+                    $amount = (float) ($row['loyalty_amount'] ?? 0);
+                    if ($amount <= 0) {
+                        continue;
+                    }
+                    $map[$row['name']] = [
+                        'amount' => $amount,
+                        'points' => (float) ($row['loyalty_points'] ?? 0),
+                    ];
+                }
+
+                $start += $batchSize;
+
+            } while (count($batch) === $batchSize);
+
+            return ['success' => true, 'data' => $map];
+
+        } catch (ConnectException $e) {
+            return ['success' => false, 'data' => [], 'error' => 'ERP HPY tidak dapat dihubungi.'];
+        } catch (RequestException $e) {
+            return ['success' => false, 'data' => [], 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'data' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Keadaan terkini sekumpulan POS Invoice di ERP HPY, dipakai untuk mendeteksi
      * invoice yang dibatalkan/dihapus di ERP tetapi masih tercatat selesai di lokal.
      *
@@ -2511,6 +2584,68 @@ class ErpNextService
 
             // Report bisa menyelipkan baris total/kosong — ambil yang punya nomor invoice.
             $rows = array_values(array_filter($rows, fn ($r) => is_array($r) && ! empty($r['pos_invoice'])));
+
+            return ['success' => true, 'data' => $rows];
+
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Ambil report "POS Sales Mode of Payment" dari ERP HPY — sudah teragregasi
+     * per (tanggal, kasir, mode of payment), jadi nominal split payment terpecah
+     * ke masing-masing metode (bukan mode gabungan seperti di POS Register).
+     *
+     * Kolom yang dikembalikan report: tanggal, kasir (email owner), mop, amount,
+     * loyalty, change_amount.
+     *
+     * CATATAN: report ini hanya menerima filter company + from_date/to_date.
+     * Filter pos_profile/owner diabaikan oleh server, jadi penyaringan per kasir
+     * harus dilakukan di sisi aplikasi (cocokkan kolom `kasir` dengan email user).
+     *
+     * @return array{success:bool,data?:array<int,array>,error?:string}
+     */
+    public function fetchPosSalesModeOfPayment(string $dateFrom, string $dateTo): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
+        if (! $company) {
+            return ['success' => false, 'error' => 'Company ERP HPY belum diset.'];
+        }
+
+        $filters = [
+            'company' => $company,
+            'from_date' => $dateFrom,
+            'to_date' => $dateTo,
+        ];
+
+        try {
+            $response = $this->client->get('/api/method/frappe.desk.query_report.run', [
+                'query' => [
+                    'report_name' => 'POS Sales Mode of Payment',
+                    'filters' => json_encode($filters),
+                    'ignore_prepared_report' => 1,
+                ],
+                'timeout' => 180,
+            ]);
+
+            $body = json_decode($response->getBody()->getContents(), true);
+            $rows = $body['message']['result'] ?? null;
+
+            if (! is_array($rows)) {
+                return ['success' => false, 'error' => 'Report POS Sales Mode of Payment tidak mengembalikan data.'];
+            }
+
+            // Report bisa menyelipkan baris total/kosong — ambil yang punya tanggal.
+            $rows = array_values(array_filter($rows, fn ($r) => is_array($r) && ! empty($r['tanggal'])));
 
             return ['success' => true, 'data' => $rows];
 

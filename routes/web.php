@@ -339,6 +339,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/pull-payment-methods', [ErpSyncController::class, 'pullPaymentMethods'])->name('pull-payment-methods');
             Route::post('/pull-users', [ErpSyncController::class, 'pullUsers'])->name('pull-users');
             Route::post('/pull-delivery-prices', [ErpSyncController::class, 'pullDeliveryPrices'])->name('pull-delivery-prices');
+            Route::post('/pull-item-prices', [ErpSyncController::class, 'pullItemPrices'])->name('pull-item-prices');
             Route::post('/pull-coupons', [ErpSyncController::class, 'pullCoupons'])->name('pull-coupons');
             Route::post('/pull-customers', [ErpSyncController::class, 'pullCustomers'])->name('pull-customers');
             Route::post('/push-customer/{customer}', [ErpSyncController::class, 'pushCustomer'])->name('push-customer');

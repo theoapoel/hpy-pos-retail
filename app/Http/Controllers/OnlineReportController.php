@@ -50,13 +50,26 @@ class OnlineReportController extends Controller
             return response()->json(['success' => false, 'error' => $register['error']], 422);
         }
 
+        // Redeem Loyalty Point per invoice. Poin yang ditukar tidak muncul sebagai
+        // baris payments di POS Invoice, padahal ikut menutup grand_total — kalau
+        // diabaikan, nilai tiap mode bayar jadi lebih besar dari uang yang benar-benar
+        // masuk. Nilainya dipisah jadi komponen "Loyalty Point" tersendiri.
+        $loyalty = $erp->fetchLoyaltyRedemptions(
+            $request->date_from,
+            $request->date_to,
+            $request->input('pos_profile', '')
+        );
+        $loyaltyByInvoice = $loyalty['data'];
+
         $modeByInvoice = collect($register['data'])
             ->pluck('mode_of_payment', 'pos_invoice')
             ->all();
 
-        $invoices = $invoices->map(function ($inv) use ($localMap, $modeByInvoice) {
+        $invoices = $invoices->map(function ($inv) use ($localMap, $modeByInvoice, $loyaltyByInvoice) {
             $inv['local_invoice']    = $localMap[$inv['name']] ?? null;
             $inv['mode_of_payment']  = $modeByInvoice[$inv['name']] ?? null;
+            $inv['loyalty_amount']   = (float) ($loyaltyByInvoice[$inv['name']]['amount'] ?? 0);
+            $inv['loyalty_points']   = (float) ($loyaltyByInvoice[$inv['name']]['points'] ?? 0);
             return $inv;
         });
 
@@ -80,17 +93,37 @@ class OnlineReportController extends Controller
             ->sortKeys();
 
         // Agregasi per metode pembayaran, dari POS Register. Nilainya pakai grand_total
-        // (bukan paid_amount) — lihat catatan di ErpNextService::fetchPosRegister().
+        // (bukan paid_amount) — lihat catatan di ErpNextService::fetchPosRegister() —
+        // dikurangi redeem loyalty invoice tersebut, supaya tiap mode hanya memuat uang
+        // yang benar-benar diterima.
         $paymentData = $registerRows
             ->groupBy(fn($r) => $r['mode_of_payment'] ?: 'Tanpa Metode')
             ->map(fn($g, $mode) => [
                 'mode_of_payment' => $mode,
                 'count'           => $g->count(),
-                'total'           => $g->sum(fn($r) => (float) $r['grand_total']),
+                'total'           => $g->sum(fn($r) => (float) $r['grand_total']
+                    - (float) ($loyaltyByInvoice[$r['pos_invoice']]['amount'] ?? 0)),
             ])
-            ->sortByDesc('total')
-            ->values()
-            ->all();
+            ->values();
+
+        // Hanya invoice yang ikut terhitung di POS Register yang dipakai, supaya
+        // total kolom tetap sama dengan omzet di kartu atas.
+        $registerInvoices = $registerRows->pluck('pos_invoice')->flip();
+        $loyaltyRows = collect($loyaltyByInvoice)
+            ->filter(fn($v, $name) => $registerInvoices->has($name));
+
+        $loyaltyTotal  = $loyaltyRows->sum('amount');
+        $loyaltyPoints = $loyaltyRows->sum('points');
+
+        if ($loyaltyTotal > 0) {
+            $paymentData->push([
+                'mode_of_payment' => 'Loyalty Point (Redeem)',
+                'count'           => $loyaltyRows->count(),
+                'total'           => $loyaltyTotal,
+            ]);
+        }
+
+        $paymentData = $paymentData->sortByDesc('total')->values()->all();
 
         return response()->json([
             'success'   => true,
@@ -102,6 +135,10 @@ class OnlineReportController extends Controller
                 'avg_per_tx'  => $avgPerTx,
                 'daily_data'  => $dailyData,
                 'payment_data' => $paymentData,
+                'loyalty_total'  => $loyaltyTotal,
+                'loyalty_points' => $loyaltyPoints,
+                'loyalty_count'  => $loyaltyRows->count(),
+                'loyalty_error'  => $loyalty['success'] ? null : ($loyalty['error'] ?? null),
             ],
         ]);
     }

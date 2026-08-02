@@ -492,6 +492,77 @@ class ErpSyncController extends Controller
         ]);
     }
 
+    /**
+     * Perbarui harga jual produk lokal dari Item Price di ERP HPY, memakai price
+     * list yang diset di halaman Sync HPY (field "Price List").
+     *
+     * Hanya kolom `price` yang disentuh — nama, kategori, gambar, dan stok tidak
+     * ikut berubah, jadi tool ini aman dipakai sesering perlu tanpa menunggu
+     * Pull Produk yang jauh lebih berat.
+     */
+    public function pullItemPrices()
+    {
+        set_time_limit(0);
+
+        $priceList = trim((string) Setting::get('erpnext_price_list', ''));
+        if ($priceList === '') {
+            return response()->json([
+                'success' => false,
+                'error' => 'Price List belum dikonfigurasi. Isi field "Price List" di pengaturan Sync HPY, lalu simpan.',
+            ], 422);
+        }
+
+        $result = $this->erp->getPriceListPrices($priceList);
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'error' => $result['error']], 422);
+        }
+
+        $prices = $result['prices'];
+
+        $updated = 0;
+        $unchanged = 0;
+        $matched = 0;
+
+        // Bandingkan di PHP lalu update per item yang harganya benar-benar berubah,
+        // supaya tidak menulis ulang ribuan baris tiap kali tool dijalankan.
+        Product::whereNotNull('erp_item_code')
+            ->select(['id', 'erp_item_code', 'price'])
+            ->chunkById(500, function ($chunk) use ($prices, &$updated, &$unchanged, &$matched) {
+                foreach ($chunk as $product) {
+                    if (! array_key_exists($product->erp_item_code, $prices)) {
+                        continue;
+                    }
+                    $matched++;
+
+                    $newPrice = (float) $prices[$product->erp_item_code];
+                    if (abs($newPrice - (float) $product->price) < 0.01) {
+                        $unchanged++;
+
+                        continue;
+                    }
+
+                    Product::whereKey($product->id)->update([
+                        'price' => $newPrice,
+                        'erp_last_sync' => now(),
+                    ]);
+                    $updated++;
+                }
+            });
+
+        return response()->json([
+            'success' => true,
+            'price_list' => $priceList,
+            'prices_found' => $result['count'],
+            'matched' => $matched,
+            'updated' => $updated,
+            'unchanged' => $unchanged,
+            // Item Price yang tidak punya pasangan produk lokal — biasanya item yang
+            // belum pernah ditarik lewat Pull Produk.
+            'without_product' => max(0, $result['count'] - $matched),
+        ]);
+    }
+
     public function pullCoupons()
     {
         $result = $this->erp->pullCoupons();

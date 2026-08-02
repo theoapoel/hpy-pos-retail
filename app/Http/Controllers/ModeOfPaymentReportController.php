@@ -3,22 +3,28 @@
 namespace App\Http\Controllers;
 
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\ErpNextService;
 use Illuminate\Http\Request;
 
 class ModeOfPaymentReportController extends Controller
 {
+    /**
+     * Redeem poin dilaporkan di kolom terpisah (`loyalty`) oleh report, di luar
+     * kolom `amount` — jadi bisa ditampilkan sebagai komponen bayar tersendiri
+     * tanpa menggandakan nilai mode lain.
+     */
+    private const LOYALTY_MODE = 'Loyalty Point (Redeem)';
+
     public function index()
     {
-        $posProfile = Setting::get('erpnext_pos_profile', '');
-
         // Kasir (non-manager) hanya melihat transaksinya sendiri — bila pengaturan
         // toko "Cakupan Laporan Transaksi" diset per kasir.
         $user = auth()->user();
         $scopedToUser = Setting::reportScopedByUser() && $user && ! $user->isManager();
         $scopedUserName = $scopedToUser ? $user->name : null;
 
-        return view('reports.mode-of-payment', compact('posProfile', 'scopedToUser', 'scopedUserName'));
+        return view('reports.mode-of-payment', compact('scopedToUser', 'scopedUserName'));
     }
 
     public function fetch(Request $request)
@@ -26,55 +32,53 @@ class ModeOfPaymentReportController extends Controller
         $request->validate([
             'date_from' => 'required|date',
             'date_to' => 'required|date|after_or_equal:date_from',
-            'pos_profile' => 'nullable|string|max:255',
         ]);
 
         $erp = new ErpNextService;
 
-        // Kasir (non-manager) dibatasi ke invoice miliknya sendiri
-        // (owner POS Invoice = email ERP User kasir), hanya bila cakupan laporan
-        // diset per kasir. Default 'all' → semua invoice toko.
-        $user = auth()->user();
-        $owner = (Setting::reportScopedByUser() && $user && ! $user->isManager()) ? $user->email : '';
-
-        // Sumber tunggal: report POS Register — satu baris per transaksi, sudah
-        // membawa metode bayarnya (split payment jadi mode gabungan "BCA QR, CASH").
-        $result = $erp->fetchPosRegister(
-            $request->date_from,
-            $request->date_to,
-            $request->input('pos_profile', ''),
-            $owner
-        );
+        // Sumber tunggal: report "POS Sales Mode of Payment" — sudah teragregasi
+        // per tanggal × kasir × metode, split payment terpecah ke tiap metodenya.
+        $result = $erp->fetchPosSalesModeOfPayment($request->date_from, $request->date_to);
 
         if (! $result['success']) {
             return response()->json(['success' => false, 'error' => $result['error']], 422);
         }
 
-        // Nilai transaksi diambil dari grand_total, bukan paid_amount — lihat catatan
-        // di ErpNextService::fetchPosRegister().
-        $matrix = [];      // tanggal => mode => ['count'=>int,'total'=>float]
-        $byCashier = [];   // owner   => mode => ['count'=>int,'total'=>float]
+        // Kasir (non-manager) dibatasi ke barisnya sendiri (kolom `kasir` = email ERP
+        // User), hanya bila cakupan laporan diset per kasir. Report tidak menyediakan
+        // filter ini di server, jadi disaring di sini.
+        $user = auth()->user();
+        $onlyCashier = (Setting::reportScopedByUser() && $user && ! $user->isManager()) ? $user->email : '';
+
+        $matrix = [];      // tanggal => mode => total
+        $byCashier = [];   // kasir   => mode => total
         $modeTotals = [];  // mode    => total (untuk urutan kolom)
-        $txPerDate = [];
 
         foreach ($result['data'] as $row) {
-            $date = $row['posting_date'] ?? null;
+            $date = $row['tanggal'] ?? null;
             if ($date === null) {
                 continue;
             }
 
-            $mode = $row['mode_of_payment'] ?: 'Tanpa Metode';
-            $amount = (float) ($row['grand_total'] ?? 0);
-            $cashier = $row['owner'] ?? 'Lainnya';
+            $cashier = $row['kasir'] ?: 'Lainnya';
+            if ($onlyCashier && $cashier !== $onlyCashier) {
+                continue;
+            }
 
-            $matrix[$date][$mode]['count'] = ($matrix[$date][$mode]['count'] ?? 0) + 1;
-            $matrix[$date][$mode]['total'] = ($matrix[$date][$mode]['total'] ?? 0) + $amount;
+            $mode = $row['mop'] ?: 'Tanpa Metode';
+            $amount = (float) ($row['amount'] ?? 0);
 
-            $byCashier[$cashier][$mode]['count'] = ($byCashier[$cashier][$mode]['count'] ?? 0) + 1;
-            $byCashier[$cashier][$mode]['total'] = ($byCashier[$cashier][$mode]['total'] ?? 0) + $amount;
-
+            $matrix[$date][$mode] = ($matrix[$date][$mode] ?? 0) + $amount;
+            $byCashier[$cashier][$mode] = ($byCashier[$cashier][$mode] ?? 0) + $amount;
             $modeTotals[$mode] = ($modeTotals[$mode] ?? 0) + $amount;
-            $txPerDate[$date] = ($txPerDate[$date] ?? 0) + 1;
+
+            $loyalty = (float) ($row['loyalty'] ?? 0);
+            if ($loyalty > 0) {
+                $lm = self::LOYALTY_MODE;
+                $matrix[$date][$lm] = ($matrix[$date][$lm] ?? 0) + $loyalty;
+                $byCashier[$cashier][$lm] = ($byCashier[$cashier][$lm] ?? 0) + $loyalty;
+                $modeTotals[$lm] = ($modeTotals[$lm] ?? 0) + $loyalty;
+            }
         }
 
         arsort($modeTotals);
@@ -84,54 +88,44 @@ class ModeOfPaymentReportController extends Controller
 
         // Bangun baris tabel per tanggal + total kolom
         $rows = [];
-        $modeTotals = array_fill_keys($modes, ['count' => 0, 'total' => 0.0]);
-        $grandCount = 0;
+        $modeTotals = array_fill_keys($modes, 0.0);
         $grandTotal = 0.0;
 
         foreach ($matrix as $date => $byMode) {
             $cells = [];
             $rowTotal = 0.0;
-            $rowCount = 0;
             foreach ($modes as $mode) {
-                $cell = $byMode[$mode] ?? ['count' => 0, 'total' => 0.0];
+                $cell = (float) ($byMode[$mode] ?? 0);
                 $cells[$mode] = $cell;
-                $rowTotal += $cell['total'];
-                $rowCount += $cell['count'];
-                $modeTotals[$mode]['count'] += $cell['count'];
-                $modeTotals[$mode]['total'] += $cell['total'];
+                $rowTotal += $cell;
+                $modeTotals[$mode] += $cell;
             }
             $rows[] = [
                 'date' => $date,
-                'tx_count' => $txPerDate[$date] ?? 0,
                 'cells' => $cells,
                 'total' => $rowTotal,
-                'count' => $rowCount,
             ];
-            $grandCount += $rowCount;
             $grandTotal += $rowTotal;
         }
 
-        // Rekap per kasir (owner POS Invoice = email ERP User). Petakan email → nama lokal.
-        $owners = array_keys($byCashier);
-        $ownerNames = \App\Models\User::whereIn('email', $owners)->pluck('name', 'email')->all();
+        // Rekap per kasir (kolom `kasir` = email ERP User). Petakan email → nama lokal.
+        $emails = array_keys($byCashier);
+        $cashierNames = User::whereIn('email', $emails)->pluck('name', 'email')->all();
 
         $cashierRows = [];
-        foreach ($byCashier as $owner => $byMode) {
+        foreach ($byCashier as $email => $byMode) {
             $cells = [];
             $rowTotal = 0.0;
-            $rowCount = 0;
             foreach ($modes as $mode) {
-                $cell = $byMode[$mode] ?? ['count' => 0, 'total' => 0.0];
+                $cell = (float) ($byMode[$mode] ?? 0);
                 $cells[$mode] = $cell;
-                $rowTotal += $cell['total'];
-                $rowCount += $cell['count'];
+                $rowTotal += $cell;
             }
             $cashierRows[] = [
-                'cashier' => $ownerNames[$owner] ?? $owner,
-                'email' => $owner,
+                'cashier' => $cashierNames[$email] ?? $email,
+                'email' => $email,
                 'cells' => $cells,
                 'total' => $rowTotal,
-                'count' => $rowCount,
             ];
         }
         // Urutkan kasir dari total terbesar
@@ -139,14 +133,13 @@ class ModeOfPaymentReportController extends Controller
 
         return response()->json([
             'success' => true,
-            // POS Register mengembalikan seluruh baris rentang tanggal (tanpa paging).
-            'truncated' => false,
             'modes' => $modes,
+            // Dipakai view untuk menandai kolom redeem poin (bukan uang masuk).
+            'loyalty_mode' => self::LOYALTY_MODE,
             'rows' => $rows,
             'cashier_rows' => $cashierRows,
             'totals' => [
                 'per_mode' => $modeTotals,
-                'grand_count' => $grandCount,
                 'grand_total' => $grandTotal,
             ],
         ]);

@@ -5,7 +5,8 @@
 <div class="page-header">
     <div>
         <div class="page-title"><i class="fas fa-wallet text-blue"></i> Laporan Mode of Payment</div>
-        <div class="page-subtitle">Rekap pembayaran per hari &times; metode, langsung dari ERP HPY</div>
+        <div class="page-subtitle">Rekap pembayaran per hari &times; metode, langsung dari ERP HPY —
+            termasuk kolom <strong>Loyalty Point (Redeem)</strong> untuk poin yang ditukar pelanggan</div>
     </div>
     @if(!empty($scopedToUser) && $scopedToUser)
         <div class="badge" style="align-self:center;background:var(--primary-light,#e0e7ff);color:var(--primary,#4f46e5);padding:6px 12px;border-radius:20px;font-weight:700;font-size:12px">
@@ -17,7 +18,7 @@
 {{-- Filter --}}
 <div class="card mb-4">
     <div class="card-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:12px;align-items:flex-end">
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:flex-end">
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">Dari Tanggal</label>
                 <input type="date" id="dateFrom" class="form-control"
@@ -27,12 +28,6 @@
                 <label class="form-label">Sampai Tanggal</label>
                 <input type="date" id="dateTo" class="form-control"
                     value="{{ now()->format('Y-m-d') }}">
-            </div>
-            <div class="form-group" style="margin-bottom:0">
-                <label class="form-label">POS Profile</label>
-                <input type="text" id="posProfile" class="form-control"
-                    placeholder="Kosong = semua profile"
-                    value="{{ $posProfile }}" style="min-width:200px">
             </div>
             <button id="btnFetch" onclick="fetchReport()" class="btn btn-primary" style="height:42px;border-radius:8px">
                 <i class="fas fa-search"></i> Tampilkan
@@ -66,13 +61,6 @@
 
 {{-- Hasil --}}
 <div id="resultArea" style="display:none">
-    {{-- Truncated warning --}}
-    <div id="truncatedWarn" class="alert alert-warning" style="display:none">
-        <i class="fas fa-exclamation-triangle"></i>
-        Data terlalu banyak — hanya 1.000 transaksi pertama yang ditampilkan.
-        Perkecil rentang tanggal untuk melihat data lengkap.
-    </div>
-
     {{-- Empty state --}}
     <div id="emptyState" class="card" style="display:none">
         <div class="card-body" style="text-align:center;padding:48px 0;color:#80868B">
@@ -164,7 +152,6 @@ function setRange(range) {
 async function fetchReport() {
     const dateFrom = document.getElementById('dateFrom').value;
     const dateTo   = document.getElementById('dateTo').value;
-    const profile  = document.getElementById('posProfile').value.trim();
 
     if (!dateFrom || !dateTo) {
         alert('Pilih rentang tanggal terlebih dahulu.');
@@ -183,7 +170,7 @@ async function fetchReport() {
         const res = await fetch('{{ route("mop-report.fetch") }}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: JSON.stringify({ date_from: dateFrom, date_to: dateTo, pos_profile: profile }),
+            body: JSON.stringify({ date_from: dateFrom, date_to: dateTo }),
         });
         const json = await res.json();
         if (!json.success) throw new Error(json.error || 'Gagal mengambil data dari ERP HPY.');
@@ -202,7 +189,6 @@ async function fetchReport() {
 
 function renderResult(json) {
     document.getElementById('resultArea').style.display   = 'block';
-    document.getElementById('truncatedWarn').style.display = json.truncated ? 'flex' : 'none';
     document.getElementById('matrixRange').textContent =
         document.getElementById('dateFrom').value + ' — ' + document.getElementById('dateTo').value;
 
@@ -228,16 +214,17 @@ function renderSummary(json) {
     const grand = json.totals.grand_total || 0;
 
     json.modes.forEach((mode, i) => {
-        const m   = json.totals.per_mode[mode] || { count: 0, total: 0 };
-        const pct = grand > 0 ? (m.total / grand * 100) : 0;
-        const color = PAY_COLORS[i % PAY_COLORS.length];
+        const total = Number(json.totals.per_mode[mode] || 0);
+        const pct = grand > 0 ? (total / grand * 100) : 0;
+        const isLoyalty = mode === json.loyalty_mode;
+        const color = isLoyalty ? '#A142F4' : PAY_COLORS[i % PAY_COLORS.length];
         const card = document.createElement('div');
         card.className = 'stat-card';
         card.innerHTML = `
-            <div class="stat-icon" style="background:${color}1A;color:${color}"><i class="fas fa-money-check-alt"></i></div>
+            <div class="stat-icon" style="background:${color}1A;color:${color}"><i class="fas ${isLoyalty ? 'fa-gift' : 'fa-money-check-alt'}"></i></div>
             <div>
-                <div class="stat-value money" style="color:${color}">${fmt(m.total)}</div>
-                <div class="stat-label">${mode} · ${Number(m.count).toLocaleString('id-ID')} pmt · ${pct.toFixed(1)}%</div>
+                <div class="stat-value money" style="color:${color}">${fmt(total)}</div>
+                <div class="stat-label">${mode} · ${pct.toFixed(1)}%</div>
             </div>`;
         wrap.appendChild(card);
     });
@@ -249,10 +236,11 @@ function renderMatrix(json) {
     const per   = json.totals.per_mode;
 
     // Header
-    let head = '<tr><th style="position:sticky;left:0;background:inherit">Tanggal</th><th style="text-align:right">Trx</th>';
+    let head = '<tr><th style="position:sticky;left:0;background:inherit">Tanggal</th>';
     modes.forEach((m, i) => {
+        const c = m === json.loyalty_mode ? '#A142F4' : PAY_COLORS[i % PAY_COLORS.length];
         head += `<th style="text-align:right">
-            <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${PAY_COLORS[i % PAY_COLORS.length]};margin-right:5px"></span>${m}</th>`;
+            <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:5px"></span>${m}</th>`;
     });
     head += '<th style="text-align:right">Total Hari</th></tr>';
     document.getElementById('matrixHead').innerHTML = head;
@@ -261,10 +249,9 @@ function renderMatrix(json) {
     let body = '';
     rows.forEach(r => {
         body += `<tr><td style="position:sticky;left:0;background:#fff"><span class="font-medium">${fmtDate(r.date)}</span></td>`;
-        body += `<td style="text-align:right" class="text-muted">${Number(r.tx_count).toLocaleString('id-ID')}</td>`;
         modes.forEach(m => {
-            const c = r.cells[m] || { total: 0, count: 0 };
-            body += `<td style="text-align:right" class="money">${c.total ? fmt(c.total) : '<span class="text-muted">-</span>'}</td>`;
+            const c = Number(r.cells[m] || 0);
+            body += `<td style="text-align:right" class="money">${c ? fmt(c) : '<span class="text-muted">-</span>'}</td>`;
         });
         body += `<td style="text-align:right" class="money font-medium">${fmt(r.total)}</td></tr>`;
     });
@@ -273,9 +260,8 @@ function renderMatrix(json) {
     // Footer
     let foot = '<tr style="border-top:2px solid #DADCE0;font-weight:600">';
     foot += '<td style="position:sticky;left:0;background:#F8F9FA">Total</td>';
-    foot += `<td style="text-align:right">${Number(json.totals.grand_count).toLocaleString('id-ID')}</td>`;
     modes.forEach(m => {
-        foot += `<td style="text-align:right" class="money">${fmt((per[m] || {}).total)}</td>`;
+        foot += `<td style="text-align:right" class="money">${fmt(per[m] || 0)}</td>`;
     });
     foot += `<td style="text-align:right" class="money text-blue">${fmt(json.totals.grand_total)}</td></tr>`;
     document.getElementById('matrixFoot').innerHTML = foot;
@@ -287,10 +273,11 @@ function renderCashier(json) {
     const per   = json.totals.per_mode;
 
     // Header
-    let head = '<tr><th style="position:sticky;left:0;background:inherit">Kasir</th><th style="text-align:right">Trx</th>';
+    let head = '<tr><th style="position:sticky;left:0;background:inherit">Kasir</th>';
     modes.forEach((m, i) => {
+        const c = m === json.loyalty_mode ? '#A142F4' : PAY_COLORS[i % PAY_COLORS.length];
         head += `<th style="text-align:right">
-            <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${PAY_COLORS[i % PAY_COLORS.length]};margin-right:5px"></span>${m}</th>`;
+            <span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:5px"></span>${m}</th>`;
     });
     head += '<th style="text-align:right">Total</th></tr>';
     document.getElementById('cashierHead').innerHTML = head;
@@ -299,22 +286,20 @@ function renderCashier(json) {
     let body = '';
     rows.forEach(r => {
         body += `<tr><td style="position:sticky;left:0;background:#fff"><span class="font-medium">${r.cashier}</span></td>`;
-        body += `<td style="text-align:right" class="text-muted">${Number(r.count).toLocaleString('id-ID')}</td>`;
         modes.forEach(m => {
-            const c = r.cells[m] || { total: 0, count: 0 };
-            body += `<td style="text-align:right" class="money">${c.total ? fmt(c.total) : '<span class="text-muted">-</span>'}</td>`;
+            const c = Number(r.cells[m] || 0);
+            body += `<td style="text-align:right" class="money">${c ? fmt(c) : '<span class="text-muted">-</span>'}</td>`;
         });
         body += `<td style="text-align:right" class="money font-medium">${fmt(r.total)}</td></tr>`;
     });
     document.getElementById('cashierBody').innerHTML = body ||
-        `<tr><td colspan="${modes.length + 3}" style="text-align:center;padding:16px" class="text-muted">Tidak ada data kasir</td></tr>`;
+        `<tr><td colspan="${modes.length + 2}" style="text-align:center;padding:16px" class="text-muted">Tidak ada data kasir</td></tr>`;
 
     // Footer
     let foot = '<tr style="border-top:2px solid #DADCE0;font-weight:600">';
     foot += '<td style="position:sticky;left:0;background:#F8F9FA">Total</td>';
-    foot += `<td style="text-align:right">${Number(json.totals.grand_count).toLocaleString('id-ID')}</td>`;
     modes.forEach(m => {
-        foot += `<td style="text-align:right" class="money">${fmt((per[m] || {}).total)}</td>`;
+        foot += `<td style="text-align:right" class="money">${fmt(per[m] || 0)}</td>`;
     });
     foot += `<td style="text-align:right" class="money text-blue">${fmt(json.totals.grand_total)}</td></tr>`;
     document.getElementById('cashierFoot').innerHTML = foot;
@@ -327,24 +312,24 @@ function exportCsv() {
     const esc   = v => `"${String(v).replace(/"/g, '""')}"`;
 
     const lines = [];
-    lines.push(['Tanggal', 'Transaksi', ...modes, 'Total Hari'].map(esc).join(sep));
+    lines.push(['Tanggal', ...modes, 'Total Hari'].map(esc).join(sep));
     lastData.rows.forEach(r => {
-        const cells = modes.map(m => (r.cells[m] || {}).total || 0);
-        lines.push([r.date, r.tx_count, ...cells, r.total].map(esc).join(sep));
+        const cells = modes.map(m => r.cells[m] || 0);
+        lines.push([r.date, ...cells, r.total].map(esc).join(sep));
     });
     const per = lastData.totals.per_mode;
-    const totalRow = ['Total', lastData.totals.grand_count,
-        ...modes.map(m => (per[m] || {}).total || 0), lastData.totals.grand_total];
+    const totalRow = ['Total',
+        ...modes.map(m => per[m] || 0), lastData.totals.grand_total];
     lines.push(totalRow.map(esc).join(sep));
 
     // Rekap per Kasir
     const cashierRows = lastData.cashier_rows || [];
     if (cashierRows.length) {
         lines.push('');
-        lines.push(['Kasir', 'Transaksi', ...modes, 'Total'].map(esc).join(sep));
+        lines.push(['Kasir', ...modes, 'Total'].map(esc).join(sep));
         cashierRows.forEach(r => {
-            const cells = modes.map(m => (r.cells[m] || {}).total || 0);
-            lines.push([r.cashier, r.count, ...cells, r.total].map(esc).join(sep));
+            const cells = modes.map(m => r.cells[m] || 0);
+            lines.push([r.cashier, ...cells, r.total].map(esc).join(sep));
         });
     }
 

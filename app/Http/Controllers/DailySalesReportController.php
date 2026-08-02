@@ -10,9 +10,9 @@ use Illuminate\Http\Request;
  * Laporan Daily Sales — cerminan report "Daily Sales V2" di ERP HPY, diagregasi
  * per hari, per brand, dan per item supaya bisa dibaca tanpa membuka ERP.
  *
- * Brand tidak bisa difilter di SQL report-nya (query-nya cuma menerima rentang
- * tanggal), jadi seluruh brand ikut terambil lalu penyaringan dilakukan di sisi
- * klien — sekali ambil, ganti brand tanpa request ulang.
+ * Brand dan item group tidak bisa difilter di SQL report-nya (query-nya cuma
+ * menerima rentang tanggal), jadi semuanya ikut terambil lalu penyaringan
+ * dilakukan di sisi klien — sekali ambil, ganti filter tanpa request ulang.
  */
 class DailySalesReportController extends Controller
 {
@@ -54,19 +54,20 @@ class DailySalesReportController extends Controller
     }
 
     /**
-     * Ringkas baris mentah report jadi tiga tabel: harian (tanggal × brand),
-     * per item, dan daftar brand. Nilai uang diambil apa adanya dari report
-     * supaya angkanya sama persis dengan yang dilihat di ERP.
+     * Ringkas baris mentah report jadi tiga tabel: harian (tanggal × brand ×
+     * item group), per item, dan daftar brand/group. Nilai uang diambil apa
+     * adanya dari report supaya angkanya sama persis dengan yang dilihat di ERP.
      *
      * @param  array<int,array>  $rows
      */
     private function aggregate(array $rows): array
     {
-        $daily = [];        // "tanggal|brand" => bucket
+        $daily = [];        // "tanggal|brand|group" => bucket
         $items = [];        // "barcode|item|brand" => bucket
         $brandNet = [];     // brand => net (untuk urutan)
+        $groupNet = [];     // item group => net (untuk urutan)
         $dailyInvoices = []; // tanggal => [invoice => true]
-        $brandInvoices = []; // "tanggal|brand" => [invoice => true]
+        $comboInvoices = []; // "tanggal|brand|group" => [invoice => true]
         $allInvoices = [];
 
         foreach ($rows as $r) {
@@ -77,6 +78,7 @@ class DailySalesReportController extends Controller
             $date = substr((string) $date, 0, 10);
 
             $brand = trim((string) ($r['brand'] ?? '')) ?: 'Tanpa Brand';
+            $group = trim((string) ($r['group'] ?? '')) ?: 'Tanpa Group';
             $invoice = (string) $r['name'];
             $qty = (float) ($r['qty'] ?? 0);
             $net = (float) ($r['net'] ?? 0);
@@ -84,9 +86,9 @@ class DailySalesReportController extends Controller
             $profit = (float) ($r['profit_value'] ?? 0);
             $disc = (float) ($r['disc'] ?? 0);
 
-            $dKey = $date.'|'.$brand;
+            $dKey = $date.'|'.$brand.'|'.$group;
             if (! isset($daily[$dKey])) {
-                $daily[$dKey] = ['date' => $date, 'brand' => $brand, 'qty' => 0.0, 'net' => 0.0, 'cogs' => 0.0, 'profit' => 0.0, 'disc' => 0.0];
+                $daily[$dKey] = ['date' => $date, 'brand' => $brand, 'group' => $group, 'qty' => 0.0, 'net' => 0.0, 'cogs' => 0.0, 'profit' => 0.0, 'disc' => 0.0];
             }
             $daily[$dKey]['qty'] += $qty;
             $daily[$dKey]['net'] += $net;
@@ -101,7 +103,7 @@ class DailySalesReportController extends Controller
                 $items[$iKey] = [
                     'barcode' => (string) ($r['barcode'] ?? ''),
                     'item_name' => (string) ($r['item_name'] ?? ''),
-                    'group' => (string) ($r['group'] ?? ''),
+                    'group' => $group,
                     'brand' => $brand,
                     'supplier' => $supplier ?: '-',
                     'qty' => 0.0, 'net' => 0.0, 'cogs' => 0.0, 'profit' => 0.0, 'disc' => 0.0,
@@ -114,25 +116,29 @@ class DailySalesReportController extends Controller
             $items[$iKey]['disc'] += $disc;
 
             $brandNet[$brand] = ($brandNet[$brand] ?? 0) + $net;
+            $groupNet[$group] = ($groupNet[$group] ?? 0) + $net;
             $dailyInvoices[$date][$invoice] = true;
-            $brandInvoices[$dKey][$invoice] = true;
+            $comboInvoices[$dKey][$invoice] = true;
             $allInvoices[$invoice] = true;
         }
 
-        // Jumlah invoice: unik per tanggal (semua brand) dan per tanggal × brand.
-        $daily = array_values($daily);
-        foreach ($daily as $i => $d) {
-            $daily[$i]['invoices'] = count($brandInvoices[$d['date'].'|'.$d['brand']] ?? []);
+        // Jumlah invoice: unik per tanggal (semua brand/group) dan per kombinasi
+        // tanggal × brand × group.
+        foreach ($daily as $key => $d) {
+            $daily[$key]['invoices'] = count($comboInvoices[$key] ?? []);
         }
+        $daily = array_values($daily);
         usort($daily, fn ($a, $b) => [$a['date'], $b['net']] <=> [$b['date'], $a['net']]);
 
         $items = array_values($items);
         usort($items, fn ($a, $b) => $b['net'] <=> $a['net']);
 
         arsort($brandNet);
+        arsort($groupNet);
 
         return [
             'brands' => array_keys($brandNet),
+            'groups' => array_keys($groupNet),
             'daily' => $daily,
             'items' => $items,
             'invoices_per_date' => array_map('count', $dailyInvoices),

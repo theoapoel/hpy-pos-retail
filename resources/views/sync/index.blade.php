@@ -372,6 +372,9 @@
                     <button class="btn btn-outline" onclick="pullCustomers()" id="pullCustomersBtn" style="color:#9334E6;border-color:#9334E6">
                         <i class="fas fa-address-book"></i> Pull Customer
                     </button>
+                    <button class="btn btn-outline" onclick="pullItemPrices()" id="pullItemPriceBtn" style="color:#0B8043;border-color:#0B8043">
+                        <i class="fas fa-tags"></i> Update Harga Jual
+                    </button>
                     <button class="btn btn-outline" onclick="pullDeliveryPrices()" id="pullDeliveryBtn" style="color:#E65100;border-color:#E65100">
                         <i class="fas fa-motorcycle"></i> Pull Harga Delivery
                     </button>
@@ -380,6 +383,8 @@
                     <i class="fas fa-info-circle"></i>
                     Pull User mengambil daftar kasir dari tab <strong>Applicable for Users</strong> pada POS Profile di ERP HPY.
                     User baru akan ditambahkan otomatis; user lama hanya diperbarui namanya.
+                    Update Harga Jual memperbarui harga produk lokal dari Item Price pada price list yang diisi di field <strong>Price List</strong> di atas
+                    (hanya kolom harga yang disentuh — nama, kategori, dan gambar produk tidak ikut berubah).
                     Pull Harga Delivery mengambil Item Price dari price list GoFood / GrabFood / ShopeeFood yang sudah dikonfigurasi di atas.
                     Pull Customer menarik seluruh pelanggan aktif dari ERP HPY beserta saldo poin loyalty-nya
                     (poin dihitung dari Loyalty Point Entry di ERP, bukan dari transaksi lokal).
@@ -759,6 +764,44 @@ async function pullUsers() {
     }
 
     btn.innerHTML = '<i class="fas fa-users"></i> Pull User dari POS Profile';
+    btn.disabled = false;
+}
+
+async function pullItemPrices() {
+    const btn = document.getElementById('pullItemPriceBtn');
+    btn.innerHTML = '<span class="spinner"></span> Memperbarui harga...';
+    btn.disabled = true;
+
+    const resultEl = document.getElementById('syncResult');
+    resultEl.style.display = '';
+    resultEl.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Mengambil Item Price dari HPY, harap tunggu... (price list besar bisa butuh beberapa menit)';
+
+    try {
+        const resp = await fetch('{{ route("sync.pull-item-prices") }}', {
+            method: 'POST',
+            headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json'}
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            const orphan = data.without_product
+                ? ` &nbsp;|&nbsp; <span style="color:var(--text3)">${data.without_product} harga tanpa produk lokal</span>`
+                : '';
+            resultEl.innerHTML = `<i class="fas fa-check-circle" style="color:var(--green)"></i> `
+                + `Harga jual diperbarui dari price list <strong>${data.price_list}</strong>: `
+                + `<span style="color:var(--green);font-weight:600">${data.updated} produk berubah</span>, `
+                + `${data.unchanged} sudah sesuai, dari ${data.prices_found} Item Price${orphan}`;
+            toast(`${data.updated} harga produk diperbarui`, 'success');
+        } else {
+            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${data.error}`;
+            toast('Gagal update harga: ' + data.error, 'error');
+        }
+    } catch(e) {
+        resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Error: ${e.message}`;
+        toast('Error: ' + e.message, 'error');
+    }
+
+    btn.innerHTML = '<i class="fas fa-tags"></i> Update Harga Jual';
     btn.disabled = false;
 }
 

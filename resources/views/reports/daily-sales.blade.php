@@ -12,7 +12,7 @@
 {{-- Filter --}}
 <div class="card mb-4">
     <div class="card-body">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr auto;gap:12px;align-items:flex-end">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr 1.2fr auto;gap:12px;align-items:flex-end">
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">Dari Tanggal</label>
                 <input type="date" id="dateFrom" class="form-control"
@@ -25,10 +25,16 @@
             </div>
             <div class="form-group" style="margin-bottom:0">
                 <label class="form-label">Brand</label>
-                {{-- Brand tidak difilter di SQL report-nya; daftar ini terisi dari data
-                     yang sudah diambil, jadi ganti brand tidak perlu request ulang. --}}
-                <select id="brandFilter" class="form-control" onchange="applyFilter()" disabled>
+                {{-- Brand & group tidak difilter di SQL report-nya; daftar ini terisi dari
+                     data yang sudah diambil, jadi ganti filter tidak perlu request ulang. --}}
+                <select id="brandFilter" class="form-control" onchange="onBrandChange()" disabled>
                     <option value="">Semua Brand</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Item Group</label>
+                <select id="groupFilter" class="form-control" onchange="applyFilter()" disabled>
+                    <option value="">Semua Group</option>
                 </select>
             </div>
             <button id="btnFetch" onclick="fetchReport()" class="btn btn-primary" style="height:42px;border-radius:8px">
@@ -230,6 +236,7 @@ async function fetchReport() {
 
         raw = json;
         fillBrandOptions(json.brands || []);
+        fillGroupOptions();
         applyFilter();
     } catch (e) {
         document.getElementById('errorMsg').textContent = e.message;
@@ -250,18 +257,46 @@ function fillBrandOptions(brands) {
     sel.disabled = brands.length === 0;
 }
 
-/** Brand terpilih ('' = semua). Dipakai semua fungsi render. */
+/**
+ * Isi pilihan item group. Daftarnya mengikuti brand yang sedang dipilih supaya
+ * tidak menawarkan group yang pasti kosong; urut dari net terbesar.
+ */
+function fillGroupOptions() {
+    const brand = currentBrand();
+    const net = new Map();
+    ((raw || {}).daily || []).forEach(d => {
+        if (!brand || d.brand === brand) net.set(d.group, (net.get(d.group) || 0) + Number(d.net || 0));
+    });
+    const groups = [...net.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g);
+
+    const sel = document.getElementById('groupFilter');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Semua Group (' + groups.length + ')</option>'
+        + groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    sel.value = groups.includes(prev) ? prev : '';
+    sel.disabled = groups.length === 0;
+}
+
+/** Ganti brand mempersempit daftar group, lalu render ulang. */
+function onBrandChange() {
+    fillGroupOptions();
+    applyFilter();
+}
+
+/** Filter aktif ('' = semua). Dipakai semua fungsi render. */
 function currentBrand() { return document.getElementById('brandFilter').value; }
+function currentGroup() { return document.getElementById('groupFilter').value; }
 
 function applyFilter() {
     if (!raw) return;
     const brand = currentBrand();
-    const daily = (raw.daily || []).filter(d => !brand || d.brand === brand);
+    const group = currentGroup();
+    const daily = (raw.daily || []).filter(d => (!brand || d.brand === brand) && (!group || d.group === group));
 
     document.getElementById('resultArea').style.display = 'block';
     document.getElementById('rangeLabel').textContent =
         document.getElementById('dateFrom').value + ' — ' + document.getElementById('dateTo').value
-        + (brand ? ' · ' + brand : '');
+        + (brand ? ' · ' + brand : '') + (group ? ' · ' + group : '');
 
     if (!daily.length) {
         document.getElementById('emptyState').style.display = 'block';
@@ -291,9 +326,11 @@ function sum(rows) {
 function renderKpi(daily) {
     const t = sum(daily);
     const brand = currentBrand();
-    // Tanpa filter brand, jumlah nota dihitung unik per tanggal (satu nota bisa
-    // memuat banyak brand, jadi angka per brand tidak boleh dijumlahkan).
-    const notes = brand
+    const group = currentGroup();
+    // Tanpa filter, jumlah nota dihitung unik per tanggal. Begitu difilter, satu
+    // nota bisa masuk ke beberapa brand/group, jadi angkanya jadi penjumlahan
+    // per kombinasi — bisa sedikit lebih besar dari jumlah nota sebenarnya.
+    const notes = (brand || group)
         ? daily.reduce((a, d) => a + Number(d.invoices || 0), 0)
         : Object.entries(raw.invoices_per_date || {})
             .filter(([d]) => daily.some(x => x.date === d))
@@ -305,7 +342,7 @@ function renderKpi(daily) {
         ['Profit',     fmt(t.profit), 'fa-arrow-trend-up',  '#4285F4', 'Margin ' + pct(t.profit, t.net)],
         ['COGS',       fmt(t.cogs),   'fa-warehouse',       '#FBBC04', 'Diskon ' + fmt(t.disc)],
         ['Qty Terjual', num(t.qty),   'fa-boxes',           '#A142F4', notes.toLocaleString('id-ID') + ' nota'],
-        ['Rata-rata Nota', fmt(avg),  'fa-receipt',         '#00ACC1', brand || 'Semua brand'],
+        ['Rata-rata Nota', fmt(avg),  'fa-receipt',         '#00ACC1', [brand, group].filter(Boolean).join(' · ') || 'Semua brand'],
     ];
     document.getElementById('kpiGrid').innerHTML = cards.map(([label, value, icon, color, sub]) => `
         <div class="stat-card">
@@ -318,8 +355,8 @@ function renderKpi(daily) {
 }
 
 function renderDaily(daily) {
-    const brand = currentBrand();
-    // Gabung baris tanggal×brand jadi satu baris per tanggal.
+    const filtered = currentBrand() || currentGroup();
+    // Gabung baris tanggal×brand×group jadi satu baris per tanggal.
     const byDate = new Map();
     daily.forEach(d => {
         const cur = byDate.get(d.date) || { date: d.date, qty: 0, disc: 0, net: 0, cogs: 0, profit: 0, invoices: 0 };
@@ -329,7 +366,7 @@ function renderDaily(daily) {
         byDate.set(d.date, cur);
     });
     const rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-    rows.forEach(r => { if (!brand) r.invoices = Number((raw.invoices_per_date || {})[r.date] || r.invoices); });
+    rows.forEach(r => { if (!filtered) r.invoices = Number((raw.invoices_per_date || {})[r.date] || r.invoices); });
 
     document.getElementById('dailyBody').innerHTML = rows.map(r => `
         <tr>
@@ -359,11 +396,12 @@ function renderDaily(daily) {
 }
 
 function renderBrands() {
-    // Selalu tampilkan seluruh brand supaya porsinya tetap terlihat; brand yang
-    // sedang difilter disorot.
+    // Selalu tampilkan seluruh brand supaya porsinya tetap terlihat (tapi tetap
+    // ikut filter item group); brand yang sedang difilter disorot.
     const active = currentBrand();
+    const group = currentGroup();
     const byBrand = new Map();
-    (raw.daily || []).forEach(d => {
+    (raw.daily || []).filter(d => !group || d.group === group).forEach(d => {
         const cur = byBrand.get(d.brand) || { brand: d.brand, qty: 0, disc: 0, net: 0, cogs: 0, profit: 0 };
         cur.qty += Number(d.qty); cur.disc += Number(d.disc); cur.net += Number(d.net);
         cur.cogs += Number(d.cogs); cur.profit += Number(d.profit);
@@ -392,14 +430,16 @@ function renderBrands() {
 function pickBrand(brand) {
     const sel = document.getElementById('brandFilter');
     sel.value = sel.value === brand ? '' : brand;
-    applyFilter();
+    onBrandChange();
 }
 
 function filteredItems() {
     const brand = currentBrand();
+    const group = currentGroup();
     const q = (document.getElementById('itemSearch').value || '').toLowerCase().trim();
     return (raw.items || []).filter(it =>
         (!brand || it.brand === brand) &&
+        (!group || it.group === group) &&
         (!q || (it.item_name + ' ' + it.barcode + ' ' + it.group + ' ' + it.supplier).toLowerCase().includes(q))
     );
 }
@@ -437,16 +477,17 @@ function exportCsv(kind) {
     const sep = ';';
     const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const brand = currentBrand();
+    const group = currentGroup();
     const lines = [];
     let name = kind;
 
     if (kind === 'daily') {
-        lines.push(['Tanggal', 'Brand', 'Nota', 'Qty', 'Diskon', 'Net Sales', 'COGS', 'Profit'].map(q).join(sep));
-        (raw.daily || []).filter(d => !brand || d.brand === brand)
-            .forEach(d => lines.push([d.date, d.brand, d.invoices, d.qty, d.disc, d.net, d.cogs, d.profit].map(q).join(sep)));
+        lines.push(['Tanggal', 'Brand', 'Group', 'Nota', 'Qty', 'Diskon', 'Net Sales', 'COGS', 'Profit'].map(q).join(sep));
+        (raw.daily || []).filter(d => (!brand || d.brand === brand) && (!group || d.group === group))
+            .forEach(d => lines.push([d.date, d.brand, d.group, d.invoices, d.qty, d.disc, d.net, d.cogs, d.profit].map(q).join(sep)));
     } else if (kind === 'brand') {
         const byBrand = new Map();
-        (raw.daily || []).forEach(d => {
+        (raw.daily || []).filter(d => !group || d.group === group).forEach(d => {
             const c = byBrand.get(d.brand) || { qty: 0, disc: 0, net: 0, cogs: 0, profit: 0 };
             c.qty += Number(d.qty); c.disc += Number(d.disc); c.net += Number(d.net);
             c.cogs += Number(d.cogs); c.profit += Number(d.profit);
@@ -466,7 +507,8 @@ function exportCsv(kind) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `daily-sales-${name}${brand ? '-' + brand.replace(/\s+/g, '_') : ''}`
+    const tag = [brand, group].filter(Boolean).map(s => '-' + s.replace(/\s+/g, '_')).join('');
+    a.download = `daily-sales-${name}${tag}`
         + `_${document.getElementById('dateFrom').value}_${document.getElementById('dateTo').value}.csv`;
     a.click();
     URL.revokeObjectURL(url);

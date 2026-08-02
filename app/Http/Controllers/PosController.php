@@ -18,6 +18,29 @@ use Illuminate\Support\Facades\DB;
 
 class PosController extends Controller
 {
+    /**
+     * Customer bawaan kasir, mengikuti field "Walk-in Customer" di menu Sync HPY.
+     *
+     * Dicocokkan dulu lewat tautan ERP (`erp_customer_name`), baru lewat nama —
+     * supaya tetap ketemu di instalasi yang customernya diketik manual. Kalau
+     * settingnya kosong atau customernya belum ada di lokal, kasir kembali ke
+     * perilaku lama: customer wajib dipilih manual.
+     */
+    private function defaultCustomer(): ?array
+    {
+        $walkin = trim((string) Setting::get('erpnext_walkin_customer', ''));
+        if ($walkin === '') {
+            return null;
+        }
+
+        $customer = Customer::where('is_active', true)
+            ->where(fn ($q) => $q->where('erp_customer_name', $walkin)->orWhere('name', $walkin))
+            ->orderByRaw('erp_customer_name = ? desc', [$walkin])
+            ->first(['id', 'code', 'name', 'phone', 'loyalty_points']);
+
+        return $customer?->only(['id', 'code', 'name', 'phone', 'loyalty_points']);
+    }
+
     public function kasirRedirect()
     {
         $layout = Setting::get('pos_layout', 'index');
@@ -37,10 +60,11 @@ class PosController extends Controller
         $posClass = $storeSettings['pos_class'] ?? '';
         $posPaymentMethods = pos_payment_methods();
         $erpBaseUrl = rtrim(Setting::get('erpnext_url', ''), '/');
+        $defaultCustomer = $this->defaultCustomer();
 
         return view('pos.quick', compact(
             'categories', 'customers', 'posClass',
-            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods', 'defaultCustomer'
         ));
     }
 
@@ -52,10 +76,11 @@ class PosController extends Controller
         $posClass = $storeSettings['pos_class'] ?? '';
         $posPaymentMethods = pos_payment_methods();
         $erpBaseUrl = rtrim(Setting::get('erpnext_url', ''), '/');
+        $defaultCustomer = $this->defaultCustomer();
 
         return view('pos.express', compact(
             'categories', 'customers', 'posClass',
-            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods', 'defaultCustomer'
         ));
     }
 
@@ -69,10 +94,11 @@ class PosController extends Controller
         $posProductDisplay = $storeSettings['pos_product_display'] ?? 'image';
         $posPaymentMethods = pos_payment_methods();
         $erpBaseUrl = rtrim(Setting::get('erpnext_url', ''), '/');
+        $defaultCustomer = $this->defaultCustomer();
 
         return view('pos.index', compact(
             'categories', 'products', 'customers', 'posClass', 'posProductDisplay',
-            'erpBaseUrl', 'storeSettings', 'posPaymentMethods'
+            'erpBaseUrl', 'storeSettings', 'posPaymentMethods', 'defaultCustomer'
         ));
     }
 
