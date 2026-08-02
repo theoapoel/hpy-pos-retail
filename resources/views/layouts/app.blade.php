@@ -362,6 +362,7 @@
             $canDeliveryNotes = $u->hasPermission('delivery_notes');
             $canOnlineReport  = $u->hasPermission('online_report');
             $canMopReport     = $u->hasPermission('mop_report');
+            $canDailySales    = $u->hasPermission('daily_sales');
             $canDoReport      = $u->hasPermission('do_report');
             $canCoupons       = $u->hasPermission('coupons');
             $canUsers         = $u->hasPermission('users');
@@ -438,7 +439,7 @@
         @endif
         @endif
 
-        @if($canSync || $canOnlineReport || $canMopReport || $canDoReport)
+        @if($canSync || $canOnlineReport || $canMopReport || $canDailySales || $canDoReport)
         <div class="nav-section">Integrasi</div>
         @if($canSync)
         <a href="{{ route('sync.index') }}" class="nav-item {{ request()->routeIs('sync.*') ? 'active' : '' }}">
@@ -453,6 +454,9 @@
         @endif
         @if($canMopReport)
         {!! $navItem(route('mop-report.index'), 'fas fa-wallet', 'Laporan Pembayaran', request()->routeIs('mop-report.*')) !!}
+        @endif
+        @if($canDailySales)
+        {!! $navItem(route('daily-sales.index'), 'fas fa-chart-line', 'Daily Sales', request()->routeIs('daily-sales.*')) !!}
         @endif
         @if($canDoReport)
         {!! $navItem(route('do-report.index'), 'fas fa-file-invoice-dollar', 'Laporan DO', request()->routeIs('do-report.*')) !!}

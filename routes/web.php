@@ -3,6 +3,7 @@
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DailySalesReportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeliveryNoteController;
 use App\Http\Controllers\DeliveryOrderController;
@@ -312,6 +313,12 @@ Route::middleware('auth')->group(function () {
     Route::prefix('mop-report')->name('mop-report.')->middleware('permission:mop_report')->group(function () {
         Route::get('/', [ModeOfPaymentReportController::class, 'index'])->name('index');
         Route::post('/fetch', [ModeOfPaymentReportController::class, 'fetch'])->name('fetch');
+    });
+
+    // Daily Sales — report "Daily Sales V2" ERP HPY, diagregasi per hari/brand/item
+    Route::prefix('daily-sales')->name('daily-sales.')->middleware('permission:daily_sales')->group(function () {
+        Route::get('/', [DailySalesReportController::class, 'index'])->name('index');
+        Route::post('/fetch', [DailySalesReportController::class, 'fetch'])->name('fetch');
     });
 
     // Laporan DO — penjualan Delivery Order dari data lokal + verifikasi SI/DN ke HPY

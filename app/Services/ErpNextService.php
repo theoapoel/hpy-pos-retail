@@ -2392,6 +2392,61 @@ class ErpNextService
     }
 
     /**
+     * Ambil report "Daily Sales V2" dari ERP HPY — satu baris per item per invoice POS
+     * (Sales Invoice dengan is_pos=1, status bukan Draft/Cancelled).
+     *
+     * Report ini Query Report bikinan HPY. Filter yang dikenal query-nya hanya
+     * from_date & to_date (`%(from_date)s` / `%(to_date)s`); Brand tidak difilter di
+     * SQL, jadi penyaringan brand dilakukan di sisi app setelah data diterima.
+     *
+     * Kolom yang dikembalikan: name (no. invoice), tanggal, barcode, item_name, group,
+     * brand, special_price, supplier, supplier_default, qty, cogs, price_list, disc,
+     * net, cogs_value, profit_value, percent.
+     *
+     * @return array{success:bool,data?:array<int,array>,error?:string,network_error?:bool}
+     */
+    public function fetchDailySales(string $dateFrom, string $dateTo): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            $response = $this->client->get('/api/method/frappe.desk.query_report.run', [
+                'query' => [
+                    'report_name' => 'Daily Sales V2',
+                    'filters' => json_encode([
+                        'from_date' => $dateFrom,
+                        'to_date' => $dateTo,
+                    ]),
+                    'ignore_prepared_report' => 1,
+                ],
+                // Query Report tanpa paging — rentang panjang bisa memakan puluhan detik.
+                'timeout' => 180,
+            ]);
+
+            $body = json_decode($response->getBody()->getContents(), true);
+            $rows = $body['message']['result'] ?? null;
+
+            if (! is_array($rows)) {
+                return ['success' => false, 'error' => 'Report Daily Sales V2 tidak mengembalikan data.'];
+            }
+
+            // Report bisa menyelipkan baris total/kosong — ambil yang punya nomor invoice.
+            $rows = array_values(array_filter($rows, fn ($r) => is_array($r) && ! empty($r['name'])));
+
+            return ['success' => true, 'data' => $rows];
+
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'ERP HPY tidak dapat dihubungi.', 'network_error' => true];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Ambil report "POS Register" dari ERP HPY — satu baris per POS Invoice, lengkap
      * dengan metode bayarnya. Invoice split payment memakai mode gabungan, mis. "BCA QR, CASH".
      *

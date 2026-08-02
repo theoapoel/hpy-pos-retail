@@ -34,6 +34,7 @@ class RolePermission extends Model
             'sync'           => ['label' => 'Sync HPY',          'icon' => 'fa-sync-alt'],
             'online_report'  => ['label' => 'Laporan Online',    'icon' => 'fa-cloud-download-alt'],
             'mop_report'     => ['label' => 'Laporan Pembayaran', 'icon' => 'fa-wallet'],
+            'daily_sales'    => ['label' => 'Daily Sales',       'icon' => 'fa-chart-line'],
             'do_report'      => ['label' => 'Laporan DO',        'icon' => 'fa-file-invoice-dollar'],
             // Sistem (dulu admin-only — default OFF untuk non-admin, lihat sensitiveModules())
             'coupons'        => ['label' => 'Kupon',             'icon' => 'fa-ticket-alt'],
