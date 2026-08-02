@@ -275,24 +275,27 @@
 
         /* Payment */
         .cart-payment { padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
-        /* Horizontal scroll — satu baris, tidak pernah wrap ke bawah */
+        /* Grid rapi — wrap ke bawah, scroll vertikal bila metode banyak */
         .payment-methods {
-            display: flex; flex-wrap: nowrap; gap: 6px;
-            margin-bottom: 10px; overflow-x: auto; padding-bottom: 2px;
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+            margin-bottom: 10px; max-height: 148px; overflow-y: auto;
+            padding-right: 2px; align-content: start;
             scrollbar-width: thin; scrollbar-color: var(--border) transparent;
         }
-        .payment-methods::-webkit-scrollbar { height: 3px; }
+        .payment-methods::-webkit-scrollbar { width: 4px; }
         .payment-methods::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         .pay-btn {
-            flex-shrink: 0; min-width: 82px;
-            padding: 8px 4px; border: 2px solid var(--border); border-radius: 10px;
+            min-width: 0; min-height: 58px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 7px 4px; border: 2px solid var(--border); border-radius: 10px;
             background: var(--surface2); cursor: pointer; text-align: center;
-            font-size: 11px; font-weight: 800; color: var(--text2); transition: all .2s;
-            font-family: 'Roboto', sans-serif;
+            font-size: 10.5px; font-weight: 800; color: var(--text2); transition: all .2s;
+            font-family: 'Roboto', sans-serif; line-height: 1.2;
+            overflow-wrap: anywhere; hyphens: auto;
         }
         .pay-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
         .pay-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; }
-        .pay-icon { font-size: 18px; display: block; margin-bottom: 3px; }
+        .pay-icon { font-size: 16px; display: block; margin-bottom: 2px; line-height: 1; }
         .paid-row { display: flex; gap: 8px; margin-bottom: 8px; }
         .paid-input {
             flex: 1; padding: 10px 14px; border: 2px solid var(--primary);

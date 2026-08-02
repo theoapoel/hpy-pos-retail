@@ -270,18 +270,19 @@
 
         /* Payment */
         .payment-methods {
-            display: flex; flex-wrap: nowrap; gap: 6px;
-            overflow-x: auto; padding-bottom: 2px;
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;
+            max-height: 140px; overflow-y: auto; padding-right: 2px; align-content: start;
             scrollbar-width: thin; scrollbar-color: var(--border) transparent;
         }
-        .payment-methods::-webkit-scrollbar { height: 3px; }
+        .payment-methods::-webkit-scrollbar { width: 4px; }
         .payment-methods::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
         .pay-btn {
-            flex-shrink: 0; min-width: 74px; padding: 7px 4px;
+            min-width: 0; min-height: 54px; padding: 6px 4px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             border: 2px solid var(--border); border-radius: 10px;
             background: var(--surface2); cursor: pointer; text-align: center;
             font-size: 10px; font-weight: 800; color: var(--text2); transition: all .15s;
-            font-family: 'Roboto', sans-serif;
+            font-family: 'Roboto', sans-serif; line-height: 1.2; overflow-wrap: anywhere;
         }
         .pay-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
         .pay-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; }
