@@ -96,6 +96,9 @@
     <hr class="divider">
 
     <div class="total-row"><span>TOTAL</span><span>Rp {{ number_format($transaction->total,0,',','.') }}</span></div>
+    @if($transaction->loyalty_amount > 0)
+        <div class="row"><span>Poin ditukar ({{ number_format($transaction->loyalty_points_redeemed,0,',','.') }})</span><span>- Rp {{ number_format($transaction->loyalty_amount,0,',','.') }}</span></div>
+    @endif
     <div class="row"><span>Bayar ({{ strtoupper($transaction->payment_method) }})</span><span>Rp {{ number_format($transaction->paid_amount,0,',','.') }}</span></div>
     @if($transaction->change_amount > 0)
         <div class="row"><span>Kembalian</span><span>Rp {{ number_format($transaction->change_amount,0,',','.') }}</span></div>

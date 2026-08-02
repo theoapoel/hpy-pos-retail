@@ -162,6 +162,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/kasir', [PosController::class, 'kasirRedirect'])->name('kasir');
         Route::get('/search-products', [PosController::class, 'searchProducts'])->name('search-products');
         Route::post('/validate-coupon', [PosController::class, 'validateCoupon'])->name('validate-coupon');
+        Route::get('/loyalty/{customer}', [PosController::class, 'loyaltyDetails'])->name('loyalty');
         Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}', [PosController::class, 'printReceipt'])->name('print');
@@ -170,6 +171,7 @@ Route::middleware('auth')->group(function () {
 
     // Shift Kasir (Buka/Tutup Kasir) — POS Opening/Closing Entry
     Route::prefix('pos-shift')->name('pos-shift.')->middleware('permission:pos')->group(function () {
+        Route::get('/', [PosShiftController::class, 'index'])->name('index');
         Route::get('/current', [PosShiftController::class, 'current'])->name('current');
         Route::post('/open', [PosShiftController::class, 'open'])->name('open');
         Route::get('/reconcile', [PosShiftController::class, 'reconcile'])->name('reconcile');
@@ -328,6 +330,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/pull-users', [ErpSyncController::class, 'pullUsers'])->name('pull-users');
             Route::post('/pull-delivery-prices', [ErpSyncController::class, 'pullDeliveryPrices'])->name('pull-delivery-prices');
             Route::post('/pull-coupons', [ErpSyncController::class, 'pullCoupons'])->name('pull-coupons');
+            Route::post('/pull-customers', [ErpSyncController::class, 'pullCustomers'])->name('pull-customers');
             Route::post('/push-customer/{customer}', [ErpSyncController::class, 'pushCustomer'])->name('push-customer');
         });
         Route::middleware('role:admin')->group(function () {

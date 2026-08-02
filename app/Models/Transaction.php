@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaction extends Model
 {
@@ -14,6 +14,7 @@ class Transaction extends Model
     protected $fillable = [
         'invoice_no', 'user_id', 'customer_id', 'status',
         'subtotal', 'discount_amount', 'discount_percent', 'coupon_code', 'coupon_discount', 'tax_amount',
+        'loyalty_points_redeemed', 'loyalty_amount', 'loyalty_program',
         'total', 'paid_amount', 'change_amount', 'payment_method',
         'payment_details', 'notes', 'pos_class',
         'order_type', 'delivery_platform', 'table_number',
@@ -24,19 +25,21 @@ class Transaction extends Model
     ];
 
     protected $casts = [
-        'payment_details'       => 'array',
-        'erp_synced_at'         => 'datetime',
-        'subtotal'              => 'decimal:2',
-        'discount_amount'       => 'decimal:2',
-        'coupon_discount'       => 'decimal:2',
-        'tax_amount'            => 'decimal:2',
-        'total'                 => 'decimal:2',
-        'paid_amount'           => 'decimal:2',
-        'change_amount'         => 'decimal:2',
-        'service_charge_pct'    => 'decimal:2',
+        'payment_details' => 'array',
+        'erp_synced_at' => 'datetime',
+        'subtotal' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
+        'coupon_discount' => 'decimal:2',
+        'loyalty_points_redeemed' => 'decimal:2',
+        'loyalty_amount' => 'decimal:2',
+        'tax_amount' => 'decimal:2',
+        'total' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
+        'change_amount' => 'decimal:2',
+        'service_charge_pct' => 'decimal:2',
         'service_charge_amount' => 'decimal:2',
-        'pb1_pct'               => 'decimal:2',
-        'pb1_amount'            => 'decimal:2',
+        'pb1_pct' => 'decimal:2',
+        'pb1_amount' => 'decimal:2',
     ];
 
     public function items(): HasMany
@@ -61,7 +64,8 @@ class Transaction extends Model
         $last = static::whereDate('created_at', today())
             ->orderByDesc('id')->first();
         $seq = $last ? (intval(substr($last->invoice_no, -4)) + 1) : 1;
-        return $prefix . '-' . $date . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+
+        return $prefix.'-'.$date.'-'.str_pad($seq, 4, '0', STR_PAD_LEFT);
     }
 
     public function isPendingSync(): bool

@@ -495,8 +495,31 @@
                 </span>
                 <span id="couponDiscountDisplay" style="color:var(--red)">− Rp 0</span>
             </div>
+            <!-- Loyalty — hanya muncul kalau pelanggan terpilih punya Loyalty Program di ERP -->
+            <div id="loyaltyInputRow" style="margin-bottom:6px;display:none">
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span style="font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap;flex-shrink:0">
+                        ⭐ Poin <span id="loyaltyBalanceLabel" style="color:var(--primary)">0</span>
+                    </span>
+                    <input type="number" id="loyaltyInput" class="discount-input" placeholder="Tukar poin" min="0"
+                        style="flex:1;min-width:0;margin:0" oninput="recalculate()">
+                    <button onclick="redeemMaxLoyalty()" type="button"
+                        style="padding:0 10px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:11px;cursor:pointer;font-weight:700;white-space:nowrap;height:34px;flex-shrink:0">
+                        Maks
+                    </button>
+                </div>
+            </div>
             <div class="summary-row"><span>Pajak</span><span id="taxDisplay">Rp 0</span></div>
             <div class="summary-row total"><span>TOTAL</span><span id="totalDisplay">Rp 0</span></div>
+            <!-- Poin tidak mengurangi TOTAL (grand_total di ERP tetap penuh) —
+                 yang berkurang adalah jumlah yang harus dibayar pelanggan. -->
+            <div class="summary-row" id="loyaltyValueRow" style="display:none">
+                <span>Poin ditukar (<span id="loyaltyPointsLabel">0</span>)</span>
+                <span id="loyaltyValueDisplay" style="color:var(--green)">− Rp 0</span>
+            </div>
+            <div class="summary-row total" id="amountDueRow" style="display:none">
+                <span>HARUS DIBAYAR</span><span id="amountDueDisplay">Rp 0</span>
+            </div>
         </div>
 
         <!-- Payment Method -->
@@ -905,6 +928,8 @@ function clearCart() {
     document.getElementById('discountAmt').value = '';
     document.getElementById('discountPct').value = '';
     removeCoupon();
+    const loyaltyEl = document.getElementById('loyaltyInput');
+    if (loyaltyEl) loyaltyEl.value = '';
     renderCart();
 }
 
@@ -1138,6 +1163,68 @@ function showCouponMsg(msg, type) {
     el.style.display = '';
 }
 
+// ============================================================
+// LOYALTY
+// Saldo & nilai tukar poin selalu diambil dari ERP saat pelanggan dipilih.
+// POS tidak pernah menghitung sendiri — ERP yang punya buku besarnya.
+// ============================================================
+let loyaltyInfo = null;   // { has_program, points, conversion_factor }
+let amountDue   = 0;      // total dikurangi nilai poin yang ditukar
+
+function resetLoyalty() {
+    loyaltyInfo = null;
+    const input = document.getElementById('loyaltyInput');
+    if (input) input.value = '';
+    document.getElementById('loyaltyInputRow').style.display = 'none';
+}
+
+async function loadLoyalty(customerId) {
+    resetLoyalty();
+    if (!customerId) { recalculate(); return; }
+
+    try {
+        const resp = await fetch(`{{ url('pos/loyalty') }}/${customerId}`, { headers: {'Accept':'application/json'} });
+        const data = await resp.json();
+
+        if (data.has_program && data.conversion_factor > 0) {
+            loyaltyInfo = data;
+            document.getElementById('loyaltyBalanceLabel').textContent = fmt(data.points);
+            document.getElementById('loyaltyInputRow').style.display = data.points > 0 ? '' : 'none';
+        }
+    } catch(e) {
+        // ERP tidak terjangkau — kasir tetap bisa jualan, hanya tanpa penukaran poin.
+    }
+    recalculate();
+}
+
+function redeemMaxLoyalty() {
+    if (!loyaltyInfo) return;
+    const total = cartNetSubtotal()
+        + cart.reduce((s, i) => s + (Math.max(0, (i.price*i.qty)-(i.discount||0)) * (i.tax/100)), 0);
+    // Poin dibatasi oleh saldo dan oleh nilai tagihan — sisa poin tidak jadi kembalian.
+    const maxByBill = Math.floor(total / loyaltyInfo.conversion_factor);
+    document.getElementById('loyaltyInput').value = Math.max(0, Math.min(loyaltyInfo.points, maxByBill));
+    recalculate();
+}
+
+/** @return { {points:number, amount:number} } — spasi di dalam kurung wajib: dua kurung kurawal rapat diurai Blade sebagai echo */
+function currentLoyaltyRedemption(total) {
+    if (!loyaltyInfo || loyaltyInfo.conversion_factor <= 0) return { points: 0, amount: 0 };
+
+    let points = parseFloat(document.getElementById('loyaltyInput').value) || 0;
+    if (points <= 0) return { points: 0, amount: 0 };
+
+    points = Math.floor(Math.min(points, loyaltyInfo.points));
+    let amount = points * loyaltyInfo.conversion_factor;
+
+    if (amount > total) {
+        points = Math.floor(total / loyaltyInfo.conversion_factor);
+        amount = points * loyaltyInfo.conversion_factor;
+    }
+
+    return { points, amount };
+}
+
 function recalculate() {
     const subtotal = cartNetSubtotal();
     const tax      = cart.reduce((s, i) => s + (Math.max(0, (i.price*i.qty)-(i.discount||0)) * (i.tax/100)), 0);
@@ -1160,6 +1247,20 @@ function recalculate() {
 
     const total = subtotal - discAmt - couponDiscount + tax;
 
+    const loyalty = currentLoyaltyRedemption(total);
+    amountDue = Math.max(0, total - loyalty.amount);
+
+    if (loyalty.amount > 0) {
+        document.getElementById('loyaltyValueRow').style.display = '';
+        document.getElementById('amountDueRow').style.display    = '';
+        document.getElementById('loyaltyPointsLabel').textContent  = fmt(loyalty.points);
+        document.getElementById('loyaltyValueDisplay').textContent = '− Rp ' + fmt(loyalty.amount);
+        document.getElementById('amountDueDisplay').textContent    = 'Rp ' + fmt(amountDue);
+    } else {
+        document.getElementById('loyaltyValueRow').style.display = 'none';
+        document.getElementById('amountDueRow').style.display    = 'none';
+    }
+
     document.getElementById('subtotalDisplay').textContent  = 'Rp ' + fmt(subtotal);
     document.getElementById('discountDisplay').textContent  = '− Rp ' + fmt(discAmt);
     document.getElementById('taxDisplay').textContent       = 'Rp ' + fmt(tax);
@@ -1168,7 +1269,8 @@ function recalculate() {
     document.getElementById('topbarTotalDisplay').textContent = 'Rp ' + fmt(total);
 
     if (selectedPaymentIsCash) {
-        const amounts = [total, Math.ceil(total/10000)*10000, Math.ceil(total/50000)*50000, Math.ceil(total/100000)*100000];
+        const due = amountDue;
+        const amounts = [due, Math.ceil(due/10000)*10000, Math.ceil(due/50000)*50000, Math.ceil(due/100000)*100000];
         const unique  = [...new Set(amounts)].slice(0, 4);
         document.getElementById('quickAmounts').innerHTML = unique.map(a =>
             `<button class="quick-amt-btn" onclick="setPaid(${a})">Rp ${fmt(a)}</button>`
@@ -1178,10 +1280,10 @@ function recalculate() {
 }
 
 function calcChange() {
-    const totalText = document.getElementById('totalDisplay').textContent;
-    const total = parseFloat(totalText.replace(/[^0-9]/g,''));
+    // Kembalian dihitung dari yang harus dibayar, bukan dari TOTAL — kalau ada poin
+    // yang ditukar, sebagian tagihan sudah tertutup poin.
     const paid  = parseFloat(document.getElementById('paidAmount').value) || 0;
-    const change = paid - total;
+    const change = paid - amountDue;
     const el = document.getElementById('changeDisplay');
     el.textContent = 'Rp ' + fmt(Math.max(0, change));
     el.style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
@@ -1225,7 +1327,9 @@ function renderCustomerBtn() {
 // Customer wajib diisi — tidak ada lagi fallback walk-in di kasir.
 function resetCustomer() {
     selectedCustomer = null;
+    resetLoyalty();
     renderCustomerBtn();
+    recalculate();
 }
 function openCustomerModal() {
     document.getElementById('customerModal').classList.add('show');
@@ -1264,6 +1368,7 @@ function selectCustomer(id, name, code) {
     selectedCustomer = { id, name, code };
     renderCustomerBtn();
     closeModal('customerModal');
+    loadLoyalty(id);
 }
 function clearCustomer(e) { if (e) e.stopPropagation(); resetCustomer(); }
 
@@ -1294,8 +1399,10 @@ async function processCheckout() {
     if (!selectedCustomer) { toast('Customer wajib diisi! Pilih customer terlebih dahulu.', 'err'); openCustomerModal(); return; }
     const totalText = document.getElementById('totalDisplay').textContent;
     const total = parseFloat(totalText.replace(/[^0-9]/g,''));
-    const paid  = selectedPaymentIsCash ? parseFloat(document.getElementById('paidAmount').value) || 0 : total;
-    if (selectedPaymentIsCash && paid < total) { toast('Nominal bayar kurang!', 'err'); return; }
+    const loyalty = currentLoyaltyRedemption(total);
+    const due   = Math.max(0, total - loyalty.amount);
+    const paid  = selectedPaymentIsCash ? parseFloat(document.getElementById('paidAmount').value) || 0 : due;
+    if (selectedPaymentIsCash && paid < due) { toast('Nominal bayar kurang!', 'err'); return; }
 
     const btn = document.getElementById('checkoutBtn');
     btn.disabled = true;
@@ -1312,6 +1419,7 @@ async function processCheckout() {
         discount_amount: discAmt,
         discount_percent: discPct,
         coupon_code: appliedCoupon?.code || null,
+        loyalty_points: loyalty.points || 0,
         pos_class: defaultPosClass || null,
     };
 
@@ -1326,6 +1434,7 @@ async function processCheckout() {
             lastReceipt = data.transaction;
             showReceipt(data.transaction);
             toast('Pesanan berhasil: ' + data.invoice_no, 'ok');
+            if (data.warning) toast(data.warning, 'err', 8000);
         } else {
             toast('Gagal: ' + (data.error || 'Unknown error'), 'err');
         }
@@ -1344,7 +1453,8 @@ function showReceipt(tx) {
     const items = tx.items.map(i =>
         `<div class="receipt-row"><span>${i.product_name} x${i.quantity}</span><span>Rp ${fmt(i.subtotal)}</span></div>`
     ).join('');
-    const change = parseFloat(tx.paid_amount) - parseFloat(tx.total);
+    const loyaltyAmt = parseFloat(tx.loyalty_amount || 0);
+    const change = parseFloat(tx.paid_amount) - (parseFloat(tx.total) - loyaltyAmt);
     document.getElementById('receiptContent').innerHTML = `
         <div class="receipt-header">
             <div class="receipt-title">{{ $storeSettings['store_name'] }}</div>
@@ -1372,6 +1482,7 @@ function showReceipt(tx) {
         ${parseFloat(tx.tax_amount) > 0 ? `<div class="receipt-row"><span>Pajak</span><span>Rp ${fmt(tx.tax_amount)}</span></div>` : ''}
         <hr class="receipt-divider">
         <div class="receipt-row receipt-total"><span>TOTAL</span><span>Rp ${fmt(tx.total)}</span></div>
+        ${loyaltyAmt > 0 ? `<div class="receipt-row"><span>Poin ditukar (${fmt(tx.loyalty_points_redeemed)})</span><span>− Rp ${fmt(loyaltyAmt)}</span></div>` : ''}
         <div class="receipt-row"><span>Bayar (${tx.payment_method.toUpperCase()})</span><span>Rp ${fmt(tx.paid_amount)}</span></div>
         ${selectedPaymentIsCash && change > 0 ? `<div class="receipt-row"><span>Kembalian</span><span>Rp ${fmt(change)}</span></div>` : ''}
         <hr class="receipt-divider">
@@ -1399,13 +1510,13 @@ function closeReceiptAndReset() {
 // ============================================================
 function fmt(n) { return parseFloat(n||0).toLocaleString('id-ID',{minimumFractionDigits:0}); }
 
-function toast(msg, type='ok') {
+function toast(msg, type='ok', dur=3000) {
     const c = document.getElementById('toasts');
     const t = document.createElement('div');
     t.className = `toast ${type}`;
     t.innerHTML = `<i class="fas fa-${type==='ok'?'check-circle':'exclamation-circle'}"></i> ${msg}`;
     c.appendChild(t);
-    setTimeout(() => { t.style.transition='.3s'; t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, 3000);
+    setTimeout(() => { t.style.transition='.3s'; t.style.opacity='0'; setTimeout(()=>t.remove(), 300); }, dur);
 }
 
 // Init

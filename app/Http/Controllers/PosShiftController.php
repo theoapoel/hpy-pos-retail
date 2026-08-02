@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PosShift;
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\ErpNextService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -13,6 +14,66 @@ class PosShiftController extends Controller
     private function tz(): string
     {
         return Setting::get('timezone', 'Asia/Jakarta') ?: 'Asia/Jakarta';
+    }
+
+    /**
+     * Halaman Shift Kasir.
+     * Semua yang punya permission POS melihat panel buka/tutup kasir miliknya;
+     * riwayat shift seluruh kasir hanya untuk admin/manager.
+     */
+    public function index(Request $request)
+    {
+        $user = auth()->user();
+        $isManager = $user->isManager();
+
+        $shift = PosShift::openFor($user->id);
+        if ($shift && ! $shift->erp_opening_entry) {
+            $this->backfillOpeningEntry($shift);
+            $shift->refresh();
+        }
+
+        $shifts = null;
+        $cashiers = collect();
+        $summary = ['count' => 0, 'sales' => 0.0, 'difference' => 0.0];
+
+        if ($isManager) {
+            $from = $request->input('from', Carbon::now($this->tz())->subDays(29)->format('Y-m-d'));
+            $to = $request->input('to', Carbon::now($this->tz())->format('Y-m-d'));
+
+            $query = PosShift::with('user')
+                ->whereBetween('opened_at', [
+                    Carbon::parse($from, $this->tz())->startOfDay(),
+                    Carbon::parse($to, $this->tz())->endOfDay(),
+                ]);
+
+            if ($request->filled('user_id')) {
+                $query->where('user_id', $request->input('user_id'));
+            }
+            if ($request->filled('status')) {
+                $query->where('status', $request->input('status'));
+            }
+
+            $summary = [
+                'count' => (clone $query)->count(),
+                'sales' => (float) (clone $query)->sum('total_sales'),
+                'difference' => (float) (clone $query)->sum('cash_difference'),
+            ];
+
+            $shifts = $query->latest('opened_at')->paginate(25)->withQueryString();
+            $cashiers = User::whereIn('id', PosShift::distinct()->pluck('user_id'))
+                ->orderBy('name')->get(['id', 'name']);
+        }
+
+        return view('pos-shift.index', [
+            'enabled' => PosShift::featureEnabled(),
+            'shift' => $shift,
+            'isManager' => $isManager,
+            'shifts' => $shifts,
+            'cashiers' => $cashiers,
+            'summary' => $summary,
+            'lastClosed' => PosShift::where('user_id', $user->id)->where('status', 'closed')
+                ->latest('closed_at')->first(),
+        ]);
     }
 
     /** Respons standar saat fitur Buka/Tutup Kasir dimatikan. */

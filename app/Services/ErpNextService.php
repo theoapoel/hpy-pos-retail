@@ -21,6 +21,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Psr\Http\Message\ResponseInterface;
@@ -82,6 +83,25 @@ class ErpNextService
     public function isConfigured(): bool
     {
         return ! empty($this->baseUrl) && ! empty($this->apiKey) && ! empty($this->apiSecret);
+    }
+
+    /**
+     * Versi quickPing() yang hasilnya di-cache 60 detik.
+     *
+     * Dipakai di jalur kasir yang dijalankan berulang (checkout): tanpa cache,
+     * tiap transaksi membayar 3 detik ping selama ERP mati. Konsekuensinya,
+     * setelah ERP hidup lagi auto-sync baru jalan maksimal 60 detik kemudian —
+     * transaksi yang tertinggal tetap berstatus pending dan ikut sync berikutnya.
+     */
+    public function isReachable(): bool
+    {
+        return Cache::remember('erp_reachable', 60, fn () => $this->quickPing());
+    }
+
+    /** Paksa pengecekan ulang pada panggilan isReachable() berikutnya. */
+    public static function forgetReachableCache(): void
+    {
+        Cache::forget('erp_reachable');
     }
 
     public function quickPing(): bool
@@ -263,6 +283,12 @@ class ErpNextService
 
         $total = (float) $transaction->total;
         $paidAmount = (float) ($transaction->paid_amount ?? 0);
+
+        // Poin yang ditukar TIDAK mengurangi grand_total di ERP — ia menutup sebagian
+        // tagihan lewat akun penukaran loyalty. Jadi yang harus dibayar tunai/non-tunai
+        // hanya sisanya, dan `payments` di bawah tidak boleh dipaksa naik sampai total.
+        $loyaltyAmount = (float) ($transaction->loyalty_amount ?? 0);
+        $amountDue = max(0, $total - $loyaltyAmount);
         $changeAmount = max(0, (float) ($transaction->change_amount ?? 0));
 
         // Field `base_*` (nilai dalam mata uang company) harus dikirim eksplisit.
@@ -286,7 +312,7 @@ class ErpNextService
         } else {
             // Kirim jumlah yang benar-benar diterima (tunai bisa termasuk kembalian),
             // fallback ke total jika paid_amount tidak wajar (< total).
-            $tendered = $paidAmount >= $total ? $paidAmount : $total;
+            $tendered = $paidAmount >= $amountDue ? $paidAmount : $amountDue;
             $payments[] = [
                 'mode_of_payment' => $this->mapPaymentMethod($transaction->payment_method),
                 'amount' => $tendered,
@@ -295,6 +321,13 @@ class ErpNextService
             $docPaidAmount = $tendered;
             $docChangeAmount = $changeAmount;
         }
+
+        // Pada invoice yang menukar poin, ERP mencatat `paid_amount` sebesar
+        // grand_total penuh sementara baris `payments` hanya berisi sisa yang
+        // dibayar pelanggan — selisihnya persis loyalty_amount. Diverifikasi pada
+        // tiga POS Invoice nyata di HPY, mis. POS-KA-INV-2026-13665:
+        // grand_total 457.000, payments 412.000, loyalty_amount 45.000.
+        $docPaidAmount += $loyaltyAmount;
 
         $defaultWarehouse = Warehouse::getDefault()?->name;
 
@@ -370,6 +403,33 @@ class ErpNextService
 
         if ($erpCouponCode) {
             $payload['coupon_code'] = $erpCouponCode;
+        }
+
+        // Penukaran poin. ERP yang memotong saldo — ia membuat Loyalty Point Entry
+        // negatif sendiri saat POS Invoice di-submit dengan redeem_loyalty_points=1.
+        // POS lokal tidak boleh mengurangi saldo apa pun ke ERP, cukup mengirim
+        // jumlah poin yang ditukar di sini.
+        //
+        // Bentuk payload mengikuti invoice penukaran nyata di HPY: loyalty_points
+        // bertipe Int (jumlah poin, positif), grand_total tetap penuh, dan
+        // akun/cost center penukaran terisi dari Loyalty Program.
+        $redeemPoints = (int) round((float) ($transaction->loyalty_points_redeemed ?? 0));
+        if ($redeemPoints > 0) {
+            $payload['redeem_loyalty_points'] = 1;
+            $payload['loyalty_points'] = $redeemPoints;
+            $payload['loyalty_amount'] = $loyaltyAmount;
+
+            if ($transaction->loyalty_program) {
+                $payload['loyalty_program'] = $transaction->loyalty_program;
+
+                $program = $this->fetchLoyaltyProgramAccounts($transaction->loyalty_program);
+                if ($program['account']) {
+                    $payload['loyalty_redemption_account'] = $program['account'];
+                }
+                if ($program['cost_center']) {
+                    $payload['loyalty_redemption_cost_center'] = $program['cost_center'];
+                }
+            }
         }
 
         $payload['taxes'] = $this->buildTaxesPayload($transaction, $company);
@@ -707,18 +767,197 @@ class ErpNextService
             $response = $this->client->get('/api/resource/Customer', [
                 'query' => [
                     'fields' => json_encode([
-                        'name', 'customer_name', 'customer_type',
-                        'email_id', 'mobile_no', 'disabled',
+                        'name', 'customer_name', 'customer_type', 'customer_group',
+                        'email_id', 'mobile_no', 'disabled', 'loyalty_program',
                     ]),
                     'filters' => json_encode([['disabled', '=', 0]]),
-                    'limit' => $limit,
+                    // `limit` bukan parameter Frappe — yang dibaca adalah
+                    // limit_page_length/limit_start. Tanpa ini paginasi tidak jalan
+                    // dan tiap halaman mengembalikan 20 baris pertama yang sama.
+                    'limit_page_length' => $limit,
                     'limit_start' => $start,
+                    // Urutan harus stabil antar-request, kalau tidak ada baris yang
+                    // terlewat / terambil dua kali saat menggeser halaman.
+                    'order_by' => 'name asc',
                 ],
             ]);
 
             $data = json_decode($response->getBody()->getContents(), true);
 
             return ['success' => true, 'data' => $data['data'] ?? $data['message'] ?? []];
+
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    // =========================================================
+    // LOYALTY POINTS
+    // Poin bukan field di doctype Customer — buku besarnya Loyalty Point Entry,
+    // satu baris per invoice (positif saat belanja, negatif saat ditukar).
+    // =========================================================
+
+    /**
+     * Saldo poin untuk sekumpulan customer ERP.
+     *
+     * Saldo = penjumlahan SELURUH baris Loyalty Point Entry, tanpa menyaring
+     * expiry_date. Ini bukan penyederhanaan: aturannya diuji terhadap
+     * get_loyalty_program_details_with_points milik ERP untuk 8 pelanggan, dan
+     * hanya penjumlahan polos yang cocok 8/8. Menyaring baris kedaluwarsa
+     * (dalam bentuk apa pun) meleset — mis. satu pelanggan tercatat -27 di ERP
+     * tetapi jadi 36 kalau baris kedaluwarsa dibuang. Jangan "diperbaiki"
+     * tanpa mengulang perbandingan itu.
+     *
+     * Buku besarnya dibaca menyeluruh dan dijumlahkan di PHP, TANPA filter
+     * `customer in [...]`. Filter itu terlihat lebih hemat tetapi tidak bisa
+     * dipakai: server HPY menolak request line di atas 4094 byte, dan daftar
+     * 200 nama pelanggan sudah menghasilkan 6176 byte — balasannya HTTP 400
+     * sehingga sebagian besar saldo diam-diam tidak pernah terisi. Memindai
+     * seluruh ledger (≈45.800 baris, 10 halaman) justru andal dan hanya
+     * memakan sekitar setengah menit.
+     *
+     * @return array{success: bool, balances: array<string,float>, error?: string}
+     */
+    public function fetchLoyaltyBalances(): array
+    {
+        $balances = [];
+        $pageSize = 5000;
+        $page = 0;
+
+        do {
+            try {
+                $response = $this->client->get('/api/resource/Loyalty Point Entry', [
+                    'query' => [
+                        'fields' => json_encode(['customer', 'loyalty_points']),
+                        'limit_page_length' => $pageSize,
+                        'limit_start' => $page * $pageSize,
+                        'order_by' => 'name asc',
+                    ],
+                ]);
+
+                $batch = json_decode($response->getBody()->getContents(), true)['data'] ?? [];
+
+            } catch (\Exception $e) {
+                // Kegagalan dilaporkan, bukan ditelan — saldo separuh jalan lebih
+                // berbahaya daripada tidak ada saldo sama sekali.
+                Log::warning('Failed to fetch Loyalty Point Entry: '.$e->getMessage());
+
+                return ['success' => false, 'balances' => $balances, 'error' => $e->getMessage()];
+            }
+
+            foreach ($batch as $row) {
+                $customer = $row['customer'] ?? '';
+                if ($customer === '') {
+                    continue;
+                }
+
+                $balances[$customer] = ($balances[$customer] ?? 0) + (float) ($row['loyalty_points'] ?? 0);
+            }
+
+            $page++;
+
+        } while (count($batch) >= $pageSize);
+
+        return ['success' => true, 'balances' => $balances];
+    }
+
+    /**
+     * Akun & cost center penukaran milik satu Loyalty Program.
+     *
+     * @return array{account: ?string, cost_center: ?string}
+     */
+    public function fetchLoyaltyProgramAccounts(string $program): array
+    {
+        try {
+            $response = $this->client->get('/api/resource/Loyalty Program/'.rawurlencode($program));
+            $data = json_decode($response->getBody()->getContents(), true)['data'] ?? [];
+
+            return [
+                'account' => ($data['expense_account'] ?? '') ?: null,
+                'cost_center' => ($data['cost_center'] ?? '') ?: null,
+            ];
+
+        } catch (\Exception $e) {
+            return ['account' => null, 'cost_center' => null];
+        }
+    }
+
+    /**
+     * Nama Loyalty Program yang dipakai satu customer, dibaca dari doctype Customer.
+     */
+    public function fetchCustomerLoyaltyProgram(string $erpCustomer): ?string
+    {
+        try {
+            $response = $this->client->get('/api/resource/Customer', [
+                'query' => [
+                    'fields' => json_encode(['loyalty_program']),
+                    'filters' => json_encode([['name', '=', $erpCustomer]]),
+                    'limit_page_length' => 1,
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            return ($data['data'][0]['loyalty_program'] ?? '') ?: null;
+
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Detail loyalty satu customer langsung dari ERP: saldo, conversion factor,
+     * dan nama programnya. Dipakai kasir saat pelanggan dipilih, supaya nilai
+     * tukar poin memakai angka ERP dan bukan tebakan lokal.
+     *
+     * `loyalty_program` WAJIB dikirim. Tanpa itu ERP membalas 404
+     * "Loyalty Program None not found" — parameter `silent` tidak menolongnya,
+     * karena penyelesaian program dari customer group gagal lebih dulu.
+     */
+    public function getLoyaltyDetails(string $erpCustomer, ?string $loyaltyProgram = null): array
+    {
+        $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY'));
+
+        $loyaltyProgram = $loyaltyProgram ?: $this->fetchCustomerLoyaltyProgram($erpCustomer);
+
+        if (! $loyaltyProgram) {
+            return ['success' => true, 'has_program' => false, 'points' => 0.0];
+        }
+
+        try {
+            $response = $this->client->get(
+                '/api/method/erpnext.accounts.doctype.loyalty_program.loyalty_program.get_loyalty_program_details_with_points',
+                [
+                    'query' => [
+                        'customer' => $erpCustomer,
+                        'loyalty_program' => $loyaltyProgram,
+                        'company' => $company,
+                        'silent' => 1,
+                        'include_expired_entry' => 0,
+                    ],
+                ]
+            );
+
+            $data = json_decode($response->getBody()->getContents(), true);
+            $msg = $data['message'] ?? [];
+
+            // Pelanggan tanpa Loyalty Program: ERP membalas dict kosong (silent=1).
+            if (empty($msg['loyalty_program'])) {
+                return ['success' => true, 'has_program' => false, 'points' => 0.0];
+            }
+
+            return [
+                'success' => true,
+                'has_program' => true,
+                'loyalty_program' => $msg['loyalty_program'],
+                'points' => (float) ($msg['loyalty_points'] ?? 0),
+                'conversion_factor' => (float) ($msg['conversion_factor'] ?? 0),
+                'expiry_date' => $msg['expiry_date'] ?? null,
+                // Akun & cost center penukaran ikut dikirim ke POS Invoice, karena
+                // dokumen yang dibuat lewat REST tidak selalu diisi ERP sendiri.
+                'redemption_account' => $msg['expense_account'] ?? null,
+                'redemption_cost_center' => $msg['cost_center'] ?? null,
+            ];
 
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];

@@ -206,6 +206,35 @@
                     </div>
                 </div>
 
+                {{-- Buka/Tutup Kasir (POS Opening/Closing Entry) Toggle --}}
+                <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;border:2px solid {{ ($settings['pos_shift_enabled'] ?? '0') === '1' ? 'var(--green)' : 'var(--border)' }}" id="posShiftBox">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <i class="fas fa-cash-register" style="color:{{ ($settings['pos_shift_enabled'] ?? '0') === '1' ? 'var(--green)' : 'var(--text3)' }}" id="posShiftIcon"></i>
+                                Buka/Tutup Kasir (Shift)
+                            </div>
+                            <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                                Kasir wajib buka kasir sebelum transaksi; tutup kasir membuat POS Opening/Closing Entry di ERP HPY
+                            </div>
+                        </div>
+                        <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
+                            <input type="checkbox" id="posShiftToggle" name="pos_shift_enabled" value="1"
+                                {{ ($settings['pos_shift_enabled'] ?? '0') === '1' ? 'checked' : '' }}
+                                onchange="onPosShiftChange(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="posShiftNote" style="margin-top:8px;font-size:12px;{{ ($settings['pos_shift_enabled'] ?? '0') !== '1' ? '' : 'display:none' }};color:#E37400">
+                        <i class="fas fa-info-circle"></i>
+                        Shift Kasir nonaktif — menu <strong>Shift Kasir</strong> dan modal buka/tutup di halaman POS tidak berfungsi.
+                    </div>
+                    <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+                        <i class="fas fa-user-check"></i>
+                        Email user POS harus sama dengan ERP User dan terdaftar di tab <em>Applicable for Users</em> pada POS Profile.
+                    </div>
+                </div>
+
                 <style>
                 .toggle-switch { position:relative;display:inline-block;width:44px;height:24px; }
                 .toggle-switch input { opacity:0;width:0;height:0; }
@@ -340,6 +369,9 @@
                     <button class="btn btn-outline" onclick="pullUsers()" id="pullUsersBtn" style="color:#4285F4;border-color:#4285F4">
                         <i class="fas fa-users"></i> Pull User dari POS Profile
                     </button>
+                    <button class="btn btn-outline" onclick="pullCustomers()" id="pullCustomersBtn" style="color:#9334E6;border-color:#9334E6">
+                        <i class="fas fa-address-book"></i> Pull Customer
+                    </button>
                     <button class="btn btn-outline" onclick="pullDeliveryPrices()" id="pullDeliveryBtn" style="color:#E65100;border-color:#E65100">
                         <i class="fas fa-motorcycle"></i> Pull Harga Delivery
                     </button>
@@ -349,6 +381,8 @@
                     Pull User mengambil daftar kasir dari tab <strong>Applicable for Users</strong> pada POS Profile di ERP HPY.
                     User baru akan ditambahkan otomatis; user lama hanya diperbarui namanya.
                     Pull Harga Delivery mengambil Item Price dari price list GoFood / GrabFood / ShopeeFood yang sudah dikonfigurasi di atas.
+                    Pull Customer menarik seluruh pelanggan aktif dari ERP HPY beserta saldo poin loyalty-nya
+                    (poin dihitung dari Loyalty Point Entry di ERP, bukan dari transaksi lokal).
                 </p>
             </div>
         </div>
@@ -483,6 +517,7 @@ async function saveSettings() {
     // Checkbox tidak dikirim FormData kalau tidak tercentang — kirim eksplisit
     data['erp_auto_sync'] = document.getElementById('autoSyncToggle').checked ? '1' : '0';
     data['stock_auto_sync'] = document.getElementById('stockAutoSyncToggle').checked ? '1' : '0';
+    data['pos_shift_enabled'] = document.getElementById('posShiftToggle').checked ? '1' : '0';
 
     btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     btn.disabled = true;
@@ -502,6 +537,21 @@ function onAutoSyncChange(el) {
     const box  = document.getElementById('autoSyncBox');
     const icon = document.getElementById('autoSyncIcon');
     const note = document.getElementById('autoSyncNote');
+    if (el.checked) {
+        box.style.borderColor  = 'var(--green)';
+        icon.style.color       = 'var(--green)';
+        note.style.display     = 'none';
+    } else {
+        box.style.borderColor  = 'var(--border)';
+        icon.style.color       = 'var(--text3)';
+        note.style.display     = '';
+    }
+}
+
+function onPosShiftChange(el) {
+    const box  = document.getElementById('posShiftBox');
+    const icon = document.getElementById('posShiftIcon');
+    const note = document.getElementById('posShiftNote');
     if (el.checked) {
         box.style.borderColor  = 'var(--green)';
         icon.style.color       = 'var(--green)';
@@ -640,6 +690,41 @@ async function pullProducts() {
     }
 
     btn.innerHTML = '<i class="fas fa-box"></i> Pull Produk';
+    btn.disabled = false;
+}
+
+async function pullCustomers() {
+    const btn = document.getElementById('pullCustomersBtn');
+    btn.innerHTML = '<span class="spinner"></span> Menarik customer...';
+    btn.disabled = true;
+
+    const resultEl = document.getElementById('syncResult');
+    resultEl.style.display = '';
+    resultEl.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Menarik customer dari HPY, harap tunggu...';
+
+    try {
+        const resp = await fetch('{{ route("sync.pull-customers") }}', {
+            method: 'POST',
+            headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json'}
+        });
+        const data = await resp.json();
+        if (data.success) {
+            resultEl.innerHTML = `<i class="fas fa-check-circle" style="color:var(--green)"></i>
+                <strong>Customer:</strong> ${data.imported} baru, ${data.updated} diperbarui
+                <span style="color:var(--text3)">— total ${data.total} record, ${data.loyalty_updated} saldo poin disinkron</span>
+                ${data.loyalty_error ? `<div style="color:var(--red);margin-top:4px"><i class="fas fa-exclamation-triangle"></i> Saldo poin tidak lengkap: ${data.loyalty_error}</div>` : ''}`;
+            toast(`Customer: ${data.imported} baru, ${data.updated} diperbarui`, data.loyalty_error ? 'error' : 'success');
+        } else {
+            const msg = errMessage(data, resp);
+            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${msg}`;
+            toast('Gagal pull customer: ' + msg, 'error');
+        }
+    } catch(e) {
+        resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Error: ${e.message}`;
+        toast('Error: ' + e.message, 'error');
+    }
+
+    btn.innerHTML = '<i class="fas fa-address-book"></i> Pull Customer';
     btn.disabled = false;
 }
 

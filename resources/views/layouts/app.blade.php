@@ -337,6 +337,7 @@
             $canBackup        = $u->hasPermission('backup');
             $canUpdate        = $u->hasPermission('update');
             $canFactoryReset  = $u->hasPermission('factory_reset');
+            $posShiftEnabled  = \App\Models\PosShift::featureEnabled();
             $showManajemen    = $canProducts || $canCustomers || $canStockTransfer || $canStock || $canStockOpname || $canSlice;
             $showSistem       = $canCoupons || $canUsers || $canRoles || $canPermissions || $canWarehouses || $canSettings || $canBackup || $canUpdate || $canFactoryReset;
         @endphp
@@ -356,6 +357,9 @@
         @endif
         @if($canPos)
         {!! $navItem(route('pos.kasir'), 'fas fa-cash-register', 'Kasir', request()->routeIs('pos.index') || request()->routeIs('pos.quick') || request()->routeIs('pos.express')) !!}
+        @endif
+        @if($canPos && $posShiftEnabled)
+        {!! $navItem(route('pos-shift.index'), 'fas fa-clock', 'Shift Kasir', request()->routeIs('pos-shift.*')) !!}
         @endif
         @if($canTransactions)
         {!! $navItem(route('transactions.index'), 'fas fa-receipt', 'Transaksi', request()->routeIs('transactions.*')) !!}

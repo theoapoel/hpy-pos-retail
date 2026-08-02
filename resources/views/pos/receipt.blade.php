@@ -133,6 +133,13 @@
                 </div>
             </div>
 
+            @if($transaction->loyalty_amount > 0)
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px;color:var(--green)">
+                <span>Poin ditukar ({{ number_format($transaction->loyalty_points_redeemed, 0, ',', '.') }})</span>
+                <span>- Rp {{ number_format($transaction->loyalty_amount, 0, ',', '.') }}</span>
+            </div>
+            @endif
+
             <!-- Payment -->
             <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14px">
                 <span style="color:var(--text2)">Metode Bayar</span>
