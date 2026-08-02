@@ -87,9 +87,21 @@
                 </div>
 
                 <div class="form-group">
+                    <label class="form-label">📏 Ukuran Kertas Struk</label>
+                    <select name="receipt_paper_size" class="form-control" style="max-width:260px">
+                        <option value="58" @selected(($settings['receipt_paper_size'] ?? '58') !== '80')>58 mm (32 karakter)</option>
+                        <option value="80" @selected(($settings['receipt_paper_size'] ?? '58') === '80')>80 mm (48 karakter)</option>
+                    </select>
+                    <p style="font-size:12px;color:var(--text3);margin-top:4px;">
+                        Berlaku untuk struk transaksi, struk dapur, struk tutup kasir, dan cetak langsung ESC/POS.
+                        Pastikan sesuai roll kertas yang terpasang — salah pilih membuat baris terpotong atau terlalu sempit.
+                    </p>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">🧾 Thermal Printer (ESC/POS)</label>
                     <p style="font-size:12px;color:var(--text3);margin:2px 0 8px;">
-                        Untuk fitur "Print Thermal" langsung ke printer 58mm.
+                        Untuk fitur "Print Thermal" langsung ke printer termal.
                         Server ini terdeteksi sebagai <strong>{{ $settings['os_family'] }}</strong> —
                         field yang aktif ditandai di bawah.
                     </p>

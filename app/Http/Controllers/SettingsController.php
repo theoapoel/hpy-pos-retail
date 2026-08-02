@@ -14,7 +14,7 @@ class SettingsController extends Controller
         'pos_layout', 'pos_product_display', 'report_scope',
         'service_charge_enabled', 'service_charge_pct',
         'pb1_enabled', 'pb1_pct',
-        'thermal_printer_device', 'thermal_printer_name',
+        'thermal_printer_device', 'thermal_printer_name', 'receipt_paper_size',
     ];
 
     private const LOGO_DIR = 'images';
@@ -36,6 +36,7 @@ class SettingsController extends Controller
         $settings['store_logo'] = Setting::get('store_logo', '');
         $settings['thermal_printer_device'] = Setting::get('thermal_printer_device', '/dev/usb/lp1');
         $settings['thermal_printer_name']   = Setting::get('thermal_printer_name', 'EPPOS58');
+        $settings['receipt_paper_size']     = Setting::get('receipt_paper_size', '58');
         $settings['os_family'] = PHP_OS_FAMILY;
 
         // Item Group filters — decode stored JSON arrays of category IDs (default: empty = all)
@@ -110,6 +111,7 @@ class SettingsController extends Controller
             'pb1_pct'                => 'nullable|numeric|min:0|max:100',
             'thermal_printer_device' => 'nullable|string|max:255',
             'thermal_printer_name'   => 'nullable|string|max:255',
+            'receipt_paper_size'     => 'nullable|in:58,80',
         ]);
 
         // Checkboxes: jika tidak dicentang, request tidak mengirim nilai → default '0'

@@ -6,9 +6,10 @@
 <title>Tutup Kasir {{ $shift->id }}</title>
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    @page { size: 58mm auto; margin: 0; }
+    @php($paper = receipt_paper())
+    @page { size: {{ $paper['page'] }} auto; margin: 0; }
     body { font-family:'Courier New', monospace; font-size:10px; line-height:1.15; color:#000; background:#fff; padding:0; }
-    .receipt { width:48mm; margin:0 auto; }
+    .receipt { width:{{ $paper['content'] }}; margin:0 auto; }
     h1 { font-size:12px; text-align:center; margin-bottom:1px; }
     .sub { text-align:center; font-size:9px; margin-bottom:4px; }
     hr { border:none; border-top:1px dashed #000; margin:6px 0; }
@@ -21,7 +22,7 @@
     th:first-child, td:first-child { text-align:left; }
     .diff-pos { color:#000; }
     .center { text-align:center; }
-    @media print { body { padding:0; } .receipt { width:48mm; } .no-print { display:none; } }
+    @media print { body { padding:0; } .receipt { width:{{ $paper['content'] }}; } .no-print { display:none; } }
 </style>
 </head>
 <body onload="window.print()">

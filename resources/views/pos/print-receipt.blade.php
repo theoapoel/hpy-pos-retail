@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <title>Struk {{ $transaction->invoice_no }}</title>
     <style>
+        @php($paper = receipt_paper())
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        /* Kertas termal 58mm — area cetak efektif ~48mm */
-        @page { size: 58mm auto; margin: 0; }
+        /* Kertas termal {{ $paper['page'] }} — area cetak efektif ~{{ $paper['content'] }} */
+        @page { size: {{ $paper['page'] }} auto; margin: 0; }
         body {
             font-family: 'Courier New', monospace;
             font-size: 10px; line-height: 1.15;
-            width: 48mm; margin: 0 auto; padding: 0;
+            width: {{ $paper['content'] }}; margin: 0 auto; padding: 0;
             background: #fff; color: #000;
         }
         .center { text-align: center; }
@@ -22,7 +23,7 @@
         .row > span:last-child { white-space: nowrap; }
         .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 11px; margin: 2px 0; }
         @media print {
-            body { width: 48mm; margin: 0; }
+            body { width: {{ $paper['content'] }}; margin: 0; }
             .no-print { display: none; }
         }
     </style>

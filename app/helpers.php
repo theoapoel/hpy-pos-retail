@@ -26,6 +26,32 @@ if (! function_exists('local_dt')) {
     }
 }
 
+if (! function_exists('receipt_paper')) {
+    /**
+     * Ukuran kertas struk termal, satu sumber untuk semua jalur cetak.
+     *
+     * - page/content : dipakai @page dan lebar body di view cetak browser
+     * - chars        : lebar baris ESC/POS Font A (ThermalPrintService)
+     * - dots         : lebar cetak efektif untuk resize logo ESC/POS
+     *
+     * Nilai 58mm dan 80mm adalah dua ukuran roll termal yang beredar; area
+     * cetak efektifnya lebih sempit dari lebar kertas karena ada margin kiri
+     * kanan yang tidak terjangkau head printer.
+     *
+     * @return array{size:string, page:string, content:string, chars:int, dots:int}
+     */
+    function receipt_paper(): array
+    {
+        $size = (string) Setting::get('receipt_paper_size', '58');
+
+        if ($size === '80') {
+            return ['size' => '80', 'page' => '80mm', 'content' => '72mm', 'chars' => 48, 'dots' => 576];
+        }
+
+        return ['size' => '58', 'page' => '58mm', 'content' => '48mm', 'chars' => 32, 'dots' => 384];
+    }
+}
+
 if (! function_exists('pos_payment_methods')) {
     /**
      * Metode pembayaran POS beserta penanda `is_cash`.

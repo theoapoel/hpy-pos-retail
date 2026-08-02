@@ -11,8 +11,22 @@ use Mike42\Escpos\Printer;
 
 class ThermalPrintService
 {
-    /** Lebar kertas 58mm dalam karakter (Font A). */
-    private const WIDTH = 32;
+    /**
+     * Lebar baris dalam karakter (Font A), mengikuti ukuran kertas terpilih:
+     * 32 untuk 58mm, 48 untuk 80mm. Dibaca sekali per instance supaya satu
+     * struk tidak setengah tercetak dengan lebar berbeda bila setting berubah
+     * di tengah proses.
+     */
+    private readonly int $width;
+
+    private readonly int $logoDots;
+
+    public function __construct()
+    {
+        $paper = receipt_paper();
+        $this->width = $paper['chars'];
+        $this->logoDots = $paper['dots'];
+    }
 
     /**
      * Cetak struk langsung ke thermal printer (ESC/POS).
@@ -164,7 +178,7 @@ class ThermalPrintService
 
     /**
      * Cetak logo toko sebagai gambar raster (kalau ada & GD tersedia).
-     * Gambar diratakan ke kanvas putih dan di-resize agar muat lebar 58mm,
+     * Gambar diratakan ke kanvas putih dan di-resize agar muat lebar kertas,
      * supaya area transparan tidak jadi hitam dan gambar tidak terpotong.
      * Kegagalan logo tidak boleh menggagalkan seluruh struk.
      */
@@ -182,7 +196,7 @@ class ThermalPrintService
 
         $tmp = null;
         try {
-            $maxWidth = 384; // lebar cetak efektif printer 58mm (dots)
+            $maxWidth = $this->logoDots; // lebar cetak efektif printer (dots)
             $src = @imagecreatefromstring(file_get_contents($path));
             if ($src === false) {
                 return;
@@ -225,12 +239,12 @@ class ThermalPrintService
     /** Baris dua kolom: label kiri, nilai kanan, dipisah spasi. */
     private function twoCol(string $left, string $right): string
     {
-        $space = self::WIDTH - mb_strlen($left) - mb_strlen($right);
+        $space = $this->width - mb_strlen($left) - mb_strlen($right);
         if ($space < 1) {
             // Kolom terlalu panjang: potong label agar muat.
-            $maxLeft = max(0, self::WIDTH - mb_strlen($right) - 1);
+            $maxLeft = max(0, $this->width - mb_strlen($right) - 1);
             $left    = mb_substr($left, 0, $maxLeft);
-            $space   = self::WIDTH - mb_strlen($left) - mb_strlen($right);
+            $space   = $this->width - mb_strlen($left) - mb_strlen($right);
         }
 
         return $left . str_repeat(' ', max(1, $space)) . $right . "\n";
@@ -239,11 +253,11 @@ class ThermalPrintService
     /** Bungkus teks panjang agar tidak melebihi lebar kertas. */
     private function wrap(string $text): string
     {
-        return wordwrap($text, self::WIDTH, "\n", true) . "\n";
+        return wordwrap($text, $this->width, "\n", true) . "\n";
     }
 
     private function divider(): string
     {
-        return str_repeat('-', self::WIDTH) . "\n";
+        return str_repeat('-', $this->width) . "\n";
     }
 }
