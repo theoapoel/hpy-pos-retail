@@ -98,69 +98,85 @@ class ThermalPrintService
 
         foreach (['store_tagline', 'store_address', 'store_phone', 'store_email'] as $key) {
             if (!empty($store[$key])) {
-                $prefix = $key === 'store_phone' ? 'Telp: ' : '';
+                $prefix = match ($key) {
+                    'store_phone' => 'Phone : ',
+                    'store_email' => 'Email : ',
+                    default       => '',
+                };
                 $printer->text($this->wrap($prefix . $store[$key]));
             }
         }
 
         $printer->setJustification(Printer::JUSTIFY_LEFT);
-        $printer->text($this->divider());
+        $printer->feed();
 
         // ── Info transaksi ──────────────────────────
-        $printer->text($this->twoCol('Invoice', $transaction->invoice_no));
-        $printer->text($this->twoCol('Tanggal', $transaction->created_at->format('d/m/Y H:i')));
-        if ($transaction->user) {
-            $printer->text($this->twoCol('Kasir', $transaction->user->name));
-        }
+        // Nomor memakai POS Invoice ERP bila sudah tersinkron, supaya struk di
+        // tangan pelanggan sama dengan dokumen yang bisa dicari di ERP.
+        $printer->text($this->wrap('Receipt No: ' . ($transaction->erp_pos_invoice ?: $transaction->invoice_no)));
+        $printer->text($this->wrap('Date: ' . $transaction->created_at->setTimezone(local_tz())->format('d-m-Y H:i:s')));
         if ($transaction->customer) {
-            $printer->text($this->twoCol('Customer', $transaction->customer->name));
+            $printer->text($this->wrap('Customer: ' . $transaction->customer->name));
+        }
+        if ($transaction->user) {
+            $printer->text($this->wrap('Cashier: ' . $transaction->user->name));
         }
 
+        $printer->text($this->twoCol('<Description>', 'Amount'));
         $printer->text($this->divider());
 
         // ── Items ───────────────────────────────────
+        // Barcode mendahului nama, seperti format POS ERP. wrap() memotong per
+        // baris kertas sehingga barcode panjang tidak mendorong kolom nominal.
         foreach ($transaction->items as $item) {
-            $printer->text($this->wrap($item->product_name));
-            $qtyLine = $item->quantity . ' x ' . $this->rp($item->price);
-            $printer->text($this->twoCol($qtyLine, $this->rp($item->subtotal)));
+            $kode = $item->product?->barcode ?: $item->product_sku;
+            $printer->text($this->wrap(trim($kode . $item->product_name)));
+            $printer->text($this->twoCol('', $this->num($item->subtotal)));
+            $printer->text('  ' . $this->qty($item->quantity) . ' @ ' . $this->num($item->price) . "\n");
         }
 
         $printer->text($this->divider());
 
         // ── Totals ──────────────────────────────────
-        if ($transaction->order_type) {
-            $types = ['dine_in' => 'Dine In', 'take_away' => 'Take Away', 'delivery' => 'Delivery'];
-            $printer->text($this->twoCol('Tipe', $types[$transaction->order_type] ?? $transaction->order_type));
-        }
-
-        $printer->text($this->twoCol('Subtotal', $this->rp($transaction->subtotal)));
+        $printer->text($this->twoCol('Total', $this->num($transaction->subtotal)));
 
         if ($transaction->discount_amount > 0) {
-            $printer->text($this->twoCol('Diskon', '-' . $this->rp($transaction->discount_amount)));
+            $printer->text($this->twoCol('Discount', '-' . $this->num($transaction->discount_amount)));
         }
         if ($transaction->coupon_code && $transaction->coupon_discount > 0) {
-            $printer->text($this->twoCol('Kupon (' . $transaction->coupon_code . ')', '-' . $this->rp($transaction->coupon_discount)));
+            $printer->text($this->twoCol('Coupon (' . $transaction->coupon_code . ')', '-' . $this->num($transaction->coupon_discount)));
         }
         if ($transaction->tax_amount > 0) {
-            $printer->text($this->twoCol('Pajak', $this->rp($transaction->tax_amount)));
-        }
-        if ($transaction->service_charge_amount > 0) {
-            $printer->text($this->twoCol('Service (' . rtrim(rtrim(number_format($transaction->service_charge_pct, 2), '0'), '.') . '%)', $this->rp($transaction->service_charge_amount)));
-        }
-        if ($transaction->pb1_amount > 0) {
-            $printer->text($this->twoCol('PB1 (' . rtrim(rtrim(number_format($transaction->pb1_pct, 2), '0'), '.') . '%)', $this->rp($transaction->pb1_amount)));
+            $printer->text($this->twoCol('Tax', $this->num($transaction->tax_amount)));
         }
 
-        $printer->text($this->divider());
-
-        // ── Total & pembayaran ──────────────────────
         $printer->setEmphasis(true);
-        $printer->text($this->twoCol('TOTAL', $this->rp($transaction->total)));
+        $printer->text($this->twoCol('Grand Total', $this->num($transaction->total)));
         $printer->setEmphasis(false);
 
-        $printer->text($this->twoCol('Bayar (' . strtoupper($transaction->payment_method) . ')', $this->rp($transaction->paid_amount)));
+        // Pembayaran: satu baris per metode. payment_details hanya terisi saat
+        // pembayaran campuran.
+        $rincian = $transaction->payment_method === 'mixed' ? ($transaction->payment_details ?: []) : [];
+        if ($rincian) {
+            foreach ($rincian as $metode => $nominal) {
+                $printer->text($this->twoCol($metode . ' Paid Amount', number_format((float) $nominal, 0, '.', ',')));
+            }
+        } else {
+            $printer->text($this->twoCol(
+                strtoupper($transaction->payment_method) . ' Paid Amount',
+                number_format((float) $transaction->paid_amount, 0, '.', ',')
+            ));
+        }
         if ($transaction->change_amount > 0) {
-            $printer->text($this->twoCol('Kembalian', $this->rp($transaction->change_amount)));
+            $printer->text($this->twoCol('Change Amount', number_format((float) $transaction->change_amount, 0, '.', ',')));
+        }
+
+        $printer->text($this->twoCol('Total Qty', $this->qty($transaction->items->sum('quantity'))));
+        if ($transaction->loyalty_amount > 0) {
+            $printer->text($this->twoCol(
+                'Loyalty Point ' . (int) $transaction->loyalty_points_redeemed,
+                number_format((float) $transaction->loyalty_amount, 0, '.', ',')
+            ));
         }
 
         $printer->text($this->divider());
@@ -236,18 +252,44 @@ class ThermalPrintService
         return 'Rp ' . number_format((float) $amount, 0, ',', '.');
     }
 
-    /** Baris dua kolom: label kiri, nilai kanan, dipisah spasi. */
+    /** Nominal gaya format POS ERP: 124,000.00 */
+    private function num($amount): string
+    {
+        return number_format((float) $amount, 2, '.', ',');
+    }
+
+    /** Kuantitas gaya ERP: satu desimal — 1.0, 2.5 */
+    private function qty($value): string
+    {
+        return number_format((float) $value, 1, '.', '');
+    }
+
+    /**
+     * Baris dua kolom: label kiri, nilai kanan, dipisah spasi.
+     *
+     * Bila keduanya tidak muat dalam satu baris, label dibungkus ke baris
+     * sendiri lalu nominal dirata-kanan di baris berikutnya. Versi lama
+     * memotong labelnya ("... Paid Amount" jadi "... Paid Amoun"), yang pada
+     * kertas 58mm membuat nama metode pembayaran hilang sebagian di struk
+     * pelanggan.
+     */
     private function twoCol(string $left, string $right): string
     {
         $space = $this->width - mb_strlen($left) - mb_strlen($right);
-        if ($space < 1) {
-            // Kolom terlalu panjang: potong label agar muat.
-            $maxLeft = max(0, $this->width - mb_strlen($right) - 1);
-            $left    = mb_substr($left, 0, $maxLeft);
-            $space   = $this->width - mb_strlen($left) - mb_strlen($right);
+
+        if ($space >= 1) {
+            return $left . str_repeat(' ', $space) . $right . "\n";
         }
 
-        return $left . str_repeat(' ', max(1, $space)) . $right . "\n";
+        return $this->wrap($left) . $this->rightAlign($right);
+    }
+
+    /** Satu baris berisi teks yang dirata-kanan pada lebar kertas. */
+    private function rightAlign(string $text): string
+    {
+        $pad = max(0, $this->width - mb_strlen($text));
+
+        return str_repeat(' ', $pad) . $text . "\n";
     }
 
     /** Bungkus teks panjang agar tidak melebihi lebar kertas. */
