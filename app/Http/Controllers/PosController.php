@@ -227,6 +227,45 @@ class PosController extends Controller
     }
 
     /**
+     * Riwayat transaksi customer langsung dari ERP HPY (POS Invoice),
+     * sama seperti panel "Recent Transactions" di Point of Sale ERPNext.
+     */
+    public function customerHistory(Customer $customer)
+    {
+        if (! $customer->erp_customer_name) {
+            return response()->json([
+                'success' => false,
+                'data' => [],
+                'error' => 'Customer ini belum tertaut ke HPY.',
+            ]);
+        }
+
+        $erp = new ErpNextService;
+        if (! $erp->isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'data' => [],
+                'error' => 'Koneksi HPY belum dikonfigurasi.',
+            ]);
+        }
+
+        $result = $erp->fetchCustomerRecentInvoices($customer->erp_customer_name, 10);
+
+        return response()->json([
+            'success' => $result['success'],
+            'customer' => $customer->name,
+            'error' => $result['error'] ?? null,
+            'data' => array_map(fn ($row) => [
+                'name' => $row['name'] ?? '',
+                'posting_date' => $row['posting_date'] ?? null,
+                'posting_time' => $row['posting_time'] ?? null,
+                'grand_total' => (float) ($row['grand_total'] ?? 0),
+                'status' => $row['status'] ?? '',
+            ], $result['data'] ?? []),
+        ]);
+    }
+
+    /**
      * Validasi penukaran poin terhadap ERP dan hitung nilai rupiahnya.
      *
      * @return array{points: float, amount: float, program: ?string, warning: ?string}

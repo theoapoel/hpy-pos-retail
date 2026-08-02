@@ -492,7 +492,9 @@
             <button class="customer-btn" id="customerBtn" onclick="openCustomerModal()">
                 <i class="fas fa-user-circle" style="font-size:15px;color:var(--primary)"></i>
                 <span id="customerBtnText">Memuat...</span>
-                <i class="fas fa-times" id="customerClearBtn" style="display:none;margin-left:auto;color:var(--red)" onclick="clearCustomer(event)"></i>
+                <i class="fas fa-history" id="customerHistoryBtn" title="Riwayat online (HPY)"
+                   style="display:none;margin-left:auto;color:var(--primary)" onclick="openCustomerHistory(event)"></i>
+                <i class="fas fa-times" id="customerClearBtn" style="display:none;margin-left:8px;color:var(--red)" onclick="clearCustomer(event)"></i>
             </button>
         </div>
 
@@ -646,6 +648,23 @@
         <div class="modal-footer">
             <button class="btn btn-ghost" onclick="closeModal('customerModal')">Batal</button>
             <button class="btn btn-success" onclick="addNewCustomer()"><i class="fas fa-user-plus"></i> Tambah</button>
+        </div>
+    </div>
+</div>
+
+<!-- Riwayat Online (HPY) Modal -->
+<div class="modal-overlay" id="customerHistoryModal">
+    <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+            <div class="modal-title" style="font-size:16px"><i class="fas fa-history" style="color:var(--primary)"></i> Riwayat Online (HPY)</div>
+            <button onclick="closeModal('customerHistoryModal')" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--text3)">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="histCustomerName" style="font-weight:800;font-size:14px;margin-bottom:10px"></div>
+            <div id="histList" style="max-height:340px;overflow-y:auto"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('customerHistoryModal')">Tutup</button>
         </div>
     </div>
 </div>
@@ -907,7 +926,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'F3') { e.preventDefault(); searchInput.focus(); searchInput.select(); }
     if (e.key === 'Escape') {
         closeDropdown();
-        ['customerModal','receiptModal','itemNoteModal','itemDiscountModal'].forEach(id => closeModal(id));
+        ['customerModal','customerHistoryModal','receiptModal','itemNoteModal','itemDiscountModal'].forEach(id => closeModal(id));
     }
 });
 
@@ -1487,14 +1506,17 @@ function renderCustomerBtn() {
     const btn    = document.getElementById('customerBtn');
     const textEl = document.getElementById('customerBtnText');
     const clearEl = document.getElementById('customerClearBtn');
+    const histEl  = document.getElementById('customerHistoryBtn');
     if (!selectedCustomer) {
         btn.classList.remove('has-customer');
         textEl.textContent = '👤 Pilih Customer (wajib)';
         clearEl.style.display = 'none';
+        histEl.style.display = 'none';
     } else {
         btn.classList.add('has-customer');
         textEl.textContent = '👤 ' + selectedCustomer.name + ' (' + selectedCustomer.code + ')';
         clearEl.style.display = 'block';
+        histEl.style.display = 'block';
     }
 }
 // Kembali ke customer bawaan (Walk-in Customer dari Sync HPY). Kalau tidak ada
@@ -1544,6 +1566,53 @@ function selectCustomer(id, name, code) {
     closeModal('customerModal');
     loadLoyalty(id);
 }
+// ── Riwayat transaksi customer, diambil live dari POS Invoice di HPY ──────────
+async function openCustomerHistory(e) {
+    if (e) e.stopPropagation();
+    if (!selectedCustomer) return;
+
+    document.getElementById('customerHistoryModal').classList.add('show');
+    document.getElementById('histCustomerName').textContent = selectedCustomer.name;
+    const el = document.getElementById('histList');
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;font-weight:700">Memuat dari HPY...</div>';
+
+    try {
+        const resp = await fetch(`{{ url('pos/customer-history') }}/${selectedCustomer.id}`, { headers: {'Accept':'application/json'} });
+        const data = await resp.json();
+
+        if (!data.success) {
+            el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--red);font-size:13px;font-weight:700">${data.error || 'Gagal mengambil riwayat dari HPY'}</div>`;
+            return;
+        }
+        if (!data.data.length) {
+            el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;font-weight:700">Belum ada transaksi</div>';
+            return;
+        }
+
+        el.innerHTML = data.data.map(r => `
+            <div style="padding:10px 2px;border-bottom:1px solid var(--border)">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+                    <div style="font-weight:800;font-size:13px">${r.name}</div>
+                    <div style="font-weight:800;font-size:14px">${fmt(r.grand_total)}</div>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:3px">
+                    <div style="font-size:12px;color:var(--text3)">${histDateLabel(r.posting_date, r.posting_time)}</div>
+                    ${r.status ? `<span style="font-size:11px;font-weight:800;color:var(--primary);background:var(--surface2);padding:2px 8px;border-radius:10px">• ${r.status}</span>` : ''}
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red);font-size:13px;font-weight:700">Tidak bisa terhubung ke HPY</div>';
+    }
+}
+
+function histDateLabel(date, time) {
+    if (!date) return '';
+    const d = new Date(date + 'T' + (time || '00:00:00'));
+    if (isNaN(d)) return date;
+    return d.toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 function clearCustomer(e) { if (e) e.stopPropagation(); resetCustomer(); }
 
 async function addNewCustomer() {

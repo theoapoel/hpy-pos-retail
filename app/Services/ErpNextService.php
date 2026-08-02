@@ -2343,7 +2343,7 @@ class ErpNextService
      * bagian dari baris payments — mode bayar hanya memuat sisa yang benar-benar
      * dibayar tunai/kartu. Jadi: grand_total = Σ payments + loyalty_amount.
      *
-     * @return array{success:bool,data:array<string,array{amount:float,points:float}>,error?:string}
+     * @return array{success:bool,data:array<string,array{amount:float,points:float,posting_date:string,owner:string}>,error?:string}
      */
     public function fetchLoyaltyRedemptions(string $dateFrom, string $dateTo, string $posProfile = '', string $owner = ''): array
     {
@@ -2373,7 +2373,7 @@ class ErpNextService
             do {
                 $response = $this->client->get('/api/resource/POS Invoice', [
                     'query' => [
-                        'fields' => json_encode(['name', 'loyalty_amount', 'loyalty_points']),
+                        'fields' => json_encode(['name', 'posting_date', 'owner', 'loyalty_amount', 'loyalty_points']),
                         'filters' => json_encode($filters),
                         'limit_start' => $start,
                         'limit_page_length' => $batchSize,
@@ -2391,6 +2391,8 @@ class ErpNextService
                     $map[$row['name']] = [
                         'amount' => $amount,
                         'points' => (float) ($row['loyalty_points'] ?? 0),
+                        'posting_date' => substr((string) ($row['posting_date'] ?? ''), 0, 10),
+                        'owner' => (string) ($row['owner'] ?? ''),
                     ];
                 }
 
@@ -3329,6 +3331,48 @@ class ErpNextService
             return ['success' => false, 'error' => $this->extractError($e)];
         } catch (\Exception $e) {
             return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Riwayat transaksi terakhir seorang customer langsung dari ERP HPY.
+     *
+     * Sama seperti panel "Recent Transactions" di Point of Sale ERPNext: daftar
+     * POS Invoice milik customer tersebut (yang sudah submit), terbaru di atas,
+     * lengkap dengan status-nya (mis. Consolidated / Paid).
+     *
+     * @return array{success:bool,data:array<int,array<string,mixed>>,error?:string}
+     */
+    public function fetchCustomerRecentInvoices(string $erpCustomer, int $limit = 10): array
+    {
+        if (empty($this->baseUrl)) {
+            return ['success' => false, 'data' => [], 'error' => 'URL ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            $response = $this->client->get('/api/resource/POS Invoice', [
+                'query' => [
+                    'fields' => json_encode([
+                        'name', 'posting_date', 'posting_time',
+                        'grand_total', 'status', 'currency', 'pos_profile',
+                    ]),
+                    'filters' => json_encode([
+                        ['customer', '=', $erpCustomer],
+                        ['docstatus', '=', 1],
+                    ]),
+                    'limit_page_length' => $limit,
+                    'order_by' => 'posting_date desc, posting_time desc',
+                ],
+            ]);
+
+            $body = json_decode($response->getBody()->getContents(), true);
+
+            return ['success' => true, 'data' => $body['data'] ?? []];
+
+        } catch (RequestException $e) {
+            return ['success' => false, 'data' => [], 'error' => $this->extractError($e)];
+        } catch (\Exception $e) {
+            return ['success' => false, 'data' => [], 'error' => $e->getMessage()];
         }
     }
 

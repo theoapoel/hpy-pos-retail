@@ -164,6 +164,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/search-products', [PosController::class, 'searchProducts'])->name('search-products');
         Route::post('/validate-coupon', [PosController::class, 'validateCoupon'])->name('validate-coupon');
         Route::get('/loyalty/{customer}', [PosController::class, 'loyaltyDetails'])->name('loyalty');
+        Route::get('/customer-history/{customer}', [PosController::class, 'customerHistory'])->name('customer-history');
         Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
         Route::get('/receipt/{transaction}', [PosController::class, 'receipt'])->name('receipt');
         Route::get('/print/{transaction}', [PosController::class, 'printReceipt'])->name('print');
