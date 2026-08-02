@@ -65,6 +65,14 @@
         .st-online  .erp-dot { background:#34A853; }
         .st-offline .erp-dot { background:#EA4335; animation:blink 1.4s ease-in-out infinite; }
         .st-checking .erp-dot { background:#BDBDBD; }
+        /* Info server lokal (XAMPP) */
+        #srvInfo { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
+            padding:4px 10px; border-radius:12px; white-space:nowrap;
+            background:var(--surface2); color:var(--text2); font-family:'Roboto Mono',monospace; }
+        #srvInfo.srv-local { background:#E8F0FE; color:#1A56C4; }
+        #srvInfo.srv-lan   { background:#FEF7E0; color:#8A5B00; }
+        #srvInfo i { font-size:11px; }
+        @media (max-width: 900px) { #srvInfo { display:none; } }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         .user-menu { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 10px; border-radius: 20px; transition: background .2s; }
         .user-menu:hover { background: var(--surface2); }
@@ -282,6 +290,33 @@
                 style="height:52px;width:auto;object-fit:contain;">
         </a>
         <div class="header-right">
+            @php
+                $srvHost    = request()->getHost();
+                $srvPort    = request()->getPort();
+                $srvAddr    = request()->server('SERVER_ADDR') ?: '';
+                $srvIsLoop  = $srvAddr === '' || in_array($srvAddr, ['127.0.0.1', '::1'], true);
+
+                // Kalau diakses via localhost, SERVER_ADDR = 127.0.0.1 — cari IP LAN mesin XAMPP
+                $srvIp = $srvIsLoop
+                    ? cache()->remember('server_lan_ip', 600, function () {
+                        foreach ((array) @gethostbynamel(gethostname() ?: '') as $ip) {
+                            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE) === false
+                                && $ip !== '127.0.0.1') {
+                                return $ip; // IP privat = alamat LAN
+                            }
+                        }
+                        return '127.0.0.1';
+                    })
+                    : $srvAddr;
+
+                $srvIsLan  = $srvIp !== '127.0.0.1';
+                $srvLabel  = $srvIp . (in_array($srvPort, [80, 443], true) ? '' : ':' . $srvPort);
+            @endphp
+            <div id="srvInfo" class="{{ $srvIsLan ? 'srv-lan' : 'srv-local' }}"
+                title="Server XAMPP — IP {{ $srvIp }} | host diakses: {{ $srvHost }}:{{ $srvPort }} | PHP {{ PHP_VERSION }}">
+                <i class="fas fa-network-wired"></i>
+                <span>Server: {{ $srvLabel }}</span>
+            </div>
             <div id="erpStatus" class="st-checking" title="Status koneksi ERP HPY">
                 <span class="erp-dot"></span>
                 <span id="erpStatusText">ERP…</span>
