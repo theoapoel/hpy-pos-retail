@@ -8,9 +8,6 @@
         <div class="page-subtitle">{{ $transaction->invoice_no }}</div>
     </div>
     <div style="display:flex;gap:8px">
-        <a href="{{ route('pos.print-kitchen', $transaction) }}" target="_blank" class="btn btn-warning">
-            <i class="fas fa-utensils"></i> Cetak Kitchen
-        </a>
         <a href="{{ route('pos.print', $transaction) }}" target="_blank" class="btn btn-primary">
             <i class="fas fa-print"></i> Cetak Struk
         </a>

@@ -5,7 +5,6 @@
 <div class="page-header">
     <div><div class="page-title">Detail Transaksi</div><div class="page-subtitle">{{ $transaction->invoice_no }}</div></div>
     <div style="display:flex;gap:8px">
-        <a href="{{ route('pos.print-kitchen',$transaction) }}" target="_blank" class="btn btn-warning"><i class="fas fa-utensils"></i> Cetak Kitchen</a>
         <a href="{{ route('pos.print',$transaction) }}" target="_blank" class="btn btn-outline"><i class="fas fa-print"></i> Cetak Struk</a>
         @if($transaction->status === 'completed')
         <button id="cancelBtn" class="btn btn-danger" onclick="cancelTransaction()"><i class="fas fa-ban"></i> Batalkan</button>
