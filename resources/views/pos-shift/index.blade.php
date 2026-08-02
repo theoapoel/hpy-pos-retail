@@ -288,6 +288,11 @@ async function loadErpEntries() {
     btn.disabled = false;
 }
 
+// Nama dokumen ERP bisa memuat karakter yang perlu di-encode di path URL.
+function erpReceiptUrl(name) {
+    return '{{ url("pos-shift/erp-receipt") }}/' + encodeURIComponent(name);
+}
+
 function statusBadge(row) {
     if (Number(row.docstatus) === 2) return '<span class="badge badge-red">Dibatalkan</span>';
     if (Number(row.docstatus) === 0) return '<span class="badge badge-yellow">Draft</span>';
@@ -319,6 +324,11 @@ function renderErpEntries(d) {
             <td style="text-align:right;color:var(--text2)">${nf(c.total_quantity)}</td>
             <td style="font-family:monospace;font-size:11px;color:var(--text2)">${esc(c.pos_opening_entry) || '—'}</td>
             <td>${statusBadge(c)}</td>
+            <td style="white-space:nowrap">
+                <a href="${erpReceiptUrl(c.name)}" target="_blank" class="btn btn-ghost" style="font-size:13px">
+                    <i class="fas fa-print"></i> Struk
+                </a>
+            </td>
         </tr>`).join('');
 
     const kosong = (n) => `<tr><td colspan="${n}" style="text-align:center;padding:24px;color:var(--text3)">Tidak ada data pada rentang ini.</td></tr>`;
@@ -344,9 +354,9 @@ function renderErpEntries(d) {
                 <thead><tr>
                     <th>Nama</th><th>Kasir</th><th>Mulai</th><th>Selesai</th>
                     <th style="text-align:right">Grand Total</th><th style="text-align:right">Qty</th>
-                    <th>Opening</th><th>Status</th>
+                    <th>Opening</th><th>Status</th><th>Cetak</th>
                 </tr></thead>
-                <tbody>${closing || kosong(8)}</tbody>
+                <tbody>${closing || kosong(9)}</tbody>
             </table>
         </div>`;
 }

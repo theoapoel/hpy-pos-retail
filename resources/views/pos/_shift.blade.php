@@ -186,7 +186,7 @@ async function doCloseShift() {
         });
         const d = await r.json();
         if (d.success) {
-            toast('Kasir ditutup.');
+            toast(d.message || 'Kasir ditutup.');
             closeModal('closeShiftModal');
             currentShift = null; updateShiftUI();
             if (d.print_url) window.open(d.print_url, '_blank');

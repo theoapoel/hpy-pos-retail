@@ -2857,6 +2857,78 @@ class ErpNextService
     }
 
     /**
+     * Cari POS Closing Entry (draft atau submitted) milik satu POS Opening Entry.
+     *
+     * Dipakai untuk idempotensi tutup kasir: bila percobaan sebelumnya sudah
+     * membuat/men-submit dokumen di ERP tapi jawabannya tidak sampai ke POS
+     * (koneksi putus), percobaan berikutnya harus memungut dokumen itu, bukan
+     * membuat yang baru — ERP akan menolaknya dengan
+     * "Selected POS Opening Entry should be open".
+     *
+     * @return array{name:string, docstatus:int}|null
+     */
+    public function findPosClosingEntryFor(string $openingName): ?array
+    {
+        try {
+            $resp = $this->client->get('/api/resource/POS Closing Entry', [
+                'query' => [
+                    'fields' => json_encode(['name', 'docstatus']),
+                    'filters' => json_encode([
+                        ['pos_opening_entry', '=', $openingName],
+                        ['docstatus', '<', 2],   // abaikan yang dibatalkan
+                    ]),
+                    'order_by' => 'creation desc',
+                    'limit_page_length' => 1,
+                ],
+            ]);
+            $row = json_decode($resp->getBody()->getContents(), true)['data'][0] ?? null;
+
+            return $row ? ['name' => $row['name'], 'docstatus' => (int) $row['docstatus']] : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Dokumen POS Closing Entry lengkap dari ERP (untuk dicetak).
+     *
+     * @return array{success:bool, data?:array, error?:string}
+     */
+    public function getPosClosingEntry(string $name): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+
+        try {
+            $resp = $this->client->get('/api/resource/POS Closing Entry/'.rawurlencode($name));
+            $doc = json_decode($resp->getBody()->getContents(), true)['data'] ?? null;
+
+            return $doc
+                ? ['success' => true, 'data' => $doc]
+                : ['success' => false, 'error' => "POS Closing Entry {$name} tidak ditemukan."];
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'ERP HPY tidak dapat dijangkau.'];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+    }
+
+    /** Pungut closing entry yang sudah ada: submit dulu bila masih draft. */
+    private function adoptExistingClosing(array $existing): array
+    {
+        if ($existing['docstatus'] === 0) {
+            try {
+                $this->submitDoc('POS Closing Entry', rawurlencode($existing['name']));
+            } catch (\Throwable $e) {
+                return ['success' => false, 'error' => 'Tutup kasir sudah tercatat di ERP ('.$existing['name'].') tapi gagal di-submit: '.$e->getMessage()];
+            }
+        }
+
+        return ['success' => true, 'docname' => $existing['name'], 'adopted' => true];
+    }
+
+    /**
      * Buat + submit POS Closing Entry dari hasil rekonsiliasi + jumlah hitung kasir.
      *
      * @param  array  $recon  hasil getShiftReconciliation()
@@ -2867,6 +2939,14 @@ class ErpNextService
         if (! $this->isConfigured()) {
             return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
         }
+        // Sudah pernah tercatat di ERP (percobaan sebelumnya berhasil tapi
+        // jawabannya tidak sampai) → pakai dokumen itu, jangan buat baru.
+        if ($existing = $this->findPosClosingEntryFor($openingName)) {
+            Log::info('POS Closing sudah ada di ERP, dipungut', $existing);
+
+            return $this->adoptExistingClosing($existing);
+        }
+
         $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY', ''));
         $posProfile = Setting::get('erpnext_pos_profile', '');
         $now = $this->localNow();
@@ -2912,18 +2992,30 @@ class ErpNextService
 
         Log::info('POS Closing payload', ['opening' => $openingName, 'user' => $userEmail, 'invoices' => count($posTransactions)]);
 
+        $name = null;
         try {
             $resp = $this->client->post('/api/resource/POS Closing Entry', ['json' => $payload]);
             $name = json_decode($resp->getBody()->getContents(), true)['data']['name'] ?? null;
             if ($name) {
-                $this->submitDoc('POS Closing Entry', $name);
+                $this->submitDoc('POS Closing Entry', rawurlencode($name));
             }
 
             return ['success' => true, 'docname' => $name];
-        } catch (ConnectException $e) {
-            return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
-        } catch (RequestException $e) {
-            return ['success' => false, 'error' => $this->extractError($e)];
+        } catch (ConnectException|RequestException $e) {
+            // Dokumen bisa saja sudah terbentuk/ter-submit di ERP walau jawabannya
+            // gagal sampai. Cek ulang sebelum melaporkan gagal, supaya kasir tidak
+            // mencoba lagi dan bertemu "Selected POS Opening Entry should be open".
+            if ($existing = $this->findPosClosingEntryFor($openingName)) {
+                Log::warning('POS Closing gagal di tengah jalan tapi dokumen sudah ada di ERP', $existing);
+
+                return $this->adoptExistingClosing($existing);
+            }
+
+            if ($e instanceof ConnectException) {
+                return ['success' => false, 'error' => 'Network unreachable', 'network_error' => true];
+            }
+
+            return ['success' => false, 'error' => $this->extractError($e), 'draft_docname' => $name];
         }
     }
 

@@ -178,6 +178,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/reconcile', [PosShiftController::class, 'reconcile'])->name('reconcile');
         Route::post('/close', [PosShiftController::class, 'close'])->name('close');
         Route::get('/{shift}/receipt', [PosShiftController::class, 'receipt'])->name('receipt');
+        Route::get('/erp-receipt/{name}', [PosShiftController::class, 'erpReceipt'])
+            ->where('name', '.*')->name('erp-receipt');
     });
 
     // Transaksi

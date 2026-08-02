@@ -479,6 +479,9 @@ class PosShiftController extends Controller
             'shift_id' => $shift->id,
             'erp_closing_entry' => $result['docname'],
             'print_url' => route('pos-shift.receipt', $shift),
+            'message' => ($result['adopted'] ?? false)
+                ? 'Tutup kasir sudah tercatat sebelumnya di ERP ('.$result['docname'].'). Shift ditutup mengikuti dokumen itu.'
+                : 'Kasir ditutup.',
         ]);
     }
 
@@ -489,6 +492,55 @@ class PosShiftController extends Controller
         $shift->load('user');
 
         return view('pos.shift-receipt', ['shift' => $shift]);
+    }
+
+    /**
+     * Struk tutup kasir yang datanya ditarik langsung dari POS Closing Entry di ERP.
+     *
+     * Dipakai untuk shift yang closing-nya dibuat di luar aplikasi ini, atau saat
+     * catatan lokalnya tidak ada — jadi setiap closing di ERP tetap bisa dicetak.
+     */
+    public function erpReceipt(string $name)
+    {
+        abort_unless(auth()->user()->isManager(), 403);
+
+        $result = (new ErpNextService)->getPosClosingEntry($name);
+        abort_if(! $result['success'], 404, $result['error'] ?? 'Dokumen tidak ditemukan.');
+
+        $doc = $result['data'];
+        $cashModes = (new ErpNextService)->getCashModeNames();
+
+        $rows = [];
+        $cashExpected = 0.0;
+        $cashCounted = 0.0;
+        $openingCash = 0.0;
+        foreach ($doc['payment_reconciliation'] ?? [] as $r) {
+            $mode = $r['mode_of_payment'] ?? '';
+            $expected = (float) ($r['expected_amount'] ?? 0);
+            $counted = (float) ($r['closing_amount'] ?? 0);
+            $isCash = in_array($mode, $cashModes, true);
+
+            $rows[] = [
+                'mode' => $mode,
+                'expected' => $expected,
+                'counted' => $counted,
+                'difference' => round($counted - $expected, 2),
+            ];
+            if ($isCash) {
+                $cashExpected += $expected;
+                $cashCounted += $counted;
+                $openingCash += (float) ($r['opening_amount'] ?? 0);
+            }
+        }
+
+        return view('pos.erp-closing-receipt', [
+            'doc' => $doc,
+            'rows' => $rows,
+            'openingCash' => $openingCash,
+            'cashExpected' => round($cashExpected, 2),
+            'cashCounted' => round($cashCounted, 2),
+            'cashDifference' => round($cashCounted - $cashExpected, 2),
+        ]);
     }
 
     /** Bangun rekonsiliasi untuk shift (rentang tanggal lokal opened_at → hari ini). */
