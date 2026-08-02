@@ -25,6 +25,14 @@
 {{-- ===== Panel shift saya ===== --}}
 <div class="card" style="padding:20px;margin-bottom:20px">
     @if($shift)
+        @if($shift->isStale())
+        <div style="background:#FEF3E2;color:#B06000;border-left:4px solid var(--yellow);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px">
+            <strong><i class="fas fa-triangle-exclamation"></i> Shift terlantar.</strong>
+            Dibuka {{ $shift->opened_at->diffForHumans() }} dan belum ditutup di ERP HPY. Menutupnya sekarang akan
+            merekonsiliasi <strong>seluruh POS Invoice sejak {{ $shift->opened_at->isoFormat('D MMM YYYY') }}</strong>,
+            bukan hanya hari ini. Periksa dulu di ERP sebelum menutup.
+        </div>
+        @endif
         <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
             <div>
                 <span class="badge badge-green">Shift Terbuka</span>
@@ -181,6 +189,26 @@
     <div style="padding:16px 20px;border-top:1px solid var(--border)">{{ $shifts->links() }}</div>
     @endif
 </div>
+
+{{-- ===== Daftar POS Opening & Closing Entry langsung dari ERP ===== --}}
+<div class="card" style="margin-top:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px;border-bottom:1px solid var(--border)">
+        <div>
+            <div style="font-weight:700;font-size:15px">
+                <i class="fas fa-server" style="color:var(--blue)"></i> POS Opening &amp; Closing Entry di ERP HPY
+            </div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                Ditarik langsung dari ERP — termasuk shift yang dibuat di luar aplikasi ini. Mengikuti filter tanggal &amp; kasir di atas.
+            </div>
+        </div>
+        <button class="btn btn-ghost" id="btnLoadErpEntries" onclick="loadErpEntries()">
+            <i class="fas fa-cloud-download-alt"></i> Muat dari ERP
+        </button>
+    </div>
+    <div id="erpEntriesBody" style="padding:20px;color:var(--text3);font-size:13px">
+        Klik <strong>Muat dari ERP</strong> untuk menarik daftarnya.
+    </div>
+</div>
 @endif
 
 {{-- ===== Modal: Buka Kasir ===== --}}
@@ -231,6 +259,98 @@
 // ============================================================
 function hideModal(id) { document.getElementById(id).classList.remove('show'); }
 function nf(n) { return parseFloat(n||0).toLocaleString('id-ID', {maximumFractionDigits:0}); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+function tglJam(s) { return s ? esc(String(s).slice(0, 16).replace('T', ' ')) : '—'; }
+
+@if($isManager)
+// ── Daftar POS Opening/Closing Entry dari ERP ────────────────────────
+async function loadErpEntries() {
+    const btn = document.getElementById('btnLoadErpEntries');
+    const body = document.getElementById('erpEntriesBody');
+    const q = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams();
+    ['from','to','user_id'].forEach(k => { if (q.get(k)) params.set(k, q.get(k)); });
+
+    btn.disabled = true;
+    body.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menarik data dari ERP HPY…';
+    try {
+        const r = await fetch('{{ route("pos-shift.erp-entries") }}?' + params.toString(),
+            { headers: {'Accept':'application/json','X-CSRF-TOKEN':csrf} });
+        const d = await r.json();
+        if (!d.success) {
+            body.innerHTML = `<div style="color:var(--red)"><i class="fas fa-exclamation-circle"></i> ${esc(d.error)}</div>`;
+        } else {
+            renderErpEntries(d);
+        }
+    } catch(e) {
+        body.innerHTML = '<div style="color:var(--red)">Gagal terhubung ke server.</div>';
+    }
+    btn.disabled = false;
+}
+
+function statusBadge(row) {
+    if (Number(row.docstatus) === 2) return '<span class="badge badge-red">Dibatalkan</span>';
+    if (Number(row.docstatus) === 0) return '<span class="badge badge-yellow">Draft</span>';
+    if (row.status === 'Open') return '<span class="badge badge-yellow">Open</span>';
+    return `<span class="badge badge-green">${esc(row.status || 'Submitted')}</span>`;
+}
+
+function renderErpEntries(d) {
+    const opening = d.opening.map(o => `
+        <tr>
+            <td style="font-family:monospace;font-size:12px">${esc(o.name)}</td>
+            <td style="font-size:13px">${esc(o.user)}</td>
+            <td style="white-space:nowrap">${tglJam(o.period_start_date)}</td>
+            <td>${statusBadge(o)}</td>
+            <td>${o.has_closing
+                ? '<span class="badge badge-green">Sudah ditutup</span>'
+                : (Number(o.docstatus) === 1 && o.status === 'Open'
+                    ? '<span class="badge badge-yellow">Belum ditutup</span>'
+                    : '<span style="color:var(--text3)">—</span>')}</td>
+        </tr>`).join('');
+
+    const closing = d.closing.map(c => `
+        <tr>
+            <td style="font-family:monospace;font-size:12px">${esc(c.name)}</td>
+            <td style="font-size:13px">${esc(c.user)}</td>
+            <td style="white-space:nowrap">${tglJam(c.period_start_date)}</td>
+            <td style="white-space:nowrap">${tglJam(c.period_end_date)}</td>
+            <td style="text-align:right">${nf(c.grand_total)}</td>
+            <td style="text-align:right;color:var(--text2)">${nf(c.total_quantity)}</td>
+            <td style="font-family:monospace;font-size:11px;color:var(--text2)">${esc(c.pos_opening_entry) || '—'}</td>
+            <td>${statusBadge(c)}</td>
+        </tr>`).join('');
+
+    const kosong = (n) => `<tr><td colspan="${n}" style="text-align:center;padding:24px;color:var(--text3)">Tidak ada data pada rentang ini.</td></tr>`;
+
+    document.getElementById('erpEntriesBody').innerHTML = `
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
+            Rentang ${esc(d.from)} s/d ${esc(d.to)} — ${d.opening.length} Opening, ${d.closing.length} Closing.
+        </div>
+
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px">POS Opening Entry</div>
+        <div class="table-wrap" style="margin-bottom:20px">
+            <table>
+                <thead><tr>
+                    <th>Nama</th><th>Kasir</th><th>Mulai</th><th>Status</th><th>Penutupan</th>
+                </tr></thead>
+                <tbody>${opening || kosong(5)}</tbody>
+            </table>
+        </div>
+
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px">POS Closing Entry</div>
+        <div class="table-wrap">
+            <table>
+                <thead><tr>
+                    <th>Nama</th><th>Kasir</th><th>Mulai</th><th>Selesai</th>
+                    <th style="text-align:right">Grand Total</th><th style="text-align:right">Qty</th>
+                    <th>Opening</th><th>Status</th>
+                </tr></thead>
+                <tbody>${closing || kosong(8)}</tbody>
+            </table>
+        </div>`;
+}
+@endif
 
 function showOpenShift() {
     document.getElementById('openShiftModal').classList.add('show');

@@ -57,6 +57,11 @@ async function checkShift() {
         currentShift = d.has_open_shift ? d.shift : null;
         updateShiftUI();
         if (!currentShift) showOpenShift();
+        // Shift sisa yang lupa ditutup: kasir harus tahu sebelum menekan Tutup Kasir.
+        else if (currentShift.stale && !window.__staleShiftWarned) {
+            window.__staleShiftWarned = true;
+            toast(currentShift.stale_message, 'err');
+        }
     } catch(e) { console.error(e); }
 }
 

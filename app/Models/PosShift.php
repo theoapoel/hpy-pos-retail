@@ -39,6 +39,21 @@ class PosShift extends Model
         return (string) Setting::get('pos_shift_enabled', '0') === '1';
     }
 
+    /** Batas wajar umur sebuah shift sebelum dianggap terlantar (jam). */
+    public const BATAS_UMUR_JAM = 24;
+
+    /**
+     * Shift yang dibuka jauh sebelum hari ini — biasanya sisa yang lupa ditutup
+     * di ERP. Rekonsiliasinya akan menyapu rentang tanggal sepanjang umur shift,
+     * jadi kasir perlu diperingatkan alih-alih menutupnya begitu saja.
+     */
+    public function isStale(): bool
+    {
+        return $this->status === 'open'
+            && $this->opened_at
+            && $this->opened_at->diffInHours(now()) > self::BATAS_UMUR_JAM;
+    }
+
     /** Shift terbuka milik seorang kasir (bila ada). */
     public static function openFor(int $userId): ?self
     {

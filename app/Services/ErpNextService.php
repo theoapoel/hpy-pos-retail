@@ -2651,6 +2651,74 @@ class ErpNextService
     }
 
     /**
+     * Daftar POS Opening Entry di ERP untuk rentang tanggal tertentu.
+     *
+     * Sumbernya ERP, bukan tabel pos_shifts lokal, supaya shift yang dibuat di
+     * luar aplikasi ini (langsung di ERP, atau dari perangkat lain) tetap terlihat.
+     *
+     * @return array{success:bool, data?:array, error?:string}
+     */
+    public function listPosOpeningEntries(string $dateFrom, string $dateTo, ?string $userEmail = null): array
+    {
+        return $this->listPosShiftDocs('POS Opening Entry', [
+            'name', 'period_start_date', 'period_end_date', 'user', 'status', 'docstatus',
+        ], $dateFrom, $dateTo, $userEmail);
+    }
+
+    /**
+     * Daftar POS Closing Entry di ERP untuk rentang tanggal tertentu.
+     *
+     * @return array{success:bool, data?:array, error?:string}
+     */
+    public function listPosClosingEntries(string $dateFrom, string $dateTo, ?string $userEmail = null): array
+    {
+        return $this->listPosShiftDocs('POS Closing Entry', [
+            'name', 'period_start_date', 'period_end_date', 'user', 'status', 'docstatus',
+            'pos_opening_entry', 'grand_total', 'net_total', 'total_quantity',
+        ], $dateFrom, $dateTo, $userEmail);
+    }
+
+    /** Bagian yang sama dari kedua listing di atas. */
+    private function listPosShiftDocs(string $doctype, array $fields, string $dateFrom, string $dateTo, ?string $userEmail): array
+    {
+        if (! $this->isConfigured()) {
+            return ['success' => false, 'error' => 'ERP HPY belum dikonfigurasi.'];
+        }
+
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+
+        // period_start_date bertipe Datetime; batas atas diberi jam 23:59:59 supaya
+        // dokumen yang dibuka pada hari $dateTo tidak terpotong.
+        $filters = [
+            ['period_start_date', '>=', $dateFrom.' 00:00:00'],
+            ['period_start_date', '<=', $dateTo.' 23:59:59'],
+        ];
+        if ($posProfile) {
+            $filters[] = ['pos_profile', '=', $posProfile];
+        }
+        if ($userEmail) {
+            $filters[] = ['user', '=', $userEmail];
+        }
+
+        try {
+            $resp = $this->client->get('/api/resource/'.rawurlencode($doctype), [
+                'query' => [
+                    'fields' => json_encode($fields),
+                    'filters' => json_encode($filters),
+                    'order_by' => 'period_start_date desc',
+                    'limit_page_length' => 200,
+                ],
+            ]);
+
+            return ['success' => true, 'data' => json_decode($resp->getBody()->getContents(), true)['data'] ?? []];
+        } catch (ConnectException $e) {
+            return ['success' => false, 'error' => 'ERP HPY tidak dapat dijangkau.'];
+        } catch (RequestException $e) {
+            return ['success' => false, 'error' => $this->extractError($e)];
+        }
+    }
+
+    /**
      * Buat + submit POS Opening Entry untuk kasir.
      * $periodStart (Y-m-d H:i:s) dipakai saat menyusulkan shift yang dibuka offline,
      * supaya waktu buka di ERP sama dengan waktu buka sebenarnya.

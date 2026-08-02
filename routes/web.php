@@ -172,6 +172,7 @@ Route::middleware('auth')->group(function () {
     // Shift Kasir (Buka/Tutup Kasir) — POS Opening/Closing Entry
     Route::prefix('pos-shift')->name('pos-shift.')->middleware('permission:pos')->group(function () {
         Route::get('/', [PosShiftController::class, 'index'])->name('index');
+        Route::get('/erp-entries', [PosShiftController::class, 'erpEntries'])->name('erp-entries');
         Route::get('/current', [PosShiftController::class, 'current'])->name('current');
         Route::post('/open', [PosShiftController::class, 'open'])->name('open');
         Route::get('/reconcile', [PosShiftController::class, 'reconcile'])->name('reconcile');

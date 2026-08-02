@@ -91,6 +91,56 @@ class PosShiftController extends Controller
         ], 200);
     }
 
+    /**
+     * Daftar POS Opening & Closing Entry langsung dari ERP.
+     *
+     * Dimuat terpisah lewat AJAX, bukan ikut render halaman, supaya ERP yang
+     * lambat atau mati tidak menahan halaman Shift Kasir.
+     */
+    public function erpEntries(Request $request)
+    {
+        abort_unless(auth()->user()->isManager(), 403);
+
+        $from = $request->input('from', Carbon::now($this->tz())->subDays(29)->format('Y-m-d'));
+        $to = $request->input('to', Carbon::now($this->tz())->format('Y-m-d'));
+        $email = $request->filled('user_id')
+            ? User::whereKey($request->input('user_id'))->value('email')
+            : null;
+
+        $erp = new ErpNextService;
+        if (! $erp->isConfigured() || ! $erp->isReachable()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'ERP HPY tidak dapat dijangkau. Daftar di bawah hanya bisa ditarik saat ERP online.',
+            ]);
+        }
+
+        $opening = $erp->listPosOpeningEntries($from, $to, $email);
+        if (! $opening['success']) {
+            return response()->json(['success' => false, 'error' => $opening['error']]);
+        }
+
+        $closing = $erp->listPosClosingEntries($from, $to, $email);
+        if (! $closing['success']) {
+            return response()->json(['success' => false, 'error' => $closing['error']]);
+        }
+
+        // Opening yang sudah punya Closing ditandai supaya yang menggantung terlihat.
+        $closedOpenings = array_filter(array_column($closing['data'], 'pos_opening_entry'));
+
+        $openingRows = array_map(fn ($o) => $o + [
+            'has_closing' => in_array($o['name'], $closedOpenings, true),
+        ], $opening['data']);
+
+        return response()->json([
+            'success' => true,
+            'from' => $from,
+            'to' => $to,
+            'opening' => $openingRows,
+            'closing' => $closing['data'],
+        ]);
+    }
+
     /** Status shift kasir yang sedang login (untuk POS mengetahui perlu buka kasir atau tidak). */
     public function current()
     {
@@ -119,6 +169,12 @@ class PosShiftController extends Controller
                 'opening_cash' => (float) $shift->opening_cash,
                 'erp_opening_entry' => $shift->erp_opening_entry,
                 'offline' => ! $shift->erp_opening_entry,
+                'stale' => $shift->isStale(),
+                'stale_message' => $shift->isStale()
+                    ? 'Shift ini dibuka '.$shift->opened_at->diffForHumans().' dan belum ditutup di ERP HPY. '
+                        .'Tutup kasir akan merekonsiliasi seluruh rentang tanggal sejak shift itu dibuka — '
+                        .'periksa dulu ke admin sebelum menutup.'
+                    : null,
             ] : null,
         ]);
     }
