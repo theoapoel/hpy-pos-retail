@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 class PosShift extends Model
 {
@@ -54,9 +55,29 @@ class PosShift extends Model
             && $this->opened_at->diffInHours(now()) > self::BATAS_UMUR_JAM;
     }
 
-    /** Shift terbuka milik seorang kasir (bila ada). */
+    /** Shift terbuka milik seorang kasir (bila ada), tanpa memandang tanggal. */
     public static function openFor(int $userId): ?self
     {
         return static::where('user_id', $userId)->where('status', 'open')->latest('id')->first();
+    }
+
+    /**
+     * Shift terbuka milik seorang kasir yang dibuka HARI INI.
+     *
+     * Dipakai sebagai penentu boleh/tidaknya buka kasir: sisa shift hari-hari
+     * sebelumnya yang lupa ditutup tidak boleh mengunci kasir hari ini.
+     */
+    public static function openTodayFor(int $userId): ?self
+    {
+        $tz = Setting::get('timezone', 'Asia/Jakarta') ?: 'Asia/Jakarta';
+
+        return static::where('user_id', $userId)
+            ->where('status', 'open')
+            ->whereBetween('opened_at', [
+                Carbon::now($tz)->startOfDay(),
+                Carbon::now($tz)->endOfDay(),
+            ])
+            ->latest('id')
+            ->first();
     }
 }

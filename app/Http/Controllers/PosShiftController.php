@@ -26,7 +26,7 @@ class PosShiftController extends Controller
         $user = auth()->user();
         $isManager = $user->isManager();
 
-        $shift = PosShift::openFor($user->id);
+        $shift = PosShift::openTodayFor($user->id);
         if ($shift && ! $shift->erp_opening_entry) {
             $this->backfillOpeningEntry($shift);
             $shift->refresh();
@@ -148,7 +148,7 @@ class PosShiftController extends Controller
             return $this->disabledResponse();
         }
 
-        $shift = PosShift::openFor(auth()->id());
+        $shift = PosShift::openTodayFor(auth()->id());
 
         // Shift yang dibuka saat internet mati: coba susulkan ke ERP begitu online lagi.
         if ($shift && ! $shift->erp_opening_entry) {
@@ -196,8 +196,11 @@ class PosShiftController extends Controller
 
         $user = auth()->user();
 
-        if (PosShift::openFor($user->id)) {
-            return response()->json(['success' => false, 'error' => 'Masih ada shift terbuka. Tutup dulu sebelum membuka lagi.'], 422);
+        // Yang mengunci hanya shift yang dibuka HARI INI oleh kasir ini. Sisa
+        // shift hari sebelumnya yang lupa ditutup tetap bisa ditutup terpisah,
+        // tapi tidak boleh membuat kasir gagal membuka kasir hari ini.
+        if (PosShift::openTodayFor($user->id)) {
+            return response()->json(['success' => false, 'error' => 'Kasir ini sudah dibuka hari ini. Tutup dulu sebelum membuka lagi.'], 422);
         }
         if (! $user->email) {
             return response()->json(['success' => false, 'error' => 'Akun kasir tidak punya email (harus sama dengan ERP User).'], 422);
@@ -220,7 +223,7 @@ class PosShiftController extends Controller
             // yang diketik kasir diabaikan: ERP tidak bisa diubah lagi setelah
             // submit, jadi menyimpan angka berbeda secara lokal hanya membuat
             // rekonsiliasi tutup kasir meleset.
-            $existing = $erp->getOpenPosOpeningEntry($user->email);
+            $existing = $erp->getOpenPosOpeningEntry($user->email, Carbon::now($this->tz())->format('Y-m-d'));
             if ($existing) {
                 $openingName = $existing['name'];
                 $openingCash = $existing['opening_cash'];
@@ -288,7 +291,7 @@ class PosShiftController extends Controller
             return null;
         }
 
-        $entry = $erp->getOpenPosOpeningEntry($user->email);
+        $entry = $erp->getOpenPosOpeningEntry($user->email, Carbon::now($this->tz())->format('Y-m-d'));
         if (! $entry) {
             return null;
         }
@@ -341,7 +344,12 @@ class PosShiftController extends Controller
             return false;
         }
 
-        $name = $erp->findOpenPosOpeningEntry($email);
+        // Dicocokkan dengan tanggal shift lokal, bukan sembarang entry Open,
+        // supaya sisa opening entry hari lain tidak tertempel ke shift ini.
+        $name = $erp->findOpenPosOpeningEntry(
+            $email,
+            $shift->opened_at->setTimezone($this->tz())->format('Y-m-d')
+        );
         if (! $name) {
             $result = $erp->createPosOpeningEntry(
                 $email,

@@ -2773,19 +2773,28 @@ class ErpNextService
     }
 
     /** Cari POS Opening Entry berstatus Open milik kasir (email). Null bila tidak ada. */
-    public function findOpenPosOpeningEntry(string $userEmail): ?string
+    public function findOpenPosOpeningEntry(string $userEmail, ?string $onDate = null): ?string
     {
         $posProfile = Setting::get('erpnext_pos_profile', '');
+        $filters = [
+            ['status', '=', 'Open'],
+            ['docstatus', '=', 1],   // exclude opening entry yang sudah dibatalkan (status bisa tetap "Open")
+            ['user', '=', $userEmail],
+            ['pos_profile', '=', $posProfile],
+        ];
+        // Dibatasi satu tanggal saat dipakai untuk menentukan "kasir ini sudah
+        // buka hari ini atau belum" — sisa opening entry hari sebelumnya yang
+        // lupa ditutup tidak boleh menghalangi buka kasir hari ini.
+        if ($onDate) {
+            $filters[] = ['period_start_date', '>=', $onDate.' 00:00:00'];
+            $filters[] = ['period_start_date', '<=', $onDate.' 23:59:59'];
+        }
+
         try {
             $resp = $this->client->get('/api/resource/POS Opening Entry', [
                 'query' => [
                     'fields' => json_encode(['name']),
-                    'filters' => json_encode([
-                        ['status', '=', 'Open'],
-                        ['docstatus', '=', 1],   // exclude opening entry yang sudah dibatalkan (status bisa tetap "Open")
-                        ['user', '=', $userEmail],
-                        ['pos_profile', '=', $posProfile],
-                    ]),
+                    'filters' => json_encode($filters),
                     'order_by' => 'creation desc',
                     'limit_page_length' => 1,
                 ],
@@ -2809,9 +2818,9 @@ class ErpNextService
      *
      * @return array{name:string, period_start_date:?string, opening_cash:float}|null
      */
-    public function getOpenPosOpeningEntry(string $userEmail): ?array
+    public function getOpenPosOpeningEntry(string $userEmail, ?string $onDate = null): ?array
     {
-        $name = $this->findOpenPosOpeningEntry($userEmail);
+        $name = $this->findOpenPosOpeningEntry($userEmail, $onDate);
         if (! $name) {
             return null;
         }
