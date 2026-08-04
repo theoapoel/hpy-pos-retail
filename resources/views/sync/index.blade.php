@@ -348,6 +348,10 @@
                         <i class="fas fa-redo"></i> Retry {{ $stats['failed'] }} Gagal
                     </button>
                     @endif
+                    {{-- Status `synced` tidak menjamin dokumennya benar — audit membandingkan isinya. --}}
+                    <a href="{{ route('sync.audit') }}" class="btn btn-outline">
+                        <i class="fas fa-magnifying-glass-dollar"></i> Audit Dokumen
+                    </a>
                 </div>
             </div>
 

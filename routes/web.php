@@ -9,6 +9,7 @@ use App\Http\Controllers\DeliveryNoteController;
 use App\Http\Controllers\DeliveryOrderController;
 use App\Http\Controllers\DeliveryOrderPaymentController;
 use App\Http\Controllers\DeliveryOrderReportController;
+use App\Http\Controllers\ErpAuditController;
 use App\Http\Controllers\ErpSyncController;
 use App\Http\Controllers\FactoryResetController;
 use App\Http\Controllers\ModeOfPaymentReportController;
@@ -345,7 +346,12 @@ Route::middleware('auth')->group(function () {
             Route::post('/pull-customers', [ErpSyncController::class, 'pullCustomers'])->name('pull-customers');
             Route::post('/push-customer/{customer}', [ErpSyncController::class, 'pushCustomer'])->name('push-customer');
         });
+        Route::middleware('permission:sync')->group(function () {
+            Route::get('/audit', [ErpAuditController::class, 'index'])->name('audit');
+        });
         Route::middleware('role:admin')->group(function () {
+            // Membatalkan dokumen akuntansi yang sudah terbit — admin saja.
+            Route::post('/audit/{transaction}/resync', [ErpAuditController::class, 'resync'])->name('audit.resync');
             Route::post('/test-connection', [ErpSyncController::class, 'testConnection'])->name('test');
             Route::post('/settings', [ErpSyncController::class, 'saveSettings'])->name('settings');
             Route::get('/logs', [ErpSyncController::class, 'logs'])->name('logs');
