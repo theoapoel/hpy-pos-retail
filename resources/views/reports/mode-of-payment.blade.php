@@ -61,6 +61,13 @@
 
 {{-- Hasil --}}
 <div id="resultArea" style="display:none">
+    {{-- Redeem poin dibaca dari POS Invoice; kalau gagal, katakan apa adanya
+         supaya kolomnya tidak terbaca sebagai "tidak ada redeem". --}}
+    <div id="loyaltyWarn" class="alert alert-warning" style="display:none">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span id="loyaltyWarnMsg"></span>
+    </div>
+
     {{-- Empty state --}}
     <div id="emptyState" class="card" style="display:none">
         <div class="card-body" style="text-align:center;padding:48px 0;color:#80868B">
@@ -189,6 +196,11 @@ async function fetchReport() {
 
 function renderResult(json) {
     document.getElementById('resultArea').style.display   = 'block';
+    document.getElementById('loyaltyWarn').style.display = json.loyalty_error ? 'flex' : 'none';
+    if (json.loyalty_error) {
+        document.getElementById('loyaltyWarnMsg').textContent =
+            'Redeem Loyalty Point gagal dibaca dari POS Invoice: ' + json.loyalty_error;
+    }
     document.getElementById('matrixRange').textContent =
         document.getElementById('dateFrom').value + ' — ' + document.getElementById('dateTo').value;
 

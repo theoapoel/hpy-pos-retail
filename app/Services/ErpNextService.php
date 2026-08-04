@@ -256,6 +256,131 @@ class ErpNextService
         }
     }
 
+    // =========================================================
+    // AUDIT & KOREKSI POS INVOICE YANG SUDAH TERBIT
+    // =========================================================
+
+    /**
+     * Ambil satu POS Invoice beserta baris itemnya, untuk dibandingkan dengan
+     * transaksi lokal.
+     *
+     * `consolidated_invoice` ikut dibaca karena itu yang menentukan apakah dokumen
+     * ini masih boleh dibatalkan: begitu masuk POS Closing Entry, ERP menolak
+     * pembatalannya sampai Closing Entry-nya sendiri dibatalkan lebih dulu.
+     *
+     * @return array{success: bool, data?: array, error?: string}
+     */
+    public function fetchPosInvoice(string $docname): array
+    {
+        try {
+            $response = $this->client->get('/api/resource/POS Invoice/'.rawurlencode($docname));
+            $data = json_decode($response->getBody()->getContents(), true)['data'] ?? null;
+
+            if (! $data) {
+                return ['success' => false, 'error' => 'POS Invoice tidak ditemukan.'];
+            }
+
+            return ['success' => true, 'data' => $data];
+
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $this->readableError($e)];
+        }
+    }
+
+    /**
+     * Batalkan POS Invoice (docstatus 2).
+     *
+     * Sengaja TIDAK memaksa: kalau dokumennya sudah consolidated atau sudah batal,
+     * kita berhenti dengan pesan jelas, bukan mencoba mengakali ERP. Membatalkan
+     * POS Closing Entry adalah keputusan akuntansi yang harus diambil manusia.
+     */
+    public function cancelPosInvoice(string $docname): array
+    {
+        $current = $this->fetchPosInvoice($docname);
+        if (! $current['success']) {
+            return $current;
+        }
+
+        $doc = $current['data'];
+
+        if ((int) ($doc['docstatus'] ?? 0) === 2) {
+            return ['success' => false, 'error' => 'POS Invoice ini sudah dibatalkan di ERP.'];
+        }
+
+        if (! empty($doc['consolidated_invoice'])) {
+            return [
+                'success' => false,
+                'error' => 'POS Invoice sudah masuk POS Closing Entry ('.$doc['consolidated_invoice'].'). '
+                    .'Batalkan Closing Entry-nya lebih dulu di ERP, atau tempuh jalur credit note.',
+                'consolidated' => true,
+            ];
+        }
+
+        try {
+            $this->client->put('/api/resource/POS Invoice/'.rawurlencode($docname), [
+                'json' => ['docstatus' => 2],
+            ]);
+
+            return ['success' => true];
+
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $this->readableError($e)];
+        }
+    }
+
+    /**
+     * Terbitkan ulang satu transaksi ke ERP: batalkan POS Invoice lama, lalu kirim
+     * ulang dengan payload terkini.
+     *
+     * Dipakai untuk membetulkan dokumen yang terlanjur terbit dengan angka salah
+     * (mis. diskon item yang dulu hilang karena rate ditimpa Price List). Dokumen
+     * submitted tidak bisa diedit, jadi batalkan-dan-buat-ulang adalah satu-satunya
+     * jalan selain dokumen koreksi.
+     *
+     * Nomor invoice ERP yang lama dicatat ke erp_sync_logs sebelum ditimpa, supaya
+     * jejaknya tidak hilang saat kolom erp_pos_invoice diisi nomor yang baru.
+     */
+    public function resyncTransaction(Transaction $transaction): array
+    {
+        $oldDocname = $transaction->erp_pos_invoice;
+
+        if (! $oldDocname) {
+            return ['success' => false, 'error' => 'Transaksi ini belum punya POS Invoice di ERP — pakai Sync biasa.'];
+        }
+
+        $cancel = $this->cancelPosInvoice($oldDocname);
+        if (! $cancel['success']) {
+            $this->logSync('transaction_resync', $transaction->id, $transaction->invoice_no,
+                'failed', ['cancel' => $oldDocname], null, $oldDocname, $cancel['error']);
+
+            return $cancel;
+        }
+
+        $this->logSync('transaction_resync', $transaction->id, $transaction->invoice_no,
+            'success', ['cancelled' => $oldDocname], null, $oldDocname);
+
+        // Nomor lama dikosongkan dulu supaya kalau pembuatan ulang gagal, transaksi
+        // tidak menunjuk ke dokumen yang sudah batal seolah masih sah.
+        $transaction->update([
+            'erp_pos_invoice' => null,
+            'erp_sync_status' => 'pending',
+        ]);
+
+        $result = $this->syncTransaction($transaction->load('items.product', 'customer'));
+
+        if ($result['success']) {
+            $result['cancelled'] = $oldDocname;
+        }
+
+        return $result;
+    }
+
+    /** Pesan error Guzzle yang bisa dibaca kasir/admin, bukan dump HTML ERP. */
+    private function readableError(\Exception $e): string
+    {
+        return $e instanceof RequestException ? $this->extractError($e) : $e->getMessage();
+    }
+
     private function buildPosInvoicePayload(Transaction $transaction): array
     {
         $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY'));
@@ -263,15 +388,14 @@ class ErpNextService
         $priceList = Setting::get('erpnext_price_list', '');
 
         $items = $transaction->items->map(function ($item) {
-            // Fold diskon item ke dalam rate — kirim net rate langsung.
-            // Ini menghindari konflik dengan ERPNext ketika price_list_rate = 0
-            // (tidak ada price list), karena ERPNext akan menghitung diskon dari rate
-            // yang kita kirim, bukan dari price list.
+            // Diskon item dilipat ke dalam rate: yang dikirim adalah harga bersih.
             $discAmt = (float) $item->discount_amount;
-            $netRate = max(0, (float) $item->price - ($item->quantity > 0 ? $discAmt / $item->quantity : 0));
+            $grossRate = (float) $item->price;
+            $unitDisc = $item->quantity > 0 ? $discAmt / $item->quantity : 0.0;
+            $netRate = max(0, $grossRate - $unitDisc);
             $netAmount = $netRate * $item->quantity;
 
-            return [
+            $row = [
                 'item_code' => $item->product->erp_item_code ?? $item->product_sku,
                 'item_name' => $item->product_name,
                 'qty' => $item->quantity,
@@ -279,6 +403,25 @@ class ErpNextService
                 'amount' => $netAmount,
                 'uom' => $item->product->unit ?? 'Nos',
             ];
+
+            // `rate` saja TIDAK cukup. Kalau baris item tidak membawa price_list_rate,
+            // ERPNext mengisinya sendiri dari Selling Price List lalu menghitung ulang
+            // baris itu — karena tidak ada diskon yang tercatat, rate ikut dikembalikan
+            // ke harga penuh dan diskon kasir hilang di ERP (lokal terdiskon, ERP harga
+            // normal). Jadi diskonnya harus dinyatakan eksplisit: harga penuh di
+            // price_list_rate, potongannya di discount_amount/discount_percentage.
+            // Hitungan ERP (price_list_rate - discount_amount) menghasilkan netRate yang
+            // sama persis, jadi nilai uangnya tidak berubah — hanya jadi terbaca.
+            //
+            // Dikirim hanya saat memang ada diskon, supaya baris tanpa diskon tetap
+            // sama seperti sebelumnya dan tidak ada risiko baru pada penjualan normal.
+            if ($unitDisc > 0 && $grossRate > 0) {
+                $row['price_list_rate'] = $grossRate;
+                $row['discount_amount'] = $unitDisc;
+                $row['discount_percentage'] = round($unitDisc / $grossRate * 100, 6);
+            }
+
+            return $row;
         })->toArray();
 
         $total = (float) $transaction->total;
@@ -2751,13 +2894,18 @@ class ErpNextService
     // =========================================================
 
     /** Nama-nama Mode of Payment bertipe Cash (untuk perlakuan kembalian). */
-    public function getCashModeNames(): array
+    public function getCashModeNames(bool $onlyEnabled = false): array
     {
+        $filters = [['type', '=', 'Cash']];
+        if ($onlyEnabled) {
+            $filters[] = ['enabled', '=', 1];
+        }
+
         try {
             $resp = $this->client->get('/api/resource/Mode of Payment', [
                 'query' => [
                     'fields' => json_encode(['name']),
-                    'filters' => json_encode([['type', '=', 'Cash']]),
+                    'filters' => json_encode($filters),
                     'limit_page_length' => 0,
                 ],
             ]);
@@ -2770,6 +2918,57 @@ class ErpNextService
 
             return ['Cash'];
         }
+    }
+
+    /**
+     * Mode of Payment yang terdaftar di POS Profile, urut sesuai baris di ERP
+     * dan default-nya didahulukan.
+     *
+     * @return array<int, string>
+     */
+    public function getPosProfilePaymentModes(): array
+    {
+        $posProfile = Setting::get('erpnext_pos_profile', '');
+        if (! $posProfile) {
+            return [];
+        }
+
+        try {
+            $resp = $this->client->get('/api/resource/POS Profile/'.rawurlencode($posProfile));
+            $rows = json_decode($resp->getBody()->getContents(), true)['data']['payments'] ?? [];
+        } catch (\Throwable $e) {
+            Log::warning('getPosProfilePaymentModes gagal: '.$e->getMessage());
+
+            return [];
+        }
+
+        usort($rows, fn ($a, $b) => ((int) ($b['default'] ?? 0)) <=> ((int) ($a['default'] ?? 0)));
+
+        return array_values(array_filter(array_column($rows, 'mode_of_payment')));
+    }
+
+    /**
+     * Mode of Payment tunai yang dipakai untuk modal kas di POS Opening Entry.
+     *
+     * ERP menolak opening entry bila mode-nya tidak punya akun Cash/Bank default,
+     * dan Mode of Payment yang sudah dinonaktifkan biasanya memang tidak punya
+     * akun itu. Karena itu yang dipilih hanya mode tunai yang masih aktif, dan
+     * diutamakan yang benar-benar terdaftar di POS Profile.
+     */
+    public function resolveOpeningCashMode(): string
+    {
+        $cashModes = $this->getCashModeNames(true);
+        if (! $cashModes) {
+            return 'Cash';
+        }
+
+        foreach ($this->getPosProfilePaymentModes() as $mode) {
+            if (in_array($mode, $cashModes, true)) {
+                return $mode;
+            }
+        }
+
+        return $cashModes[0];
     }
 
     /** Cari POS Opening Entry berstatus Open milik kasir (email). Null bila tidak ada. */
@@ -2935,7 +3134,7 @@ class ErpNextService
             return ['success' => false, 'error' => 'POS Profile belum diset.'];
         }
 
-        $cashMode = $this->getCashModeNames()[0] ?? 'Cash';
+        $cashMode = $this->resolveOpeningCashMode();
         $now = $this->localNow();
         $start = $periodStart ?: $now->format('Y-m-d H:i:s');
 

@@ -10,9 +10,10 @@ use Illuminate\Http\Request;
 class ModeOfPaymentReportController extends Controller
 {
     /**
-     * Redeem poin dilaporkan di kolom terpisah (`loyalty`) oleh report, di luar
-     * kolom `amount` — jadi bisa ditampilkan sebagai komponen bayar tersendiri
-     * tanpa menggandakan nilai mode lain.
+     * Kolom redeem poin. Nilainya dibaca dari POS Invoice (`loyalty_amount` pada
+     * dokumen dengan redeem_loyalty_points = 1), bukan dari kolom `loyalty` di
+     * report — dan tidak menggandakan mode lain karena poin yang ditukar memang
+     * bukan bagian dari baris payments.
      */
     private const LOYALTY_MODE = 'Loyalty Point (Redeem)';
 
@@ -72,13 +73,30 @@ class ModeOfPaymentReportController extends Controller
             $byCashier[$cashier][$mode] = ($byCashier[$cashier][$mode] ?? 0) + $amount;
             $modeTotals[$mode] = ($modeTotals[$mode] ?? 0) + $amount;
 
-            $loyalty = (float) ($row['loyalty'] ?? 0);
-            if ($loyalty > 0) {
-                $lm = self::LOYALTY_MODE;
-                $matrix[$date][$lm] = ($matrix[$date][$lm] ?? 0) + $loyalty;
-                $byCashier[$cashier][$lm] = ($byCashier[$cashier][$lm] ?? 0) + $loyalty;
-                $modeTotals[$lm] = ($modeTotals[$lm] ?? 0) + $loyalty;
+        }
+
+        // Redeem poin TIDAK diambil dari kolom `loyalty` report, melainkan langsung
+        // dari POS Invoice yang memang menandai redeem_loyalty_points = 1 — supaya
+        // yang tampil benar-benar nilai tukar poin per dokumen.
+        $loyalty = $erp->fetchLoyaltyRedemptions(
+            $request->date_from,
+            $request->date_to,
+            Setting::get('erpnext_pos_profile', ''),
+            $onlyCashier
+        );
+
+        foreach ($loyalty['data'] as $inv) {
+            $date = $inv['posting_date'];
+            if ($date === '') {
+                continue;
             }
+
+            $cashier = $inv['owner'] ?: 'Lainnya';
+            $lm = self::LOYALTY_MODE;
+
+            $matrix[$date][$lm] = ($matrix[$date][$lm] ?? 0) + $inv['amount'];
+            $byCashier[$cashier][$lm] = ($byCashier[$cashier][$lm] ?? 0) + $inv['amount'];
+            $modeTotals[$lm] = ($modeTotals[$lm] ?? 0) + $inv['amount'];
         }
 
         arsort($modeTotals);
@@ -136,6 +154,7 @@ class ModeOfPaymentReportController extends Controller
             'modes' => $modes,
             // Dipakai view untuk menandai kolom redeem poin (bukan uang masuk).
             'loyalty_mode' => self::LOYALTY_MODE,
+            'loyalty_error' => $loyalty['success'] ? null : ($loyalty['error'] ?? null),
             'rows' => $rows,
             'cashier_rows' => $cashierRows,
             'totals' => [

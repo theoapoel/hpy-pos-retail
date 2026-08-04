@@ -188,7 +188,7 @@ class PosController extends Controller
             return response()->json(['has_program' => false, 'points' => 0, 'reason' => 'not_linked']);
         }
 
-        $erp = new ErpNextService;
+        $erp = app(ErpNextService::class);
         if (! $erp->isConfigured()) {
             // ERP tidak tersedia — tampilkan saldo hasil pull terakhir, tapi jangan
             // izinkan penukaran, karena angkanya belum tentu masih berlaku.
@@ -211,11 +211,20 @@ class PosController extends Controller
         }
 
         // Segarkan cache lokal supaya badge di daftar pelanggan ikut akurat.
-        $customer->update([
-            'loyalty_points' => $result['points'],
-            'erp_loyalty_program' => $result['loyalty_program'] ?? null,
-            'loyalty_synced_at' => now(),
-        ]);
+        //
+        // HANYA saat program benar-benar terbaca. Balasan has_program=false bukan
+        // bukti saldonya nol: getLoyaltyDetails() juga membalas begitu ketika nama
+        // program gagal diselesaikan (fetchCustomerLoyaltyProgram mengembalikan
+        // null saat request-nya error). Kalau tetap ditulis, erp_loyalty_program
+        // ikut terhapus, panggilan berikutnya makin pasti gagal, dan pelanggan
+        // terkunci di 0 poin secara lokal padahal ERP masih mencatat saldonya.
+        if ($result['has_program'] ?? false) {
+            $customer->update([
+                'loyalty_points' => $result['points'],
+                'erp_loyalty_program' => $result['loyalty_program'] ?? null,
+                'loyalty_synced_at' => now(),
+            ]);
+        }
 
         return response()->json([
             'has_program' => $result['has_program'],
@@ -240,7 +249,7 @@ class PosController extends Controller
             ]);
         }
 
-        $erp = new ErpNextService;
+        $erp = app(ErpNextService::class);
         if (! $erp->isConfigured()) {
             return response()->json([
                 'success' => false,
@@ -285,7 +294,7 @@ class PosController extends Controller
             throw new \RuntimeException('Pelanggan belum tertaut ke ERP, poin tidak bisa ditukar.');
         }
 
-        $erp = new ErpNextService;
+        $erp = app(ErpNextService::class);
 
         // ERP mati bukan alasan untuk menolak transaksi — poin dilewati saja dan
         // kasir diberi tahu. Saldo poin tidak ikut terpotong, jadi pelanggan bisa
@@ -476,7 +485,7 @@ class PosController extends Controller
             // Auto-sync to ERPNext if configured, reachable, and auto-sync is enabled
             try {
                 $autoSync = Setting::get('erp_auto_sync', '1') === '1';
-                $erp = new ErpNextService;
+                $erp = app(ErpNextService::class);
                 // isReachable() wajib diperiksa, bukan cuma isConfigured(): kalau ERP
                 // hidup tapi menggantung, tiap panggilan di bawah menunggu sampai 30
                 // detik dan kasir mengira POS-nya mati. Transaksi sudah ter-commit di
@@ -490,9 +499,11 @@ class PosController extends Controller
                     $cust = $transaction->customer;
                     if ($cust?->erp_customer_name) {
                         $details = $erp->getLoyaltyDetails($cust->erp_customer_name, $cust->erp_loyalty_program);
-                        if ($details['success'] ?? false) {
+                        // has_program wajib diperiksa — lihat catatan di loyaltyDetails().
+                        if (($details['success'] ?? false) && ($details['has_program'] ?? false)) {
                             $cust->update([
                                 'loyalty_points' => $details['points'],
+                                'erp_loyalty_program' => $details['loyalty_program'] ?? $cust->erp_loyalty_program,
                                 'loyalty_synced_at' => now(),
                             ]);
                         }

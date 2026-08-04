@@ -402,11 +402,28 @@ class ErpSyncController extends Controller
             $balances = $result['balances'];
 
             if (! $result['success']) {
-                $loyaltyError = $result['error'] ?? 'gagal membaca Loyalty Point Entry';
+                // Ledger terbaca separuh jalan. Jangan ditulis sama sekali: halaman
+                // yang belum terbaca membuat saldo tampak jauh lebih kecil dari
+                // yang di ERP, dan itu justru sumber selisih yang paling sulit
+                // dilacak karena angkanya terlihat wajar.
+                $loyaltyError = ($result['error'] ?? 'gagal membaca Loyalty Point Entry')
+                    .' — saldo poin tidak diperbarui agar tidak terisi angka separuh.';
+                $balances = [];
             }
 
             // Hanya customer yang memang ada di ERP hasil tarikan ini yang disentuh.
             $wanted = array_flip($erpNames);
+
+            // Pelanggan yang sama sekali tidak punya baris Loyalty Point Entry berarti
+            // saldonya nol di ERP. Tanpa baris ini nilai lama di lokal akan bertahan
+            // selamanya dan terlihat seperti "poin tidak update".
+            if ($result['success']) {
+                foreach ($erpNames as $erpName) {
+                    if (! isset($balances[$erpName])) {
+                        $balances[$erpName] = 0.0;
+                    }
+                }
+            }
 
             foreach ($balances as $erpName => $points) {
                 if (! isset($wanted[$erpName])) {
