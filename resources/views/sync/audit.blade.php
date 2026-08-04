@@ -136,7 +136,7 @@
         </div>
         @endif
 
-        @if($row['selisih'] && auth()->user()->role === 'admin')
+        @if($row['selisih'])
         <div class="card-body" style="border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
             <div style="font-size:12px;color:var(--text3)">
                 Membatalkan POS Invoice lama di ERP lalu menerbitkan ulang dari data kasir.

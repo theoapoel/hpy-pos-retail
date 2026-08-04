@@ -348,10 +348,12 @@ Route::middleware('auth')->group(function () {
         });
         Route::middleware('permission:sync')->group(function () {
             Route::get('/audit', [ErpAuditController::class, 'index'])->name('audit');
+            // Tidak dibatasi admin: yang menentukan boleh-tidaknya adalah dokumen ERP
+            // sendiri — invoice yang sudah consolidated ditolak, dan itu pengaman yang
+            // sebenarnya. Siapa pun yang boleh membuka Sync HPY boleh membetulkan.
+            Route::post('/audit/{transaction}/resync', [ErpAuditController::class, 'resync'])->name('audit.resync');
         });
         Route::middleware('role:admin')->group(function () {
-            // Membatalkan dokumen akuntansi yang sudah terbit — admin saja.
-            Route::post('/audit/{transaction}/resync', [ErpAuditController::class, 'resync'])->name('audit.resync');
             Route::post('/test-connection', [ErpSyncController::class, 'testConnection'])->name('test');
             Route::post('/settings', [ErpSyncController::class, 'saveSettings'])->name('settings');
             Route::get('/logs', [ErpSyncController::class, 'logs'])->name('logs');

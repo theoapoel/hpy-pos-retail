@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Models\RolePermission;
 use App\Models\Setting;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
@@ -170,9 +171,38 @@ class ErpDocumentAuditTest extends TestCase
         $this->assertSame('ACC-PSINV-2026-0001', $trx->erp_pos_invoice);
     }
 
-    public function test_kasir_tidak_boleh_menerbitkan_ulang(): void
+    public function test_non_admin_dengan_akses_sync_boleh_menerbitkan_ulang(): void
+    {
+        // Pembatasan admin sengaja dilepas: yang menentukan boleh-tidaknya adalah
+        // dokumen ERP sendiri (invoice consolidated ditolak), bukan role pemakai.
+        Setting::set('erpnext_url', 'https://erp.test');
+        $this->actingAs(User::create([
+            'name' => 'Manager',
+            'email' => 'manager.uji@larapos.test',
+            'password' => bcrypt('password'),
+            'role' => 'manager',
+        ]));
+
+        $trx = $this->transaksi();
+
+        $erp = $this->erpMock();
+        $erp->shouldReceive('resyncTransaction')->once()->andReturn([
+            'success' => true,
+            'docname' => 'ACC-PSINV-2026-0099',
+        ]);
+
+        $this->postJson(route('sync.audit.resync', $trx))
+            ->assertOk()
+            ->assertJsonPath('invoice_baru', 'ACC-PSINV-2026-0099');
+    }
+
+    public function test_tanpa_akses_sync_tetap_ditolak(): void
     {
         Setting::set('erpnext_url', 'https://erp.test');
+
+        RolePermission::updateOrCreate(['role' => 'cashier', 'module' => 'sync'], ['allowed' => false]);
+        RolePermission::clearCache('cashier');
+
         $this->actingAs(User::create([
             'name' => 'Kasir',
             'email' => 'kasir.uji@larapos.test',
