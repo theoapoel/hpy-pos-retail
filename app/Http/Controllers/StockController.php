@@ -140,7 +140,7 @@ class StockController extends Controller
         // Index produk by erp_item_code untuk lookup O(1)
         $products = Product::where('track_stock', true)
             ->whereNotNull('erp_item_code')
-            ->select('id', 'erp_item_code')
+            ->select('id', 'erp_item_code', 'stock')
             ->get()
             ->keyBy('erp_item_code');
 
@@ -169,6 +169,13 @@ class StockController extends Controller
         $writeError  = null;
         $updatedIds  = [];
 
+        // Stok yang sudah tersimpan, untuk membandingkan sebelum menulis. Antar sync
+        // hampir semua qty tidak berubah — menulis ulang 64 ribu baris tiap kali
+        // adalah beban terbesar di endpoint ini.
+        $existing = ProductStock::where('warehouse_id', $warehouse->id)
+            ->pluck('quantity', 'product_id')
+            ->all();
+
         // Kumpulkan dulu, tulis belakangan secara borongan. updateOrCreate per bin
         // berarti satu SELECT + satu INSERT/UPDATE untuk tiap item — dengan puluhan
         // ribu bin, request-nya habis waktu sebelum selesai.
@@ -187,22 +194,26 @@ class StockController extends Controller
 
             $qty = (int) round($bin['actual_qty']);
 
-            $rows[] = [
-                'product_id'   => $product->id,
-                'warehouse_id' => $warehouse->id,
-                'quantity'     => $qty,
-                'created_at'   => $now,
-                'updated_at'   => $now,
-            ];
+            // updatedIds dipakai untuk menentukan baris basi di bawah — semua produk
+            // yang ada di ERP masuk hitungan, berubah atau tidak.
+            $updatedIds[] = $product->id;
+
+            if (($existing[$product->id] ?? null) !== $qty) {
+                $rows[] = [
+                    'product_id'   => $product->id,
+                    'warehouse_id' => $warehouse->id,
+                    'quantity'     => $qty,
+                    'created_at'   => $now,
+                    'updated_at'   => $now,
+                ];
+                $updated++;
+            }
 
             // products.stock hanya mengikuti warehouse default. Dikelompokkan per
             // qty supaya bisa diupdate borongan, bukan satu query per produk.
-            if ($warehouse->is_default) {
+            if ($warehouse->is_default && (int) $product->stock !== $qty) {
                 $idsByQty[$qty][] = $product->id;
             }
-
-            $updatedIds[] = $product->id;
-            $updated++;
         }
 
         try {
@@ -234,15 +245,13 @@ class StockController extends Controller
         // dengan puluhan ribu produk query-nya menembus batas 65.535 milik MySQL
         // (error 1390). Bandingkan di PHP, lalu hapus per potongan.
         $keep     = array_flip($updatedIds);
-        $staleIds = ProductStock::where('warehouse_id', $warehouse->id)
-            ->pluck('product_id', 'id')
-            ->reject(fn ($productId) => isset($keep[$productId]))
-            ->keys()
-            ->all();
+        $staleIds = array_keys(array_diff_key($existing, $keep));
 
         $removed = 0;
         foreach (array_chunk($staleIds, 1000) as $chunk) {
-            $removed += ProductStock::whereIn('id', $chunk)->delete();
+            $removed += ProductStock::where('warehouse_id', $warehouse->id)
+                ->whereIn('product_id', $chunk)
+                ->delete();
         }
 
         // Verifikasi: hitung baris yang tersimpan
@@ -254,6 +263,7 @@ class StockController extends Controller
             'erp_name'   => $warehouse->name,
             'is_default' => $warehouse->is_default,
             'bin_count'  => count($bins),
+            'matched'    => count($updatedIds),
             'updated'    => $updated,
             'skipped'    => $skipped,
             'removed'    => $removed,
