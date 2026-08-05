@@ -359,47 +359,55 @@ class StockController extends Controller
 
         $selectedWarehouse = $warehouses->firstWhere('id', $selectedWarehouseId);
 
+        // Join langsung ke products. whereHas bersarang menghasilkan EXISTS subquery
+        // per baris — dengan puluhan ribu baris stok request-nya kehabisan waktu.
         $query = ProductStock::with(['product.category', 'product.itemCategory'])
-            ->where('warehouse_id', $selectedWarehouseId)
-            ->whereHas('product', fn($q) => $q->where('is_active', true)->where('track_stock', true));
+            ->join('products', 'products.id', '=', 'product_stocks.product_id')
+            ->where('product_stocks.warehouse_id', $selectedWarehouseId)
+            ->where('products.is_active', true)
+            ->where('products.track_stock', true);
 
         if ($request->search) {
-            $query->whereHas('product', function ($q) use ($request) {
-                $q->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('sku', 'like', "%{$request->search}%")
-                  ->orWhere('barcode', 'like', "%{$request->search}%");
+            $query->where(function ($q) use ($request) {
+                $q->where('products.name', 'like', "%{$request->search}%")
+                  ->orWhere('products.sku', 'like', "%{$request->search}%")
+                  ->orWhere('products.barcode', 'like', "%{$request->search}%");
             });
         }
 
         if ($request->item_category_id) {
-            $query->whereHas('product', fn($q) => $q->where('item_category_id', $request->item_category_id));
+            $query->where('products.item_category_id', $request->item_category_id);
         }
 
         if ($request->status === 'empty') {
-            $query->where('quantity', '<=', 0);
+            $query->where('product_stocks.quantity', '<=', 0);
         } elseif ($request->status === 'low') {
-            $query->where('quantity', '>', 0)
-                  ->whereHas('product', fn($q) => $q->whereColumn('product_stocks.quantity', '<=', 'products.min_stock'));
+            $query->where('product_stocks.quantity', '>', 0)
+                  ->whereColumn('product_stocks.quantity', '<=', 'products.min_stock');
         } elseif ($request->status === 'safe') {
-            $query->where('quantity', '>', 0)
-                  ->whereHas('product', fn($q) => $q->whereColumn('product_stocks.quantity', '>', 'products.min_stock'));
+            $query->where('product_stocks.quantity', '>', 0)
+                  ->whereColumn('product_stocks.quantity', '>', 'products.min_stock');
         }
 
-        $stocks = $query->join('products', 'products.id', '=', 'product_stocks.product_id')
-            ->orderBy('products.name')
+        $stocks = $query->orderBy('products.name')
             ->select('product_stocks.*')
             ->paginate(50)
             ->withQueryString();
 
-        // Summary stats untuk warehouse yang dipilih
-        $allInWarehouse = ProductStock::where('warehouse_id', $selectedWarehouseId)
-            ->whereHas('product', fn($q) => $q->where('is_active', true)->where('track_stock', true));
+        // Empat ringkasan dihitung dalam satu query agregat, bukan empat count terpisah.
+        $summary = ProductStock::query()
+            ->join('products', 'products.id', '=', 'product_stocks.product_id')
+            ->where('product_stocks.warehouse_id', $selectedWarehouseId)
+            ->where('products.is_active', true)
+            ->where('products.track_stock', true)
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw('SUM(product_stocks.quantity <= 0) AS empty_count')
+            ->selectRaw('SUM(product_stocks.quantity > 0 AND product_stocks.quantity <= products.min_stock) AS low_count')
+            ->first();
 
-        $totalProducts = (clone $allInWarehouse)->count();
-        $totalEmpty    = (clone $allInWarehouse)->where('quantity', '<=', 0)->count();
-        $totalLow      = (clone $allInWarehouse)->where('quantity', '>', 0)
-            ->whereHas('product', fn($q) => $q->whereColumn('product_stocks.quantity', '<=', 'products.min_stock'))
-            ->count();
+        $totalProducts = (int) ($summary->total ?? 0);
+        $totalEmpty    = (int) ($summary->empty_count ?? 0);
+        $totalLow      = (int) ($summary->low_count ?? 0);
         $totalSafe     = $totalProducts - $totalEmpty - $totalLow;
 
         $itemCategories = ItemCategory::active()->orderBy('name')->get();
