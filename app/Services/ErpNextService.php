@@ -718,13 +718,18 @@ class ErpNextService
     // =========================================================
     // PULL PRODUCTS FROM ERPNext
     // =========================================================
-    public function pullProducts(int $limit = 100, int $start = 0): array
+    public function pullProducts(int $limit = 100, int $start = 0, ?string $modifiedSince = null): array
     {
         try {
             $fields = '["name","item_name","item_code","description","item_group","kategori","standard_rate","valuation_rate","stock_uom","is_sales_item","disabled","has_variants","image"]';
             // Tarik semua item (termasuk yang disabled) supaya item yang dinonaktifkan di
             // ERP ikut dinonaktifkan lokal. Filtering disabled ditangani di ErpSyncController.
-            $filters = '[]';
+            //
+            // $modifiedSince membatasi ke item yang berubah sejak tanggal tsb — puluhan ribu
+            // item di ERP berarti ratusan halaman, dan hampir semuanya tidak berubah.
+            $filters = $modifiedSince
+                ? json_encode([['modified', '>=', $modifiedSince]])
+                : '[]';
 
             $response = $this->client->get('/api/resource/Item', [
                 'timeout' => 120,
@@ -733,6 +738,9 @@ class ErpNextService
                     'filters' => $filters,
                     'limit' => $limit,
                     'limit_start' => $start,
+                    // Default ERPNext `modified desc` membuat paging bergeser kalau ada item
+                    // yang berubah di tengah sync. Urutan naik lebih stabil.
+                    'order_by' => 'modified asc',
                 ],
             ]);
 

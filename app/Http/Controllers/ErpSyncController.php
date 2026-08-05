@@ -123,15 +123,26 @@ class ErpSyncController extends Controller
 
         $reset = $request->boolean('reset');
 
+        // Mode inkremental: hanya tarik item yang berubah di ERP dalam N hari terakhir.
+        // Full pull menarik puluhan ribu item — ratusan halaman × 3 request API per halaman
+        // (Item, Item Price, Item Barcode) — dan hampir semuanya tidak berubah.
+        // `since_days=0` (atau reset) memaksa full pull.
+        $sinceDays = $request->has('since_days') ? (int) $request->input('since_days') : 30;
+        $modifiedSince = ($reset || $sinceDays <= 0)
+            ? null
+            : now()->subDays($sinceDays)->format('Y-m-d H:i:s');
+
         $imported = 0;
         $updated = 0;
         $disabledDeactivated = 0;
         $page = 0;
-        $pageSize = 100;
+        // 200/halaman: lebih besar berisiko membuat query string Item Price/Item Barcode
+        // (yang mengirim seluruh item code) menembus batas panjang URL server ERP.
+        $pageSize = 200;
         $seenItemCodes = [];
 
         do {
-            $result = $this->erp->pullProducts($pageSize, $page * $pageSize);
+            $result = $this->erp->pullProducts($pageSize, $page * $pageSize, $modifiedSince);
 
             if (! $result['success']) {
                 return response()->json([
@@ -259,6 +270,8 @@ class ErpSyncController extends Controller
 
         return response()->json([
             'success' => true,
+            'mode' => $modifiedSince ? "perubahan {$sinceDays} hari terakhir" : 'semua produk',
+            'modified_since' => $modifiedSince,
             'imported' => $imported,
             'updated' => $updated,
             'total' => $imported + $updated,

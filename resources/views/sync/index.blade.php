@@ -359,9 +359,18 @@
             <div style="background:var(--surface2);border-radius:10px;padding:16px">
                 <div style="font-weight:700;font-size:14px;margin-bottom:4px"><i class="fas fa-arrow-down text-green"></i> Pull dari HPY</div>
                 <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Ambil data produk dan user kasir dari HPY ke lokal</div>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:8px">
+                    Tarik produk yang berubah:
+                    <select id="pullProductsSince" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+                        <option value="7">7 hari terakhir</option>
+                        <option value="30" selected>30 hari terakhir</option>
+                        <option value="90">90 hari terakhir</option>
+                        <option value="0">Semua produk (lambat)</option>
+                    </select>
+                </label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:10px;cursor:pointer">
                     <input type="checkbox" id="resetProductsCheckbox">
-                    Reset & sinkron ulang dari nol (nonaktifkan produk yang sudah tidak ada di ERP, bersihkan kategori kosong)
+                    Reset & sinkron ulang dari nol (nonaktifkan produk yang sudah tidak ada di ERP, bersihkan kategori kosong) — selalu tarik semua produk
                 </label>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn btn-success" onclick="pullProducts()" id="pullProductsBtn">
@@ -663,28 +672,38 @@ async function pullPaymentMethods() {
 async function pullProducts() {
     const btn    = document.getElementById('pullProductsBtn');
     const reset  = document.getElementById('resetProductsCheckbox').checked;
+    const since  = document.getElementById('pullProductsSince').value;
 
-    if (reset && !confirm('Reset & sinkron ulang dari nol akan menonaktifkan produk lokal yang sudah tidak ada di ERP, dan menghapus kategori yang tidak dipakai produk manapun. Lanjutkan?')) {
+    if (reset && !confirm('Reset & sinkron ulang dari nol akan menarik SEMUA produk dari ERP (bisa memakan waktu lama), menonaktifkan produk lokal yang sudah tidak ada di ERP, dan menghapus kategori yang tidak dipakai produk manapun. Lanjutkan?')) {
+        return;
+    }
+    if (!reset && since === '0' && !confirm('Menarik semua produk bisa memakan waktu sangat lama. Untuk pemakaian harian cukup pilih rentang hari. Lanjutkan?')) {
         return;
     }
 
-    btn.innerHTML = '<span class="spinner"></span> Menarik semua produk...';
+    const scope = (reset || since === '0') ? 'semua produk' : `perubahan ${since} hari terakhir`;
+
+    btn.innerHTML = '<span class="spinner"></span> Menarik produk...';
     btn.disabled = true;
 
     // Tampilkan info bahwa ini mungkin butuh waktu untuk data besar
     const resultEl = document.getElementById('syncResult');
     resultEl.style.display = '';
-    resultEl.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Menarik produk dari HPY, harap tunggu... (data besar mungkin butuh beberapa menit)';
+    resultEl.innerHTML = `<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Menarik ${scope} dari HPY, harap tunggu...`;
 
     try {
-        const resp = await fetch('{{ route("sync.pull-products") }}' + (reset ? '?reset=1' : ''), {
+        const params = new URLSearchParams();
+        if (reset) params.set('reset', '1');
+        params.set('since_days', reset ? '0' : since);
+
+        const resp = await fetch('{{ route("sync.pull-products") }}?' + params.toString(), {
             method:'POST',
             headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}
         });
         const data = await resp.json();
         if (data.success) {
             showSyncResult({...data, label: 'Produk'});
-            let msg = `Produk: ${data.imported} baru, ${data.updated} diupdate — total ${data.total} record`;
+            let msg = `Produk (${data.mode}): ${data.imported} baru, ${data.updated} diupdate — total ${data.total} record`;
             if (data.disabled_deactivated) msg += `, ${data.disabled_deactivated} dinonaktifkan (disabled/template ERP)`;
             if (reset) msg += `, ${data.deactivated} dinonaktifkan, ${data.categories_pruned} kategori dibersihkan`;
             toast(msg, 'success');
