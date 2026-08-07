@@ -199,7 +199,16 @@ class PosController extends Controller
             ]);
         }
 
-        $result = $erp->getLoyaltyDetails($customer->erp_customer_name, $customer->erp_loyalty_program);
+        // Parameter validator POS Invoice, bukan parameter default — lihat catatan
+        // di getLoyaltyDetails(). Angka yang muncul di layar kasir harus angka yang
+        // sama dengan yang dipakai ERP untuk meloloskan submit; kalau di sini lebih
+        // besar, kasir menawarkan poin yang pasti ditolak saat sync.
+        $result = $erp->getLoyaltyDetails(
+            $customer->erp_customer_name,
+            $customer->erp_loyalty_program,
+            now()->format('Y-m-d'),
+            true
+        );
 
         if (! ($result['success'] ?? false)) {
             return response()->json([
@@ -305,7 +314,28 @@ class PosController extends Controller
             ]);
         }
 
-        $details = $erp->getLoyaltyDetails($customer->erp_customer_name, $customer->erp_loyalty_program);
+        // Auto-sync mati diperlakukan sama: penukaran poin hanya sah kalau invoice-nya
+        // bisa langsung diterima ERP di detik ini juga (lihat checkout()). Kalau sync
+        // ditunda, poin yang dijanjikan ke pelanggan bisa ditolak berjam-jam kemudian.
+        if (Setting::get('erp_auto_sync', '1') !== '1') {
+            return array_merge($none, [
+                'warning' => 'Auto-sync HPY sedang dimatikan — poin TIDAK ditukar pada transaksi ini. Saldo poin pelanggan tetap utuh.',
+            ]);
+        }
+
+        // Ditanyakan dengan parameter yang PERSIS dipakai validator POS Invoice di
+        // ERP (expiry_date = posting_date invoice, include_expired_entry = 1).
+        // Saldo untuk badge kasir dihitung dengan parameter default dan angkanya
+        // bisa berbeda; yang menentukan diterima/ditolaknya submit hanya angka
+        // versi validator ini. Memakai angka lain berarti transaksi lolos di kasir
+        // lalu gagal sync — persis kasus "You don't have enought Loyalty Points
+        // to redeem" yang muncul setelah struk tercetak.
+        $details = $erp->getLoyaltyDetails(
+            $customer->erp_customer_name,
+            $customer->erp_loyalty_program,
+            now()->format('Y-m-d'),
+            true
+        );
 
         if (! ($details['success'] ?? false)) {
             throw new \RuntimeException('Gagal memeriksa saldo poin di ERP: '.($details['error'] ?? 'unknown'));
@@ -480,37 +510,70 @@ class PosController extends Controller
                     ->increment('total_purchase', $total);
             }
 
+            // Auto-sync to ERPNext if configured, reachable, and auto-sync is enabled.
+            //
+            // Sengaja dijalankan SEBELUM commit ketika ada penukaran poin. Validasi
+            // saldo Loyalty Point di ERP baru dieksekusi saat POS Invoice di-submit,
+            // jadi hanya submit yang berhasil yang membuktikan poinnya benar-benar
+            // diterima. Kalau ditolak, transaksinya di-rollback utuh — stok kembali,
+            // struk tidak pernah tercetak, dan kasir langsung tahu — bukan mengendap
+            // sebagai transaksi erp_sync_status=failed yang harus diurus belakangan.
+            $usesLoyalty = ($loyalty['points'] ?? 0) > 0;
+            $erp = app(ErpNextService::class);
+            // isReachable() wajib diperiksa, bukan cuma isConfigured(): kalau ERP
+            // hidup tapi menggantung, tiap panggilan di bawah menunggu sampai 30
+            // detik dan kasir mengira POS-nya mati.
+            $canSync = Setting::get('erp_auto_sync', '1') === '1'
+                && $erp->isConfigured()
+                && $erp->isReachable();
+
+            if ($usesLoyalty && ! $canSync) {
+                // Nyaris mustahil (resolveLoyaltyRedemption sudah menolak poin saat
+                // ERP tak terjangkau), tapi jaraknya beberapa detik — kalau ERP mati
+                // di sela itu, poin tidak boleh terlanjur dijanjikan.
+                throw new \RuntimeException('Koneksi HPY terputus sebelum penukaran poin tercatat. Ulangi transaksi tanpa poin.');
+            }
+
+            if ($canSync) {
+                try {
+                    // precheckLoyalty=false: saldo baru saja diperiksa di
+                    // resolveLoyaltyRedemption(), tidak perlu satu round-trip lagi.
+                    $sync = $erp->syncTransaction($transaction->load('items.product', 'customer'), false);
+                } catch (\Exception $e) {
+                    $sync = ['success' => false, 'error' => $e->getMessage()];
+                }
+
+                // Tanpa poin, gagal sync tidak menggagalkan checkout: transaksinya
+                // tetap sah dan tinggal disinkronkan ulang dari menu Sinkronisasi.
+                if ($usesLoyalty && ! ($sync['success'] ?? false)) {
+                    throw new \RuntimeException(
+                        'Penukaran poin ditolak HPY: '.($sync['error'] ?? 'tidak diketahui').
+                        ' — transaksi dibatalkan. Ulangi tanpa poin atau periksa saldo poin pelanggan.'
+                    );
+                }
+            }
+
             DB::commit();
 
-            // Auto-sync to ERPNext if configured, reachable, and auto-sync is enabled
+            // Setelah invoice masuk, ERP menambah (dan bila ditukar, memotong)
+            // Loyalty Point Entry. Tarik ulang saldonya supaya badge di kasir
+            // tidak menampilkan angka sebelum transaksi ini. Di luar commit karena
+            // ini murni penyegaran cache — gagal pun tidak mengubah keabsahan struk.
             try {
-                $autoSync = Setting::get('erp_auto_sync', '1') === '1';
-                $erp = app(ErpNextService::class);
-                // isReachable() wajib diperiksa, bukan cuma isConfigured(): kalau ERP
-                // hidup tapi menggantung, tiap panggilan di bawah menunggu sampai 30
-                // detik dan kasir mengira POS-nya mati. Transaksi sudah ter-commit di
-                // atas, jadi melewati sync sepenuhnya aman — statusnya tetap pending.
-                if ($autoSync && $erp->isConfigured() && $erp->isReachable()) {
-                    $erp->syncTransaction($transaction->load('items.product', 'customer'));
-
-                    // Setelah invoice masuk, ERP menambah (dan bila ditukar, memotong)
-                    // Loyalty Point Entry. Tarik ulang saldonya supaya badge di kasir
-                    // tidak menampilkan angka sebelum transaksi ini.
-                    $cust = $transaction->customer;
-                    if ($cust?->erp_customer_name) {
-                        $details = $erp->getLoyaltyDetails($cust->erp_customer_name, $cust->erp_loyalty_program);
-                        // has_program wajib diperiksa — lihat catatan di loyaltyDetails().
-                        if (($details['success'] ?? false) && ($details['has_program'] ?? false)) {
-                            $cust->update([
-                                'loyalty_points' => $details['points'],
-                                'erp_loyalty_program' => $details['loyalty_program'] ?? $cust->erp_loyalty_program,
-                                'loyalty_synced_at' => now(),
-                            ]);
-                        }
+                $cust = $transaction->customer;
+                if ($canSync && $cust?->erp_customer_name) {
+                    $details = $erp->getLoyaltyDetails($cust->erp_customer_name, $cust->erp_loyalty_program);
+                    // has_program wajib diperiksa — lihat catatan di loyaltyDetails().
+                    if (($details['success'] ?? false) && ($details['has_program'] ?? false)) {
+                        $cust->update([
+                            'loyalty_points' => $details['points'],
+                            'erp_loyalty_program' => $details['loyalty_program'] ?? $cust->erp_loyalty_program,
+                            'loyalty_synced_at' => now(),
+                        ]);
                     }
                 }
             } catch (\Exception $e) {
-                // Silent — sync failure must not affect checkout response
+                // Silent — refresh cache gagal tidak boleh mempengaruhi respons checkout
             }
 
             return response()->json([

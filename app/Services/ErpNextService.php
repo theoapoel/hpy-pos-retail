@@ -201,12 +201,47 @@ class ErpNextService
     // =========================================================
     // SYNC TRANSACTIONS → ERPNext POS Invoice
     // =========================================================
-    public function syncTransaction(Transaction $transaction): array
+    public function syncTransaction(Transaction $transaction, bool $precheckLoyalty = true): array
     {
         // Auto-push customer ke ERPNext jika belum punya erp_customer_name
         if ($transaction->customer && ! ($transaction->customer->erp_customer_name ?: null)) {
             $this->pushCustomer($transaction->customer);
             $transaction->customer->refresh();
+        }
+
+        $redeem = (int) round((float) ($transaction->loyalty_points_redeemed ?? 0));
+
+        // Transaksi berpoin yang disinkronkan ulang belakangan (menu Sinkronisasi,
+        // resync manual) memakai saldo HARI INI, bukan saldo saat transaksi dibuat.
+        // Diperiksa lebih dulu supaya penolakannya terbaca sebagai kalimat yang jelas
+        // dan tidak menyisakan draft di ERP. PosController melewati pemeriksaan ini
+        // (precheckLoyalty=false) karena baru saja melakukannya beberapa milidetik lalu.
+        if ($precheckLoyalty && $redeem > 0 && $transaction->customer?->erp_customer_name) {
+            $balance = $this->getLoyaltyDetails(
+                $transaction->customer->erp_customer_name,
+                $transaction->loyalty_program ?: $transaction->customer->erp_loyalty_program,
+                now()->format('Y-m-d'),
+                true
+            );
+
+            if (($balance['success'] ?? false) && ($balance['has_program'] ?? false)
+                && $redeem > (float) $balance['points']) {
+                $error = 'Saldo poin pelanggan sekarang tinggal '.(int) floor((float) $balance['points']).
+                    ', tidak cukup untuk penukaran '.$redeem.' poin pada transaksi ini. '.
+                    'Batalkan transaksi atau terbitkan ulang tanpa poin.';
+
+                $transaction->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+                $this->logSync('transaction', $transaction->id, $transaction->invoice_no,
+                    'failed', null, null, null, $error);
+
+                return ['success' => false, 'error' => $error, 'loyalty_error' => true];
+            }
+        }
+
+        // Invoice untuk transaksi ini mungkin sudah terbit di percobaan sebelumnya
+        // yang jawabannya tidak sampai. Adopsi yang sudah ada daripada membuat kedua.
+        if ($adopted = $this->adoptExistingPosInvoice($transaction)) {
+            return $adopted;
         }
 
         $payload = $this->buildPosInvoicePayload($transaction);
@@ -220,7 +255,30 @@ class ErpNextService
             $docname = $data['data']['name'] ?? null;
 
             if ($docname) {
-                $this->submitDoc('POS Invoice', $docname);
+                try {
+                    $this->submitDoc('POS Invoice', $docname);
+                } catch (\Exception $e) {
+                    // Submit bisa gagal karena dua sebab yang berbeda jauh:
+                    //
+                    // (a) ERP menolaknya (validasi saldo Loyalty Point baru jalan di
+                    //     sini) — draft-nya yatim, harus dihapus supaya sync ulang
+                    //     tidak membuat duplikat.
+                    // (b) jawabannya hilang di jaringan padahal ERP sudah memproses —
+                    //     dokumennya sah dan tidak boleh disentuh.
+                    //
+                    // Bedanya cuma bisa dipastikan dengan membaca ulang docstatus-nya.
+                    $state = $this->fetchDocStatus('POS Invoice', $docname);
+
+                    if ($state === 1) {
+                        // (b) — submit sebenarnya berhasil.
+                        Log::warning("ERPNext: submit {$docname} tampak gagal tapi dokumennya sudah submitted; diadopsi.");
+                    } else {
+                        if ($state === 0 || $state === null) {
+                            $this->deleteDoc('POS Invoice', $docname);
+                        }
+                        throw $e;
+                    }
+                }
             }
 
             $transaction->update([
@@ -254,6 +312,66 @@ class ErpNextService
 
             return ['success' => false, 'error' => $errorBody];
         }
+    }
+
+    /**
+     * Cari POS Invoice yang sudah pernah terbit untuk transaksi lokal ini (ditandai
+     * lewat po_no), lalu adopsi kalau memang sudah submitted.
+     *
+     * Ini penambal satu-satunya celah nyata yang tersisa di checkout berpoin: kalau
+     * jawaban ERP hilang di jaringan SETELAH invoice-nya sah terbit, POS mengira
+     * gagal. Tanpa pemeriksaan ini, percobaan berikutnya membuat invoice kedua —
+     * poin pelanggan terpotong dua kali dan stok ERP ikut ganda.
+     *
+     * Draft sisa (docstatus 0) tidak diadopsi: ia justru sampah dari percobaan yang
+     * gagal, jadi dihapus supaya alur normal bisa membuat yang baru.
+     *
+     * @return array{success: bool, docname: string}|null null bila tidak ada yang bisa diadopsi
+     */
+    private function adoptExistingPosInvoice(Transaction $transaction): ?array
+    {
+        if ($transaction->erp_pos_invoice) {
+            return null; // sudah tertaut; bukan urusan fungsi ini
+        }
+
+        try {
+            $response = $this->client->get('/api/resource/POS Invoice', [
+                'query' => [
+                    'filters' => json_encode([['po_no', '=', $transaction->invoice_no]]),
+                    'fields' => json_encode(['name', 'docstatus']),
+                    'limit_page_length' => 5,
+                ],
+            ]);
+            $rows = json_decode($response->getBody()->getContents(), true)['data'] ?? [];
+        } catch (\Exception $e) {
+            // Tidak terbaca → jangan menghalangi sync normal. Risiko duplikat pada
+            // kasus langka lebih ringan daripada memblokir semua transaksi.
+            return null;
+        }
+
+        foreach ($rows as $row) {
+            if ((int) ($row['docstatus'] ?? 0) === 1) {
+                $transaction->update([
+                    'erp_pos_invoice' => $row['name'],
+                    'erp_synced_at' => now(),
+                    'erp_sync_status' => 'synced',
+                    'erp_sync_error' => null,
+                ]);
+
+                $this->logSync('transaction', $transaction->id, $transaction->invoice_no,
+                    'success', null, $row, $row['name']);
+
+                Log::warning("ERPNext: {$transaction->invoice_no} sudah punya invoice {$row['name']} di ERP; diadopsi tanpa membuat yang baru.");
+
+                return ['success' => true, 'docname' => $row['name'], 'adopted' => true];
+            }
+
+            if ((int) ($row['docstatus'] ?? 0) === 0) {
+                $this->deleteDoc('POS Invoice', $row['name']);
+            }
+        }
+
+        return null;
     }
 
     // =========================================================
@@ -520,6 +638,12 @@ class ErpNextService
             // tempat (tidak ada Delivery Note menyusul seperti alur Delivery Order), jadi
             // invoice inilah yang berhak memotong stok.
             'update_stock' => 1,
+            // Nomor invoice lokal dititipkan di po_no supaya satu transaksi POS bisa
+            // dikenali lagi di ERP tanpa menyimpan apa pun di sisi kita. Dipakai
+            // findPosInvoiceByLocal() untuk mengadopsi invoice yang terlanjur terbit
+            // ketika jawaban ERP tidak sampai — tanpa ini, percobaan berikutnya
+            // membuat invoice kedua untuk transaksi yang sama.
+            'po_no' => $transaction->invoice_no,
             'apply_discount_on' => 'Net Total',
             'additional_discount_percentage' => $erpDiscPct,
             'discount_amount' => $erpDiscAmt,
@@ -1064,9 +1188,21 @@ class ErpNextService
      * `loyalty_program` WAJIB dikirim. Tanpa itu ERP membalas 404
      * "Loyalty Program None not found" — parameter `silent` tidak menolongnya,
      * karena penyelesaian program dari customer group gagal lebih dulu.
+     *
+     * $expiryDate & $includeExpired ada supaya pemanggil bisa menanyakan saldo
+     * dengan parameter yang PERSIS dipakai validator POS Invoice di ERP
+     * (validate_loyalty_transaction memanggil fungsi yang sama dengan
+     * expiry_date = posting_date dan include_expired_entry = True). Tanpa
+     * paritas itu, saldo yang ditampilkan kasir bisa lolos di sini tetapi
+     * ditolak ERP saat submit dengan "You don't have enought Loyalty Points
+     * to redeem" — kegagalan yang baru terlihat setelah struk tercetak.
      */
-    public function getLoyaltyDetails(string $erpCustomer, ?string $loyaltyProgram = null): array
-    {
+    public function getLoyaltyDetails(
+        string $erpCustomer,
+        ?string $loyaltyProgram = null,
+        ?string $expiryDate = null,
+        bool $includeExpired = false
+    ): array {
         $company = Setting::get('erpnext_company', env('ERPNEXT_COMPANY'));
 
         $loyaltyProgram = $loyaltyProgram ?: $this->fetchCustomerLoyaltyProgram($erpCustomer);
@@ -1084,8 +1220,8 @@ class ErpNextService
                         'loyalty_program' => $loyaltyProgram,
                         'company' => $company,
                         'silent' => 1,
-                        'include_expired_entry' => 0,
-                    ],
+                        'include_expired_entry' => $includeExpired ? 1 : 0,
+                    ] + ($expiryDate ? ['expiry_date' => $expiryDate] : []),
                 ]
             );
 
@@ -2109,6 +2245,20 @@ class ErpNextService
         } catch (\Exception $e) {
             // Tidak terbaca → biarkan pembatalan dicoba; ERP yang jadi penentu.
             return null;
+        }
+    }
+
+    /**
+     * Hapus dokumen yang masih draft. Dipakai untuk membersihkan sisa dokumen
+     * yang gagal di-submit; kegagalan penghapusan sengaja ditelan supaya tidak
+     * menutupi error submit yang jadi penyebab sebenarnya.
+     */
+    private function deleteDoc(string $doctype, string $name): void
+    {
+        try {
+            $this->client->delete("/api/resource/{$doctype}/".rawurlencode($name));
+        } catch (\Exception $e) {
+            Log::warning("ERPNext: gagal menghapus draft {$doctype} {$name}: ".$e->getMessage());
         }
     }
 
