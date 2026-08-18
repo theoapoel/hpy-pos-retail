@@ -2,23 +2,24 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Category;
 use App\Models\Customer;
 use App\Models\DeliveryPrice;
 use App\Models\ErpSyncLog;
-use App\Models\ItemCategory;
-use App\Models\Product;
 use App\Models\Setting;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\ErpNextService;
+use App\Services\ErpPullService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class ErpSyncController extends Controller
 {
-    public function __construct(private ErpNextService $erp) {}
+    public function __construct(
+        private ErpNextService $erp,
+        private ErpPullService $pull,
+    ) {}
 
     public function index()
     {
@@ -54,6 +55,7 @@ class ErpSyncController extends Controller
             'pb1_erp_account' => Setting::get('pb1_erp_account', ''),
             'erp_auto_sync' => Setting::get('erp_auto_sync', '1'),
             'stock_auto_sync' => Setting::get('stock_auto_sync', '0'),
+            'full_auto_sync' => Setting::get('full_auto_sync', '0'),
             'pos_shift_enabled' => Setting::get('pos_shift_enabled', '0'),
         ];
 
@@ -119,166 +121,12 @@ class ErpSyncController extends Controller
 
     public function pullProducts(Request $request)
     {
-        set_time_limit(0);
+        $result = $this->pull->pullProducts(
+            $request->boolean('reset'),
+            $request->has('since_days') ? (int) $request->input('since_days') : 30,
+        );
 
-        $reset = $request->boolean('reset');
-
-        // Mode inkremental: hanya tarik item yang berubah di ERP dalam N hari terakhir.
-        // Full pull menarik puluhan ribu item — ratusan halaman × 3 request API per halaman
-        // (Item, Item Price, Item Barcode) — dan hampir semuanya tidak berubah.
-        // `since_days=0` (atau reset) memaksa full pull.
-        $sinceDays = $request->has('since_days') ? (int) $request->input('since_days') : 30;
-        $modifiedSince = ($reset || $sinceDays <= 0)
-            ? null
-            : now()->subDays($sinceDays)->format('Y-m-d H:i:s');
-
-        $imported = 0;
-        $updated = 0;
-        $disabledDeactivated = 0;
-        $page = 0;
-        // 200/halaman: lebih besar berisiko membuat query string Item Price/Item Barcode
-        // (yang mengirim seluruh item code) menembus batas panjang URL server ERP.
-        $pageSize = 200;
-        $seenItemCodes = [];
-
-        do {
-            $result = $this->erp->pullProducts($pageSize, $page * $pageSize, $modifiedSince);
-
-            if (! $result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'error' => $result['error'],
-                    'imported' => $imported,
-                    'updated' => $updated,
-                ], 422);
-            }
-
-            $batch = $result['data'];
-
-            foreach ($batch as $item) {
-                $seenItemCodes[] = $item['name'];
-
-                $category = null;
-                if (! empty($item['item_group'])) {
-                    $category = Category::firstOrCreate(
-                        ['name' => $item['item_group']],
-                        ['slug' => Str::slug($item['item_group']), 'erp_item_group' => $item['item_group']]
-                    );
-                }
-
-                $itemCategory = null;
-                if (! empty($item['kategori'])) {
-                    $itemCategory = ItemCategory::firstOrCreate(
-                        ['name' => $item['kategori']],
-                        ['erp_last_sync' => now()]
-                    );
-                    $itemCategory->update(['erp_last_sync' => now()]);
-                }
-
-                $exists = Product::where('erp_item_code', $item['name'])->first();
-                $erpImage = $item['image'] ?? null;
-
-                $data = [
-                    'name' => $item['item_name'] ?? $item['name'],
-                    'sku' => $item['item_code'] ?? $item['name'],
-                    'price' => (float) ($item['standard_rate'] ?? 0),
-                    'cost_price' => (float) ($item['valuation_rate'] ?? 0),
-                    'unit' => $item['stock_uom'] ?? 'Nos',
-                    'category_id' => $category?->id,
-                    'item_category_id' => $itemCategory?->id,
-                    'erp_item_code' => $item['name'],
-                    'erp_last_sync' => now(),
-                    'is_active' => ! ($item['disabled'] ?? false),
-                ];
-
-                // Barcode hanya ditulis kalau ERP memang punya. Kalau kosong, barcode
-                // yang diisi manual di POS dibiarkan — jangan ditimpa null tiap sync.
-                $erpBarcode = trim((string) ($item['barcode'] ?? ''));
-                if ($erpBarcode !== '') {
-                    $data['barcode'] = $erpBarcode;
-                }
-
-                // Download image only when ERPNext has one and the path has changed
-                if ($erpImage && $erpImage !== ($exists?->erp_image)) {
-                    $localPath = $this->erp->downloadProductImage($erpImage, $item['name']);
-                    if ($localPath) {
-                        $data['image'] = $localPath;
-                        $data['erp_image'] = $erpImage;
-                    }
-                } elseif (! $erpImage && $exists?->erp_image) {
-                    // Image removed on ERPNext side — clear local reference too
-                    $data['image'] = null;
-                    $data['erp_image'] = null;
-                }
-
-                $isDisabled = (bool) ($item['disabled'] ?? false);
-                $isTemplate = (bool) ($item['has_variants'] ?? false); // Item Template ERPNext — bukan barang jual
-                $excludeFromSale = $isDisabled || $isTemplate;
-
-                // Item template/disabled tidak boleh aktif sebagai produk jual
-                if ($excludeFromSale) {
-                    $data['is_active'] = false;
-                }
-
-                if ($exists) {
-                    if ($excludeFromSale && $exists->is_active) {
-                        $disabledDeactivated++;
-                    }
-                    $exists->update($data);
-                    $updated++;
-                } else {
-                    // Item template/disabled yang belum ada tidak perlu diimpor
-                    if ($excludeFromSale) {
-                        continue;
-                    }
-                    Product::create(array_merge($data, ['track_stock' => true]));
-                    $imported++;
-                }
-            }
-
-            $page++;
-
-        } while (count($batch) >= $pageSize);
-
-        $deactivated = 0;
-        $categoriesPruned = 0;
-
-        if ($reset) {
-            // Produk lokal yang sudah punya erp_item_code tapi tidak lagi muncul di ERP saat ini —
-            // dinonaktifkan (bukan dihapus, supaya riwayat transaksi/order lama tetap utuh).
-            //
-            // Jangan pakai whereNotIn($seenItemCodes): tiap item code jadi satu placeholder,
-            // dan dengan ribuan item ERP query-nya menembus batas 65535 placeholder MySQL
-            // (error 1390). Bandingkan di PHP, lalu update per potongan id.
-            $seen = array_flip($seenItemCodes);
-
-            $staleIds = Product::whereNotNull('erp_item_code')
-                ->where('is_active', true)
-                ->pluck('erp_item_code', 'id')
-                ->reject(fn ($code) => isset($seen[$code]))
-                ->keys()
-                ->all();
-
-            foreach (array_chunk($staleIds, 1000) as $chunk) {
-                $deactivated += Product::whereIn('id', $chunk)->update(['is_active' => false]);
-            }
-
-            // Bersihkan kategori/item group lokal yang sudah tidak dipakai produk manapun
-            $categoriesPruned = Category::doesntHave('products')->delete()
-                + ItemCategory::doesntHave('products')->delete();
-        }
-
-        return response()->json([
-            'success' => true,
-            'mode' => $modifiedSince ? "perubahan {$sinceDays} hari terakhir" : 'semua produk',
-            'modified_since' => $modifiedSince,
-            'imported' => $imported,
-            'updated' => $updated,
-            'total' => $imported + $updated,
-            'deactivated' => $deactivated,
-            'disabled_deactivated' => $disabledDeactivated,
-            'categories_pruned' => $categoriesPruned,
-        ]);
+        return response()->json($result, $result['success'] ? 200 : 422);
     }
 
     public function pullUsers()
@@ -333,135 +181,9 @@ class ErpSyncController extends Controller
      */
     public function pullCustomers(Request $request)
     {
-        set_time_limit(0);
+        $result = $this->pull->pullCustomers($request->boolean('loyalty', true));
 
-        if (! $this->erp->isConfigured()) {
-            return response()->json(['success' => false, 'error' => 'Koneksi ERP HPY belum dikonfigurasi.'], 422);
-        }
-
-        $withLoyalty = $request->boolean('loyalty', true);
-
-        $imported = 0;
-        $updated = 0;
-        $page = 0;
-        $pageSize = 100;
-        $erpNames = [];
-
-        // Nomor urut kode lokal dihitung sekali, lalu dinaikkan di memori. Memanggil
-        // Customer::generateCode() per baris akan query ulang tiap kali dan — karena
-        // baris belum tentu ter-flush — bisa menghasilkan kode kembar.
-        $lastCode = Customer::orderByDesc('id')->value('code');
-        $seq = $lastCode ? (int) substr($lastCode, 4) : 0;
-
-        do {
-            $result = $this->erp->pullCustomers($pageSize, $page * $pageSize);
-
-            if (! $result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'error' => $result['error'],
-                    'imported' => $imported,
-                    'updated' => $updated,
-                ], 422);
-            }
-
-            $batch = $result['data'];
-
-            foreach ($batch as $row) {
-                $docname = $row['name'] ?? null;
-                if (! $docname) {
-                    continue;
-                }
-
-                $erpNames[] = $docname;
-
-                $data = [
-                    'name' => ($row['customer_name'] ?? '') ?: $docname,
-                    'email' => ($row['email_id'] ?? '') ?: null,
-                    'phone' => ($row['mobile_no'] ?? '') ?: null,
-                    'erp_customer_name' => $docname,
-                    'erp_loyalty_program' => ($row['loyalty_program'] ?? '') ?: null,
-                    'erp_last_sync' => now(),
-                    'is_active' => true,
-                ];
-
-                // Cocokkan dulu lewat erp_customer_name; kalau belum pernah ditautkan,
-                // pakai nama supaya customer yang terlanjur diketik manual di kasir
-                // tersambung ke dokumen ERP-nya, bukan jadi baris kembar.
-                $existing = Customer::where('erp_customer_name', $docname)->first()
-                    ?: Customer::whereNull('erp_customer_name')->where('name', $data['name'])->first();
-
-                if ($existing) {
-                    $existing->update($data);
-                    $updated++;
-                } else {
-                    $seq++;
-                    Customer::create(array_merge($data, [
-                        'code' => 'CUST'.str_pad($seq, 5, '0', STR_PAD_LEFT),
-                    ]));
-                    $imported++;
-                }
-            }
-
-            $page++;
-
-        } while (count($batch) >= $pageSize);
-
-        $loyaltyUpdated = 0;
-        $loyaltyError = null;
-
-        if ($withLoyalty && $erpNames) {
-            $result = $this->erp->fetchLoyaltyBalances();
-            $balances = $result['balances'];
-
-            if (! $result['success']) {
-                // Ledger terbaca separuh jalan. Jangan ditulis sama sekali: halaman
-                // yang belum terbaca membuat saldo tampak jauh lebih kecil dari
-                // yang di ERP, dan itu justru sumber selisih yang paling sulit
-                // dilacak karena angkanya terlihat wajar.
-                $loyaltyError = ($result['error'] ?? 'gagal membaca Loyalty Point Entry')
-                    .' — saldo poin tidak diperbarui agar tidak terisi angka separuh.';
-                $balances = [];
-            }
-
-            // Hanya customer yang memang ada di ERP hasil tarikan ini yang disentuh.
-            $wanted = array_flip($erpNames);
-
-            // Pelanggan yang sama sekali tidak punya baris Loyalty Point Entry berarti
-            // saldonya nol di ERP. Tanpa baris ini nilai lama di lokal akan bertahan
-            // selamanya dan terlihat seperti "poin tidak update".
-            if ($result['success']) {
-                foreach ($erpNames as $erpName) {
-                    if (! isset($balances[$erpName])) {
-                        $balances[$erpName] = 0.0;
-                    }
-                }
-            }
-
-            foreach ($balances as $erpName => $points) {
-                if (! isset($wanted[$erpName])) {
-                    continue;
-                }
-
-                // Yang dilaporkan adalah jumlah pelanggan yang saldonya diproses,
-                // bukan nilai balik update(). update() mengembalikan baris
-                // terpengaruh, dan saldo yang kebetulan sama dengan nilai lama
-                // menghasilkan 0 — angkanya jadi jauh lebih kecil dari kenyataan.
-                Customer::where('erp_customer_name', $erpName)
-                    ->update(['loyalty_points' => $points, 'loyalty_synced_at' => now()]);
-
-                $loyaltyUpdated++;
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'imported' => $imported,
-            'updated' => $updated,
-            'total' => $imported + $updated,
-            'loyalty_updated' => $loyaltyUpdated,
-            'loyalty_error' => $loyaltyError,
-        ]);
+        return response()->json($result, $result['success'] ? 200 : 422);
     }
 
     public function pushCustomer(Customer $customer)
@@ -532,65 +254,26 @@ class ErpSyncController extends Controller
      */
     public function pullItemPrices()
     {
+        $result = $this->pull->pullItemPrices();
+
+        return response()->json($result, $result['success'] ? 200 : 422);
+    }
+
+    /**
+     * Sync Semua — satu klik: pull produk (inkremental), pull customer,
+     * update harga jual, lalu push transaksi pending ke ERP HPY.
+     */
+    public function syncEverything(Request $request)
+    {
         set_time_limit(0);
 
-        $priceList = trim((string) Setting::get('erpnext_price_list', ''));
-        if ($priceList === '') {
-            return response()->json([
-                'success' => false,
-                'error' => 'Price List belum dikonfigurasi. Isi field "Price List" di pengaturan Sync HPY, lalu simpan.',
-            ], 422);
+        if (! $this->erp->isConfigured()) {
+            return response()->json(['success' => false, 'error' => 'Koneksi ERP HPY belum dikonfigurasi.'], 422);
         }
 
-        $result = $this->erp->getPriceListPrices($priceList);
+        $sinceDays = $request->has('since_days') ? (int) $request->input('since_days') : 30;
 
-        if (! $result['success']) {
-            return response()->json(['success' => false, 'error' => $result['error']], 422);
-        }
-
-        $prices = $result['prices'];
-
-        $updated = 0;
-        $unchanged = 0;
-        $matched = 0;
-
-        // Bandingkan di PHP lalu update per item yang harganya benar-benar berubah,
-        // supaya tidak menulis ulang ribuan baris tiap kali tool dijalankan.
-        Product::whereNotNull('erp_item_code')
-            ->select(['id', 'erp_item_code', 'price'])
-            ->chunkById(500, function ($chunk) use ($prices, &$updated, &$unchanged, &$matched) {
-                foreach ($chunk as $product) {
-                    if (! array_key_exists($product->erp_item_code, $prices)) {
-                        continue;
-                    }
-                    $matched++;
-
-                    $newPrice = (float) $prices[$product->erp_item_code];
-                    if (abs($newPrice - (float) $product->price) < 0.01) {
-                        $unchanged++;
-
-                        continue;
-                    }
-
-                    Product::whereKey($product->id)->update([
-                        'price' => $newPrice,
-                        'erp_last_sync' => now(),
-                    ]);
-                    $updated++;
-                }
-            });
-
-        return response()->json([
-            'success' => true,
-            'price_list' => $priceList,
-            'prices_found' => $result['count'],
-            'matched' => $matched,
-            'updated' => $updated,
-            'unchanged' => $unchanged,
-            // Item Price yang tidak punya pasangan produk lokal — biasanya item yang
-            // belum pernah ditarik lewat Pull Produk.
-            'without_product' => max(0, $result['count'] - $matched),
-        ]);
+        return response()->json($this->pull->syncEverything($sinceDays));
     }
 
     public function pullCoupons()
@@ -626,6 +309,7 @@ class ErpSyncController extends Controller
             'pb1_erp_account' => 'nullable|string|max:200',
             'erp_auto_sync' => 'nullable|in:0,1',
             'stock_auto_sync' => 'nullable|in:0,1',
+            'full_auto_sync' => 'nullable|in:0,1',
             'pos_shift_enabled' => 'nullable|in:0,1',
         ]);
 
@@ -647,6 +331,7 @@ class ErpSyncController extends Controller
         // Checkbox — kirim '1' kalau centang, '0' kalau tidak
         Setting::set('erp_auto_sync', $request->input('erp_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
         Setting::set('stock_auto_sync', $request->input('stock_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
+        Setting::set('full_auto_sync', $request->input('full_auto_sync', '0') === '1' ? '1' : '0', 'erpnext');
         Setting::set('pos_shift_enabled', $request->input('pos_shift_enabled', '0') === '1' ? '1' : '0', 'erpnext');
 
         // URL/kredensial berubah → status "terjangkau" hasil cache tidak berlaku lagi.

@@ -206,6 +206,35 @@
                     </div>
                 </div>
 
+                {{-- Auto Full Sync Toggle --}}
+                <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;border:2px solid {{ ($settings['full_auto_sync'] ?? '0') === '1' ? 'var(--green)' : 'var(--border)' }}" id="fullAutoSyncBox">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                        <div>
+                            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px">
+                                <i class="fas fa-rotate" style="color:{{ ($settings['full_auto_sync'] ?? '0') === '1' ? 'var(--green)' : 'var(--text3)' }}" id="fullAutoSyncIcon"></i>
+                                Auto Sync Semua dari ERP HPY
+                            </div>
+                            <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                                Tiap 10 menit otomatis: pull produk (perubahan terbaru), customer, harga jual, dan kirim transaksi pending — tanpa klik apa pun. Kalau internet mati, dilewati dan dicoba lagi di jadwal berikutnya.
+                            </div>
+                        </div>
+                        <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
+                            <input type="checkbox" id="fullAutoSyncToggle" name="full_auto_sync" value="1"
+                                {{ ($settings['full_auto_sync'] ?? '0') === '1' ? 'checked' : '' }}
+                                onchange="onFullAutoSyncChange(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="fullAutoSyncNote" style="margin-top:8px;font-size:12px;{{ ($settings['full_auto_sync'] ?? '0') !== '1' ? '' : 'display:none' }};color:#E37400">
+                        <i class="fas fa-info-circle"></i>
+                        Auto Sync Semua nonaktif — data hanya ter-update lewat tombol <strong>Sync Semua</strong> atau tombol per bagian.
+                    </div>
+                    <div style="margin-top:8px;font-size:11px;color:var(--text3)">
+                        <i class="fas fa-clock"></i>
+                        Butuh Laravel scheduler aktif (Task Scheduler menjalankan <code>php artisan schedule:run</code> tiap menit).
+                    </div>
+                </div>
+
                 {{-- Buka/Tutup Kasir (POS Opening/Closing Entry) Toggle --}}
                 <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;border:2px solid {{ ($settings['pos_shift_enabled'] ?? '0') === '1' ? 'var(--green)' : 'var(--border)' }}" id="posShiftBox">
                     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -334,6 +363,18 @@
         <div class="card-title"><i class="fas fa-exchange-alt" style="color:#34A853"></i> Aksi Sinkronisasi</div>
     </div>
     <div class="card-body">
+        {{-- Sync Semua — satu klik untuk seluruh rangkaian sync rutin --}}
+        <div style="background:var(--surface2);border:2px solid var(--green);border-radius:10px;padding:16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+            <div>
+                <div style="font-weight:700;font-size:14px;margin-bottom:4px"><i class="fas fa-bolt" style="color:var(--green)"></i> Sync Semua (Satu Klik)</div>
+                <div style="font-size:13px;color:var(--text3)">
+                    Jalankan berurutan: pull produk (perubahan 30 hari), pull customer, update harga jual, lalu kirim transaksi pending ke ERP HPY.
+                </div>
+            </div>
+            <button class="btn btn-success" onclick="syncEverything()" id="syncEverythingBtn" style="flex-shrink:0">
+                <i class="fas fa-bolt"></i> Sync Semua Sekarang
+            </button>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
             <!-- Push Transactions -->
             <div style="background:var(--surface2);border-radius:10px;padding:16px">
@@ -535,6 +576,7 @@ async function saveSettings() {
     // Checkbox tidak dikirim FormData kalau tidak tercentang — kirim eksplisit
     data['erp_auto_sync'] = document.getElementById('autoSyncToggle').checked ? '1' : '0';
     data['stock_auto_sync'] = document.getElementById('stockAutoSyncToggle').checked ? '1' : '0';
+    data['full_auto_sync'] = document.getElementById('fullAutoSyncToggle').checked ? '1' : '0';
     data['pos_shift_enabled'] = document.getElementById('posShiftToggle').checked ? '1' : '0';
 
     btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
@@ -581,6 +623,21 @@ function onPosShiftChange(el) {
     }
 }
 
+function onFullAutoSyncChange(el) {
+    const box  = document.getElementById('fullAutoSyncBox');
+    const icon = document.getElementById('fullAutoSyncIcon');
+    const note = document.getElementById('fullAutoSyncNote');
+    if (el.checked) {
+        box.style.borderColor  = 'var(--green)';
+        icon.style.color       = 'var(--green)';
+        note.style.display     = 'none';
+    } else {
+        box.style.borderColor  = 'var(--border)';
+        icon.style.color       = 'var(--text3)';
+        note.style.display     = '';
+    }
+}
+
 function onStockAutoSyncChange(el) {
     const box  = document.getElementById('stockAutoSyncBox');
     const icon = document.getElementById('stockAutoSyncIcon');
@@ -609,6 +666,51 @@ async function syncAll() {
     showSyncResult(data);
     toast(`Sync selesai: ${data.success} berhasil, ${data.failed} gagal`);
     setTimeout(() => location.reload(), 1500);
+}
+
+async function syncEverything() {
+    const btn = document.getElementById('syncEverythingBtn');
+    btn.innerHTML = '<span class="spinner"></span> Mensync semua...';
+    btn.disabled = true;
+
+    const resultEl = document.getElementById('syncResult');
+    resultEl.style.display = '';
+    resultEl.innerHTML = '<i class="fas fa-spinner fa-spin" style="color:var(--blue)"></i> Menjalankan Sync Semua — produk, customer, harga jual, transaksi pending. Harap tunggu...';
+
+    try {
+        const resp = await fetch('{{ route("sync.everything") }}', {
+            method: 'POST',
+            headers: {'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}
+        });
+        const data = await resp.json();
+        const s = data.steps ?? {};
+
+        const stepLine = (ok, label, detail) =>
+            `<div style="margin-top:4px"><i class="fas fa-${ok ? 'check-circle' : 'exclamation-circle'}" style="color:var(--${ok ? 'green' : 'red'})"></i> <strong>${label}:</strong> ${detail}</div>`;
+
+        const p = s.products ?? {}, c = s.customers ?? {}, h = s.prices ?? {}, t = s.transactions ?? {};
+        resultEl.innerHTML =
+            `<strong><i class="fas fa-bolt" style="color:var(--green)"></i> Hasil Sync Semua</strong>`
+            + stepLine(p.success !== false, 'Produk', p.success !== false ? `${p.imported ?? 0} baru, ${p.updated ?? 0} diupdate (${p.mode ?? ''})` : (p.error ?? 'gagal'))
+            + stepLine(c.success !== false, 'Customer', c.success !== false ? `${c.imported ?? 0} baru, ${c.updated ?? 0} diperbarui, ${c.loyalty_updated ?? 0} saldo poin` : (c.error ?? 'gagal'))
+            + stepLine(h.success !== false, 'Harga Jual', h.success !== false ? `${h.updated ?? 0} produk berubah, ${h.unchanged ?? 0} sudah sesuai` : (h.error ?? 'gagal'))
+            + stepLine(t.success !== false, 'Transaksi', t.success !== false ? `${t.success ?? 0} terkirim, ${t.failed ?? 0} gagal dari ${t.total ?? 0} pending` : (t.error ?? 'gagal'));
+
+        if (data.success) {
+            toast('Sync Semua selesai', 'success');
+        } else if (resp.status === 422 && data.error) {
+            resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Gagal: ${data.error}`;
+            toast('Gagal: ' + data.error, 'error');
+        } else {
+            toast('Sync Semua selesai dengan kegagalan di: ' + (data.failed_steps ?? []).join(', '), 'error');
+        }
+    } catch(e) {
+        resultEl.innerHTML = `<i class="fas fa-exclamation-circle" style="color:var(--red)"></i> Error: ${e.message}`;
+        toast('Error: ' + e.message, 'error');
+    }
+
+    btn.innerHTML = '<i class="fas fa-bolt"></i> Sync Semua Sekarang';
+    btn.disabled = false;
 }
 
 async function retryFailed() {

@@ -14,6 +14,13 @@ Schedule::command('stock:sync-erp')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Auto full-sync dengan ERP HPY tiap 10 menit (gate via setting full_auto_sync):
+// pull produk inkremental + customer + harga jual, lalu push transaksi pending.
+Schedule::command('erp:full-sync')
+    ->everyTenMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Backup DB otomatis ke Google Drive tiap hari jam 02:00, lalu bersihkan yang lama.
 Schedule::command('backup:clean')->dailyAt('01:55')->withoutOverlapping();
 Schedule::command('backup:run --only-db')->dailyAt('02:00')->withoutOverlapping();
