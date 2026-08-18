@@ -172,7 +172,21 @@
                 });
         }
 
-        window.onload = () => window.print();
+        // Jalur utama: cetak thermal langsung (ESC/POS, font bawaan printer —
+        // hasilnya tajam). Cetak lewat dialog browser me-raster halaman jadi
+        // gambar dan hurufnya buram di kertas thermal, jadi hanya dipakai
+        // sebagai cadangan bila printer thermal gagal / belum dikonfigurasi.
+        window.onload = () => {
+            fetch('{{ route('pos.direct-print', $transaction->id) }}')
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'thermal gagal');
+                    }
+                    // Sukses — tidak perlu dialog print browser sama sekali.
+                })
+                .catch(() => window.print());
+        };
     </script>
 </body>
 </html>
