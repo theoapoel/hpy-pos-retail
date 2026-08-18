@@ -13,6 +13,7 @@ class Transaction extends Model
 
     protected $fillable = [
         'invoice_no', 'user_id', 'customer_id', 'status',
+        'type', 'return_against_id', 'return_against_erp',
         'subtotal', 'discount_amount', 'discount_percent', 'coupon_code', 'coupon_discount', 'tax_amount',
         'loyalty_points_redeemed', 'loyalty_amount', 'loyalty_program',
         'total', 'paid_amount', 'change_amount', 'payment_method',
@@ -57,9 +58,25 @@ class Transaction extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    public static function generateInvoiceNo(): string
+    /** Transaksi asal yang diretur (hanya terisi pada type=return). */
+    public function returnAgainst(): BelongsTo
     {
-        $prefix = 'INV';
+        return $this->belongsTo(self::class, 'return_against_id');
+    }
+
+    /** Transaksi retur yang menunjuk transaksi ini. */
+    public function returns(): HasMany
+    {
+        return $this->hasMany(self::class, 'return_against_id');
+    }
+
+    public function isReturn(): bool
+    {
+        return $this->type === 'return';
+    }
+
+    public static function generateInvoiceNo(string $prefix = 'INV'): string
+    {
         $date = now()->format('Ymd');
         $last = static::whereDate('created_at', today())
             ->orderByDesc('id')->first();

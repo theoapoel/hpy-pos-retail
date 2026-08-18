@@ -203,6 +203,20 @@ class ErpNextService
     // =========================================================
     public function syncTransaction(Transaction $transaction, bool $precheckLoyalty = true): array
     {
+        // Transaksi retur hanya bisa dikirim kalau invoice asalnya sudah punya
+        // nomor POS Invoice ERP — return_against wajib menunjuk dokumen nyata.
+        // Ditandai failed (bukan exception) supaya loop sync massal tetap jalan.
+        if (($transaction->type ?? 'sale') === 'return'
+            && ! $transaction->return_against_erp
+            && ! $transaction->returnAgainst?->erp_pos_invoice) {
+            $error = 'Invoice asal retur ini belum tersinkron ke ERP HPY. Sinkronkan transaksi asalnya dulu.';
+            $transaction->update(['erp_sync_status' => 'failed', 'erp_sync_error' => $error]);
+            $this->logSync('transaction', $transaction->id, $transaction->invoice_no,
+                'failed', null, null, null, $error);
+
+            return ['success' => false, 'error' => $error];
+        }
+
         // Auto-push customer ke ERPNext jika belum punya erp_customer_name
         if ($transaction->customer && ! ($transaction->customer->erp_customer_name ?: null)) {
             $this->pushCustomer($transaction->customer);
@@ -406,6 +420,50 @@ class ErpNextService
     }
 
     /**
+     * Jumlah qty yang SUDAH diretur per item_code atas satu POS Invoice di ERP HPY,
+     * dihitung dari seluruh invoice retur (is_return) yang menunjuknya dan belum batal.
+     *
+     * Dipakai alur Tukar Barang berbasis struk ERP untuk menghitung sisa qty yang
+     * masih boleh diretur, supaya kasir tidak menyusun retur yang toh akan ditolak.
+     *
+     * @return array{success:bool, returned?:array<string,float>, error?:string}
+     */
+    public function returnedQtyAgainst(string $docname): array
+    {
+        try {
+            $resp = $this->client->get('/api/resource/POS Invoice', [
+                'query' => [
+                    'filters' => json_encode([
+                        ['return_against', '=', $docname],
+                        ['is_return', '=', 1],
+                        ['docstatus', '<', 2],
+                    ]),
+                    'fields' => json_encode(['name']),
+                    'limit_page_length' => 0,
+                ],
+            ]);
+            $rows = json_decode($resp->getBody()->getContents(), true)['data'] ?? [];
+
+            $returned = [];
+            foreach ($rows as $row) {
+                $doc = $this->fetchPosInvoice($row['name']);
+                if (! $doc['success']) {
+                    return ['success' => false, 'error' => $doc['error'] ?? 'gagal membaca invoice retur '.$row['name']];
+                }
+                foreach (($doc['data']['items'] ?? []) as $item) {
+                    $code = $item['item_code'] ?? '';
+                    // Qty pada invoice retur negatif — dibalik jadi positif.
+                    $returned[$code] = ($returned[$code] ?? 0) + abs((float) ($item['qty'] ?? 0));
+                }
+            }
+
+            return ['success' => true, 'returned' => $returned];
+        } catch (\Exception $e) {
+            return ['success' => false, 'error' => $this->readableError($e)];
+        }
+    }
+
+    /**
      * Batalkan POS Invoice (docstatus 2).
      *
      * Sengaja TIDAK memaksa: kalau dokumennya sudah consolidated atau sudah batal,
@@ -559,7 +617,19 @@ class ErpNextService
         // bawah omzet sebenarnya. POS ini transaksi dalam mata uang company
         // (conversion_rate = 1), jadi nilai base = nilai aslinya.
         $payments = [];
-        if ($transaction->payment_method === 'mixed' && $transaction->payment_details) {
+        if (($transaction->type ?? 'sale') === 'return') {
+            // Invoice retur: pembayaran satu baris negatif sebesar total retur,
+            // memakai MOP transaksinya (alur Tukar Barang memakai RETURN). Tanpa
+            // cabang ini, logika `tendered` di bawah memaksa nominal ke 0 karena
+            // amountDue retur selalu negatif.
+            $payments[] = [
+                'mode_of_payment' => $this->mapPaymentMethod($transaction->payment_method),
+                'amount' => $total,
+                'base_amount' => $total,
+            ];
+            $docPaidAmount = $total;
+            $docChangeAmount = 0.0;
+        } elseif ($transaction->payment_method === 'mixed' && $transaction->payment_details) {
             foreach ($transaction->payment_details as $method => $amount) {
                 $payments[] = [
                     'mode_of_payment' => $this->mapPaymentMethod($method),
@@ -695,6 +765,31 @@ class ErpNextService
                 }
                 if ($program['cost_center']) {
                     $payload['loyalty_redemption_cost_center'] = $program['cost_center'];
+                }
+            }
+        }
+
+        // Retur: POS Invoice ber-is_return yang menunjuk invoice asal. ERP HPY
+        // memvalidasi sendiri qty retur terhadap invoice asal, mengembalikan stok
+        // (update_stock), dan mengoreksi poin loyalty transaksi asal.
+        if (($transaction->type ?? 'sale') === 'return') {
+            $returnAgainst = $transaction->return_against_erp
+                ?: $transaction->returnAgainst?->erp_pos_invoice;
+            if (! $returnAgainst) {
+                throw new \RuntimeException(
+                    'Transaksi retur '.$transaction->invoice_no.' tidak bisa disinkron: invoice asalnya belum tersinkron ke ERP HPY.'
+                );
+            }
+            $payload['is_return'] = 1;
+            $payload['return_against'] = $returnAgainst;
+
+            // ERP menolak retur yang customer-nya beda dari invoice asal. Retur
+            // berbasis struk ERP tidak membawa customer lokal, jadi ambil dari
+            // dokumen asalnya.
+            if (! $erpCustomer) {
+                $orig = $this->fetchPosInvoice($returnAgainst);
+                if (($orig['success'] ?? false) && ! empty($orig['data']['customer'])) {
+                    $payload['customer'] = $orig['data']['customer'];
                 }
             }
         }
@@ -1306,8 +1401,10 @@ class ErpNextService
     {
         $pending = Transaction::where('erp_sync_status', 'pending')
             ->where('status', 'completed')
-            ->with(['items.product', 'customer'])
-            ->latest()->get();
+            ->with(['items.product', 'customer', 'returnAgainst'])
+            // Urut lama → baru: transaksi retur harus terkirim SETELAH invoice
+            // asalnya, dan invoice asal selalu lebih tua dari returnya.
+            ->oldest()->get();
 
         $results = ['total' => $pending->count(), 'success' => 0, 'failed' => 0, 'errors' => []];
 

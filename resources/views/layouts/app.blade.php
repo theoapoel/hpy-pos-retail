@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="{{ asset('images/hpy-favicon.png') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'HPYSync')</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -396,6 +397,9 @@
         @endif
         @if($canPos && $posShiftEnabled)
         {!! $navItem(route('pos-shift.index'), 'fas fa-clock', 'Shift Kasir', request()->routeIs('pos-shift.*')) !!}
+        @endif
+        @if($canPos)
+        {!! $navItem(route('exchange.index'), 'fas fa-right-left', 'Tukar Barang', request()->routeIs('exchange.*')) !!}
         @endif
         @if($canTransactions)
         {!! $navItem(route('transactions.index'), 'fas fa-receipt', 'Transaksi', request()->routeIs('transactions.*')) !!}

@@ -172,6 +172,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/direct-print/{transaction}', [PosController::class, 'directPrint'])->name('direct-print');
     });
 
+    // Tukar Barang — retur + penjualan pengganti dalam satu alur (permission:pos)
+    Route::prefix('exchange')->name('exchange.')->middleware('permission:pos')->group(function () {
+        // Alur struk ERP HPY — harus terdaftar sebelum route {transaction}
+        Route::get('/', [\App\Http\Controllers\ExchangeController::class, 'index'])->name('index');
+        Route::get('/lookup', [\App\Http\Controllers\ExchangeController::class, 'lookup'])->name('lookup');
+        Route::post('/', [\App\Http\Controllers\ExchangeController::class, 'storeErp'])->name('store-erp');
+        // Alur transaksi lokal
+        Route::get('/{transaction}', [\App\Http\Controllers\ExchangeController::class, 'create'])->name('create');
+        Route::post('/{transaction}', [\App\Http\Controllers\ExchangeController::class, 'store'])->name('store');
+    });
+
     // Shift Kasir (Buka/Tutup Kasir) — POS Opening/Closing Entry
     Route::prefix('pos-shift')->name('pos-shift.')->middleware('permission:pos')->group(function () {
         Route::get('/', [PosShiftController::class, 'index'])->name('index');
@@ -335,6 +346,7 @@ Route::middleware('auth')->group(function () {
         Route::middleware('permission:sync')->group(function () {
             Route::get('/', [ErpSyncController::class, 'index'])->name('index');
             Route::post('/all', [ErpSyncController::class, 'syncAll'])->name('all');
+            Route::post('/everything', [ErpSyncController::class, 'syncEverything'])->name('everything');
             Route::post('/transaction/{transaction}', [ErpSyncController::class, 'syncSingle'])->name('single');
             Route::post('/retry-failed', [ErpSyncController::class, 'retryFailed'])->name('retry');
             Route::post('/pull-products', [ErpSyncController::class, 'pullProducts'])->name('pull-products');
